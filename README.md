@@ -1,6 +1,6 @@
 # AI Video Tools
 
-AI Video Tools is a Python application that concatenates video with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing command owns the complete pipeline; the desktop GUI provides a convenient front end to that same core behavior.
+AI Video Tools is a Python application for macOS on Apple Silicon that concatenates video with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing command owns the complete pipeline; a PySide6 desktop GUI provides a convenient front end to that same core behavior.
 
 > **Status:** foundation stage. The repository currently contains project guidance only; source code, packaging, and executable commands will be added as implementation begins.
 
@@ -38,16 +38,37 @@ The Python core must expose this workflow as one CLI operation. The GUI must cal
 
 Frame extraction turns variable-frame-rate sources into a frame sequence, so each job must choose and record an explicit output frame rate. Audio must be mapped from the concatenated timeline and kept synchronized with the re-encoded frames.
 
+### Version 1 media defaults
+
+The default profile favors preservation during processing and high-quality, broadly playable output:
+
+- **Normalization container:** Matroska
+- **Normalization video:** lossless FFV1
+- **Normalization audio:** lossless PCM at 48 kHz, using the selected primary channel layout
+- **Normalization canvas and frame rate:** first clip's resolution and frame rate unless explicitly overridden; preserve aspect ratio and pad rather than crop or stretch
+- **Extracted/upscaled frames:** lossless PNG with deterministic zero-padded names
+- **Final container:** MP4 with fast-start metadata
+- **Final video:** H.264 through `libx264`, CRF 18, slow preset, and `yuv420p`
+- **Final audio:** copy the selected primary stream when it is MP4-compatible; otherwise encode AAC-LC at 256 kbit/s and 48 kHz
+- **Additional streams:** warn rather than silently discard extra audio, subtitles, chapters, or attachments
+
+All media choices must be overridable from the shared job model. Mixed-resolution or variable-frame-rate inputs must produce a visible normalization warning before processing.
+
 ## Requirements
 
-The exact dependency set will be documented when the first runnable version is added. Expected runtime requirements include:
+Version 1 requires macOS 26.5.2 or later on Apple Silicon. The reference development and validation machine is an Apple M5 Max with 128 GB unified memory; that hardware configuration is not a minimum system requirement.
 
+Expected runtime requirements include:
+
+- macOS 26.5.2 or later on Apple Silicon; older macOS releases, Intel Macs, and other operating systems are outside the v1 support target
 - Python 3.10 or later
 - [uv](https://docs.astral.sh/uv/) for Python and dependency management
+- [PySide6](https://doc.qt.io/qtforpython-6/) for the desktop GUI
 - [FFmpeg](https://ffmpeg.org/) and FFprobe available on `PATH`
 - [`realesrgan-ncnn-vulkan`](https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan) and its model files
-- A supported desktop GUI framework
 - A Vulkan-capable GPU and working Vulkan driver
+
+Users install FFmpeg, FFprobe, `realesrgan-ncnn-vulkan`, Vulkan support, and model files themselves. The application does not bundle or automatically download these components. It discovers explicit executable paths first and then `PATH`, and fails preflight with an actionable message when a required component is missing or incompatible.
 
 ## Getting started
 
@@ -93,14 +114,17 @@ Use the `Makefile` as the canonical developer interface. Run an underlying tool 
 ```text
 ai-videol-tools-v2/
 ├── src/ai_video_tools/
-│   ├── gui/            # Windows, dialogs, widgets, and view models
+│   ├── gui/            # PySide6 windows, dialogs, widgets, and view models
 │   ├── cli.py          # Thin command-line front end
 │   ├── services/       # Shared pipeline and job orchestration
 │   ├── video/          # FFmpeg probing, concatenation, and encoding
 │   ├── upscale/        # realesrgan-ncnn-vulkan process adapter
 │   └── __main__.py     # Application entry point
 ├── tests/              # Automated tests and lightweight fixtures
+├── docs/
+│   └── ARCHITECTURE.md # Pipeline and component specification
 ├── AGENTS.md           # Development guidance for coding agents
+├── CONTRIBUTING.md     # Contributor workflow and quality checks
 ├── README.md
 ├── Makefile            # Canonical development commands
 ├── uv.lock             # Reproducible dependency lockfile
@@ -138,6 +162,8 @@ Before submitting a change:
 4. Run `make check` to verify Black formatting, Pylint, pycodestyle, and the test suite.
 5. Test affected GUI workflows manually when automation cannot cover them.
 6. Document new dependencies, models, environment variables, and user-facing options.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete workflow and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the authoritative processing design.
 
 ## License
 

@@ -4,7 +4,7 @@ This file provides repository-wide guidance for AI coding agents and contributor
 
 ## Mission
 
-Act as a senior Python engineer building a reliable desktop application and CLI for an FFmpeg → `realesrgan-ncnn-vulkan` → FFmpeg video pipeline. Deliver complete, maintainable changes with predictable media output, a responsive GUI, and actionable errors.
+Act as a senior Python engineer building a reliable macOS Apple Silicon desktop application and CLI for an FFmpeg → `realesrgan-ncnn-vulkan` → FFmpeg video pipeline. Use PySide6 for the GUI. Deliver complete, maintainable changes with predictable media output, a responsive interface, and actionable errors.
 
 The repository is in its initial stage. Do not describe proposed modules or commands as implemented until they exist and have been verified.
 
@@ -43,13 +43,17 @@ Most source code in this repository is expected to be generated or assisted by A
 
 ## Execution workflow
 
-1. Inspect the relevant source, tests, `README.md`, `pyproject.toml`, `Makefile`, and the nearest `AGENTS.md`. Treat implemented code and configuration as the source of truth.
+1. Inspect the relevant source, tests, `README.md`, `docs/ARCHITECTURE.md`, `pyproject.toml`, `Makefile`, and the nearest `AGENTS.md`. Treat implemented code and configuration as the source of truth.
 2. Identify the behavior to change, its callers, edge cases, and the narrowest useful validation. For a bug, reproduce it or establish a failing regression test when feasible.
 3. Implement the smallest complete vertical change. Follow existing conventions; avoid speculative frameworks, premature abstraction, drive-by refactors, and compatibility shims without a requirement.
 4. Run targeted checks first, then the broadest affordable repository check. Diagnose failures instead of weakening or deleting tests. Distinguish failures caused by the change from pre-existing failures.
 5. Review the diff for correctness, security, dead code, debug output, accidental generated files, and documentation drift before finishing.
 
 ## Architecture boundaries
+
+`docs/ARCHITECTURE.md` is the authoritative pipeline and component specification. Keep it synchronized with intentional architecture changes.
+
+Version 1 requires macOS 26.5.2 or later on Apple Silicon. The Apple M5 Max with 128 GB unified memory is the reference machine, not a minimum hardware requirement. Do not add behavior for older macOS releases, Intel Macs, Windows, or Linux without an explicit scope change and validation plan.
 
 Keep these responsibilities separate:
 
@@ -74,6 +78,7 @@ validate → probe → concatenate/normalize → extract frames
 ```
 
 - Validate all inputs, output policy, free disk space when practical, executable paths, Vulkan availability, model choice, scale, and job workspace before processing.
+- Treat FFmpeg, FFprobe, `realesrgan-ncnn-vulkan`, Vulkan support, and model files as user-installed prerequisites. Discover and validate them, but never bundle or automatically download them.
 - Probe every clip before choosing a concat strategy. When all streams are compatible, use FFmpeg's concat demuxer with stream copy so concatenation is lossless and avoids an extra encode. Inputs with differing codecs, time bases, dimensions, frame rates, pixel formats, or audio layouts require explicit normalization to a common intermediate specification before concat.
 - Complete concatenation before frame extraction or Real-ESRGAN invocation. The concat stage must produce one merged working video and one continuous media timeline for all later stages.
 - Extract one lossless, zero-padded frame sequence from the concatenated timeline. Select and record an explicit output frame rate; do not infer timing later from directory contents.
@@ -89,6 +94,7 @@ validate → probe → concatenate/normalize → extract frames
 - Use `uv` for Python environments, dependency resolution, locking, and command execution. Do not introduce `pip`, Poetry, Pipenv, or Conda workflows.
 - Keep runtime and development dependencies in `pyproject.toml`, and commit `uv.lock` once it exists.
 - Use `pathlib.Path` for filesystem paths.
+- Use PySide6 for GUI code and Qt's signals, slots, models, and ownership rules consistently. Do not introduce another GUI framework.
 - Add precise type annotations to new and changed public interfaces; avoid `Any` when a useful type is known.
 - Prefer dataclasses, enums, or typed models for job configuration instead of unstructured dictionaries.
 - Catch narrow exception types. Preserve the original cause when translating an exception with `raise ... from ...`.
@@ -123,8 +129,8 @@ All Python tools invoked by the `Makefile` should run through `uv run`, and depe
 
 ## GUI and concurrency
 
-- Never perform video probing, encoding, filesystem scans, model downloads, or inference on the GUI thread.
-- Communicate worker progress through the GUI framework's thread-safe signal or event mechanism.
+- Never perform video probing, encoding, filesystem scans, or inference on the GUI thread.
+- Deliver worker progress to the GUI through PySide6's thread-safe signal/slot mechanism.
 - Model job states explicitly so queued, running, cancelling, cancelled, failed, and completed states cannot be confused.
 - Treat cancellation as a normal state, not an exception shown as a crash.
 - Disable or guard actions that would create conflicting concurrent jobs.
@@ -137,6 +143,7 @@ All Python tools invoked by the `Makefile` should run through `uv run`, and depe
 - Probe every input before starting a job and validate that files are readable.
 - Do not assume clips share codec, dimensions, frame rate, pixel format, time base, or audio layout.
 - Use stream-copy concatenation only when inputs are compatible; otherwise normalize or transcode explicitly.
+- Use the documented quality-first defaults unless the job overrides them: Matroska/FFV1/PCM for normalization, PNG frames, and MP4/libx264 CRF 18 slow/yuv420p with compatible audio copy or AAC-LC 256 kbit/s for final output.
 - Never upscale clips individually as an implementation shortcut. Normalization, when required, happens before concat; AI upscaling happens once after concat.
 - Generate concat manifests safely; escape paths according to FFmpeg's manifest format and never interpolate them into a shell command.
 - Preserve deterministic frame ordering with one documented zero-padded naming scheme shared by extraction, upscaling, and encoding.
@@ -155,8 +162,8 @@ All Python tools invoked by the `Makefile` should run through `uv run`, and depe
 - Use the executable's directory input/output support instead of launching one process per frame unless a measured constraint requires otherwise.
 - Use tiling to bound GPU memory. If an out-of-memory failure is retryable, reduce tile size through a bounded, logged policy rather than retrying indefinitely.
 - Do not promise a CPU fallback: this pipeline targets the NCNN Vulkan executable. Fail early with an actionable message when no compatible Vulkan device is available.
-- Verify model sources and licenses before adding automatic downloads or redistribution.
-- Store downloaded weights in an application cache, not in the repository.
+- Do not implement automatic model downloads or redistribution. Validate user-supplied model files and document their expected source and license.
+- Store only model paths in application configuration; never copy model weights into the repository.
 - Preserve output-frame numbering exactly and reject missing, duplicate, or unexpected frames before encoding.
 
 ## Testing
