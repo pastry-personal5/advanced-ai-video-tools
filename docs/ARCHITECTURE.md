@@ -111,6 +111,24 @@ Overwrite an existing destination by default. Never truncate or remove it when t
 
 The CLI provides `--no-overwrite`, and the GUI provides an overwrite setting that is enabled by default. In no-overwrite mode, reject an existing destination during preflight and recheck immediately before publication to detect a file created while the job was running.
 
+### Automatic output naming
+
+Generate the default output basename when the job is created, not when processing starts or finishes. Use the timezone-aware local wall clock and this ASCII-only format:
+
+```text
+ai-video-YYYYMMDD-HHMMSS-ffffffZZZZ.mp4
+```
+
+For example: `ai-video-20260821-143052-123456+0900.mp4`.
+
+- `ai-video-` is the fixed prefix.
+- `ffffff` is six-digit microsecond precision.
+- `ZZZZ` is the signed numeric local UTC offset, such as `+0900` or `-0700`, which disambiguates repeated wall-clock times.
+- The selected output directory remains separate from the generated basename. The CLI uses `--output-dir`; the GUI exposes an output-directory picker.
+- Capture and freeze the timestamp, offset, basename, and resolved path in the job model so queued jobs do not change names later.
+- Reserve the resolved path against both the filesystem and all queued or active jobs. If it collides, append `-01`, `-02`, and so on before `.mp4` until a free path is reserved.
+- Automatically generated paths never replace an older output. The general default-overwrite policy applies only to an explicit user-supplied destination path.
+
 ### Workspace and disk safety
 
 Resolve the cache root with `QStandardPaths.StandardLocation.CacheLocation`; on macOS the intended job root is `~/Library/Caches/AI Video Tools/jobs/`. Create one randomly identified, ownership-marked directory per job.
@@ -154,7 +172,7 @@ GUI ─────┘                       │
 
 - **CLI:** parses arguments, creates a typed job request, and renders progress and errors. It contains no media-processing logic.
 - **GUI:** creates the same typed job request and consumes the same progress events. It contains no backend command construction.
-- **Job model:** holds validated inputs, output policy, concat and normalization settings, color interpretation and range, rational frame rate, target height, resolved dimensions, model, resolved AI runtime, encoding, selected audio, dropped-stream acknowledgement, workspace, retention, and overwrite mode, which defaults to replace.
+- **Job model:** holds validated inputs, output directory, frozen creation time and generated basename, reserved destination, output policy, concat and normalization settings, color interpretation and range, rational frame rate, target height, resolved dimensions, model, resolved AI runtime, encoding, selected audio, dropped-stream acknowledgement, workspace, retention, and overwrite mode, which defaults to replace for explicit paths.
 - **Pipeline service:** owns stage transitions, orchestration, cancellation, error translation, and cleanup.
 - **Process adapters:** build argument arrays, launch external tools without a shell, parse progress, capture diagnostic output, and translate exit failures.
 - **Workspace/output manager:** owns job-specific temporary paths, verifies ownership before cleanup, and atomically publishes the final output.
@@ -167,7 +185,7 @@ GUI ─────┘                       │
 - Verify that resolved executables can launch on Apple Silicon and that the Real-ESRGAN installation can access a working Vulkan device and its selected model files.
 - Require the `realesrgan-x4plus` parameter and binary files and resolve them during preflight. Never inherit the executable's default model implicitly.
 - Do not install, download, update, or modify external tools as part of preflight.
-- Validate readable inputs, zero or absent rotation metadata, distinct output, overwrite mode, model files, target height, resolved dimensions, AI scale, Vulkan device, owned workspace, conservative disk estimate, and 20% free-space margin.
+- Validate readable inputs, zero or absent rotation metadata, writable output directory, frozen and reserved destination, overwrite mode, model files, target height, resolved dimensions, AI scale, Vulkan device, owned workspace, conservative disk estimate, and 20% free-space margin.
 - Reject detected HDR or unsupported wide gamut. Require acknowledgement for missing or ambiguous color tags and for every unsupported secondary stream that will be dropped.
 - Calculate a conservative peak temporary-space estimate; frame sequences can be substantially larger than their source videos.
 - Freeze the effective job configuration before starting so logs and retries are reproducible.
@@ -266,13 +284,13 @@ Progress events include the job ID, stage, measured completed work, measured tot
 - Treat nonzero exit codes, malformed probe output, missing frames, and failed output verification as typed failures.
 - Cancellation must terminate the active process tree and wait for termination before workspace deletion.
 - Never modify or delete source inputs.
-- Default to atomic destination replacement after verification. Never truncate the existing file early. In no-overwrite mode, reject collisions during preflight and recheck immediately before publication.
+- Default to atomic destination replacement after verification for explicit paths. Never truncate the existing file early. In no-overwrite mode, reject collisions during preflight and recheck immediately before publication. Generated paths must be uniquely reserved and never overwrite an earlier output.
 - Avoid loading full videos or unbounded frame batches into Python memory.
 
 ## Testing boundaries
 
 - Unit-test job validation, compatibility decisions, command construction, state transitions, progress parsing, path escaping, and cleanup ownership with process fakes.
-- Unit-test exact rational frame-rate handling, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion decisions, default atomic replacement, preservation of the old file on failure, no-overwrite races, disk-margin rejection, FIFO scheduling, workspace retention, log rotation, and the bounded tile retry sequence.
+- Unit-test timezone-aware automatic names, microsecond formatting, UTC offsets, queued-path reservations, numeric collision suffixes, exact rational frame-rate handling, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion decisions, default atomic replacement for explicit paths, preservation of the old file on failure, no-overwrite races, disk-margin rejection, FIFO scheduling, workspace retention, log rotation, and the bounded tile retry sequence.
 - Integration-test FFprobe, concat, extraction, and encoding with tiny generated media fixtures.
 - Contract-test the Real-ESRGAN adapter with a fake executable that copies or transforms small image fixtures predictably.
 - Test orchestration without a GUI, GPU, network, or real model weights.

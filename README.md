@@ -80,6 +80,7 @@ Extra audio streams, subtitles, chapters, and attachments are unsupported in v1.
 - Preserve the first clip's exact rational frame rate, such as `30000/1001`; normalize VFR or mixed-rate inputs to it without float rounding.
 - Run one active processing job and keep later jobs in an in-memory FIFO queue.
 - Overwrite an existing destination by default, but only by atomically replacing it after the new partial output passes verification. A failed or cancelled job leaves the existing file intact. Users may opt out with CLI or GUI no-overwrite mode.
+- Generate the default filename when the job is created using local time: `ai-video-YYYYMMDD-HHMMSS-ffffffZZZZ.mp4`, where `ZZZZ` is the numeric UTC offset such as `+0900` or `-0700`. Place it in the selected output directory and reserve a unique path so automatic naming never overwrites an earlier generated output.
 - Store job workspaces under `~/Library/Caches/AI Video Tools/jobs/` using Qt's application cache location.
 - Require a conservative peak-disk estimate plus a 20% free-space margin before starting.
 - Delete workspaces after success or cancellation; retain and report them after failure.
@@ -124,12 +125,12 @@ The intended CLI shape is:
 uv run ai-video-tools process \
   --input clip-01.mp4 \
   --input clip-02.mp4 \
-  --output combined-upscaled.mp4 \
+  --output-dir ./output \
   --model realesrgan-x4plus \
   --height 2160
 ```
 
-This interface is a design target until the CLI entry point is implemented.
+This interface is a design target until the CLI entry point is implemented. For example, a job created in Korea on August 21, 2026 could produce `ai-video-20260821-143052-123456+0900.mp4`.
 
 ## Development commands
 

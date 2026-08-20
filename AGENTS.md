@@ -89,7 +89,7 @@ validate → probe → concatenate/normalize → extract frames
 - Invoke `realesrgan-ncnn-vulkan` at most once for the merged frame directory. Pass the selected model, resolved AI scale, GPU, tile size, thread settings, and image format explicitly. Skip AI processing by default when the merged input is already at or above the requested height.
 - Encode the processed frames at the recorded frame rate and resolved target dimensions, mux the selected audio, and apply explicit codec, pixel-format, quality, and metadata policies.
 - Verify process exit codes, expected frame count, output existence, nonzero duration, and readable output streams before publishing the result.
-- Publish through a partial file on the destination filesystem and atomically replace the destination only after verification. Overwrite is the default; preserve the old file on failure or cancellation. Honor no-overwrite mode with preflight and pre-publication collision checks. Delete owned workspaces after success or cancellation; retain and report them after failure. Do not resume partial jobs in v1.
+- Generate and reserve the default `ai-video-<local timestamp and offset>.mp4` destination when the job is created. Generated names never overwrite older output. For explicit paths, publish through a partial file on the destination filesystem and atomically replace only after verification; overwrite remains the default. Preserve the old file on failure or cancellation. Honor no-overwrite mode with collision checks. Delete owned workspaces after success or cancellation; retain and report them after failure. Do not resume partial jobs in v1.
 
 ## Python standards
 
@@ -165,6 +165,7 @@ All Python tools invoked by the `Makefile` should run through `uv run`, and depe
 - Always preserve aspect ratio through proportional scaling and padding. Cropping and stretching are unsupported in v1.
 - Write output through a temporary or partial file and promote it only after successful completion.
 - Overwrite an existing destination by default through verified atomic replacement. Never truncate it at job start. Support CLI `--no-overwrite` and the equivalent GUI setting, with a collision recheck immediately before publication.
+- For automatic naming, capture timezone-aware local time at job creation and format `ai-video-YYYYMMDD-HHMMSS-ffffffZZZZ.mp4`, where `ZZZZ` is a signed numeric UTC offset. Freeze and reserve the path across the filesystem and queue; resolve collisions with `-01`, `-02`, and increasing numeric suffixes. Generated paths must never overwrite older output.
 - Create owned workspaces beneath `QStandardPaths.StandardLocation.CacheLocation/jobs`, require estimated peak use plus a 20% margin, delete after success or cancellation, and retain after failure. Never recursively delete an unmarked workspace or a path outside the job root.
 - Record the effective processing configuration in logs to make jobs reproducible.
 
@@ -196,7 +197,7 @@ Tests must not require a GPU, network connection, large model download, or long 
 
 Include fixtures for SDR BT.709, explicit HDR rejection, missing color tags, clips without audio, short and long audio, and unsupported secondary streams. Verify acknowledgement gates, silence insertion, trimming, final BT.709 tags, and audio/video duration alignment.
 
-Test exact rational frame rates, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion, FIFO serialization, default atomic replacement, old-file preservation on failure, no-overwrite races, disk-margin rejection, workspace retention and safe cleanup, bounded tile retries, log rotation, and the absence of application-initiated network calls.
+Test timezone-aware filename formatting, UTC offsets, path reservation, numeric collision suffixes, exact rational frame rates, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion, FIFO serialization, default atomic replacement for explicit paths, old-file preservation on failure, no-overwrite races, disk-margin rejection, workspace retention and safe cleanup, bounded tile retries, log rotation, and the absence of application-initiated network calls.
 
 Use the narrowest effective validation during iteration. Before completion, run `make check` when it exists and is affordable. Use `uv run` for focused diagnostics that have no Make target. Never claim a check passed unless it was actually run; if a check cannot run, report the command, reason, and next-best validation.
 

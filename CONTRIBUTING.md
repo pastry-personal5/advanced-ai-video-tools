@@ -69,7 +69,7 @@ Produce limited-range BT.709, converting accepted full-range input explicitly. R
 
 Use the first audio stream from each clip. Insert silence where a clip lacks audio, pad short audio, trim long audio to the video timeline, and require acknowledgement before dropping unsupported secondary streams.
 
-Run one job at a time in FIFO order. Overwrite destinations by default through verified atomic replacement, preserve the old file on failure, and honor no-overwrite mode. Require estimated peak disk space plus 20%, delete successful or cancelled workspaces, retain failed workspaces, and do not implement resume in v1.
+Run one job at a time in FIFO order. Generate and reserve a timezone-aware `ai-video-` filename when each job is created; generated paths never overwrite older output. Explicit paths overwrite by default through verified atomic replacement, preserve the old file on failure, and honor no-overwrite mode. Require estimated peak disk space plus 20%, delete successful or cancelled workspaces, retain failed workspaces, and do not implement resume in v1.
 
 Use Real-ESRGAN automatic GPU and tiling defaults with TTA disabled. Retry only recognized Vulkan memory errors using the documented bounded tile sequence. Keep settings and rotating local logs in Qt standard macOS locations, and do not add telemetry or application-initiated network access.
 
