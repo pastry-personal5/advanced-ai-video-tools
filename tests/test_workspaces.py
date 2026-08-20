@@ -32,6 +32,7 @@ def test_cleanup_refuses_unmarked_mismatched_and_outside_directories(tmp_path: P
     assert unmarked.exists()
 
     workspace = manager.create()
+    assert manager.validate(workspace) == workspace.path
     forged = OwnedWorkspace(manager.root, workspace.path, "wrong-id")
     with pytest.raises(WorkspaceError, match="does not match"):
         manager.cleanup(forged)

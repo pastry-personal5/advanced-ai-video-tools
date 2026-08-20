@@ -34,12 +34,17 @@ class PreparationFailed(RuntimeError):
 
 
 class PreparationCancelled(RuntimeError):
-    """Preparation was cancelled after child termination and workspace cleanup."""
+    """Preparation was cancelled after terminating its active child process."""
+
+    def __init__(self, message: str, workspace_path: Path, stage: PipelineStage) -> None:
+        super().__init__(message)
+        self.workspace_path = workspace_path
+        self.stage = stage
 
 
 @dataclass(frozen=True)
 class PreparationResult:
-    """Verified merged facts retained after successful workspace cleanup."""
+    """Verified merged facts whose artifact lifetime belongs to the caller."""
 
     merged_probe: MediaProbe
     normalization_count: int
@@ -155,10 +160,29 @@ class MediaPreparationExecutor:
 
         token = cancellation or CancellationToken()
         workspace = self._workspace_manager.create()
+        try:
+            result = self.execute_in_workspace(job, ffmpeg, workspace, token, progress)
+        except PreparationCancelled as error:
+            try:
+                self._cleanup(workspace, progress)
+            except WorkspaceError as cleanup_error:
+                raise PreparationFailed("Preparation was cancelled, but its workspace could not be cleaned.", workspace.path, PipelineStage.CLEANUP) from cleanup_error
+            raise PreparationCancelled("Preparation cancelled; child processes terminated and workspace cleaned.", workspace.path, error.stage) from error
+        try:
+            self._cleanup(workspace, progress)
+        except WorkspaceError as error:
+            raise PreparationFailed(f"Preparation succeeded, but workspace cleanup failed: {error}", workspace.path, PipelineStage.CLEANUP) from error
+        return result
+
+    def execute_in_workspace(self, job: JobPlan, ffmpeg: Path, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None) -> PreparationResult:
+        """Prepare media in a caller-owned workspace without cleaning it."""
+
+        token = cancellation or CancellationToken()
         stage = PipelineStage.NORMALIZE
         results: list[ProcessResult] = []
         try:
-            plan = build_media_preparation_plan(job, ffmpeg, workspace.path)
+            workspace_path = self._workspace_manager.validate(workspace)
+            plan = build_media_preparation_plan(job, ffmpeg, workspace_path)
             self._prepare_directories(plan)
             normalization_total = len(plan.normalization_commands)
             if normalization_total == 0:
@@ -182,18 +206,10 @@ class MediaPreparationExecutor:
             merged_probe = self._verifier.verify(plan.merged_output_path, job, plan.compatibility.strategy)
             self._emit(progress, stage, 1, 1, "Verified the merged timeline")
         except ProcessCancelled as error:
-            try:
-                self._cleanup(workspace, progress)
-            except WorkspaceError as cleanup_error:
-                raise PreparationFailed("Preparation was cancelled, but its workspace could not be cleaned.", workspace.path, PipelineStage.CLEANUP) from cleanup_error
-            raise PreparationCancelled("Preparation cancelled; child processes terminated and workspace cleaned.") from error
+            raise PreparationCancelled("Preparation cancelled; child processes terminated. The caller still owns the workspace.", workspace.path, stage) from error
         except (MergedOutputVerificationError, ProcessError, ProbeError, WorkspaceError, OSError, ValueError) as error:
             diagnostic = error.stderr_tail if isinstance(error, ProcessError) else ""
             raise PreparationFailed(f"Preparation failed during {stage.value}: {error}. Workspace retained at {workspace.path}", workspace.path, stage, diagnostic) from error
-        try:
-            self._cleanup(workspace, progress)
-        except WorkspaceError as error:
-            raise PreparationFailed(f"Preparation succeeded, but workspace cleanup failed: {error}", workspace.path, PipelineStage.CLEANUP) from error
         return PreparationResult(merged_probe, len(plan.normalization_commands), tuple(results), workspace.identifier)
 
     @staticmethod

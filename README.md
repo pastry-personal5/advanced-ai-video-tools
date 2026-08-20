@@ -8,8 +8,9 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 > safe FFmpeg/FFprobe command construction, lossless normalization planning,
 > concat manifests, owned workspaces, cancellable process execution, sequential
 > normalization, one concat, and merged-media verification are also implemented
-> and exercised with tiny real media. Extraction, Real-ESRGAN execution, final
-> encoding and publication, job queuing, and the PySide6 GUI remain future stages.
+> and exercised with tiny real media. Caller-owned composition and exact-CFR RGB
+> PNG extraction are implemented as backend services. Real-ESRGAN execution,
+> final encoding and publication, job queuing, and the PySide6 GUI remain future stages.
 
 ## Implemented foundation
 
@@ -28,7 +29,8 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 - One concat-demuxer stream-copy command after optional normalization
 - Ownership-marked per-job workspaces with guarded cleanup and failed-workspace retention
 - Shell-free subprocess execution with bounded diagnostics, timeouts, cancellation, and process-group termination
-- A media-preparation service that normalizes clips sequentially, writes the manifest, concatenates exactly once, reports measured stage progress, and verifies the merged intermediate—including FFV1/PCM on the normalization path—before cleanup
+- A media-preparation service that normalizes clips sequentially, writes the manifest, concatenates exactly once, reports measured stage progress, and verifies the merged intermediate—including FFV1/PCM on the normalization path—with either standalone cleanup or caller-owned retention
+- Cancellable exact-rational frame extraction with explicit limited BT.709 YUV-to-RGB conversion, deterministic nine-digit PNG names, structural RGB PNG validation, contiguous numbering, plausible frame-count checks, and retention of merged audio for later muxing
 - Preflight gates for platform, paths, SDR BT.709, rotation, streams, timing,
   audio layout, dimensions, AI scale, concat strategy, and disk margin
 - Human-readable and JSON CLI reports through `ai-video-tools preflight`
@@ -38,7 +40,6 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 
 ## Planned features
 
-- Extract the concatenated video to frames with FFmpeg
 - Upscale frame directories with `realesrgan-ncnn-vulkan`
 - Re-encode upscaled frames and restore audio with FFmpeg
 - Configure resolution, codec, quality, audio, and output location
@@ -194,7 +195,7 @@ Use the `Makefile` as the canonical developer interface. Run an underlying tool 
 ai-videol-tools-v2/
 ├── src/ai_video_tools/
 │   ├── core/           # Immutable domain and preflight result models
-│   ├── services/       # Shared preflight application service
+│   ├── services/       # Shared preflight, preparation, and extraction services
 │   ├── storage/        # Qt-standard paths and output reservation
 │   ├── system/         # Host policy and prerequisite discovery
 │   ├── video/          # Probing, compatibility, manifests, and FFmpeg builders
@@ -212,9 +213,9 @@ ai-videol-tools-v2/
 └── pyproject.toml
 ```
 
-The processing service, frame extraction and final-encoding builders, upscaling
-adapter, job queue, and GUI will extend these boundaries rather than duplicating
-preflight or media-preparation logic.
+The full-job pipeline service, final-encoding builders, upscaling adapter, job
+queue, and GUI will extend these boundaries rather than duplicating preflight,
+media-preparation, or frame-extraction logic.
 
 ## Engineering principles
 

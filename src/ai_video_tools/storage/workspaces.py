@@ -66,19 +66,25 @@ class WorkspaceManager:
     def cleanup(self, workspace: OwnedWorkspace) -> None:
         """Delete a workspace only after containment and marker verification."""
 
+        path = self.validate(workspace)
+        try:
+            shutil.rmtree(path)
+        except OSError as error:
+            raise WorkspaceError(f"could not clean job workspace: {path}") from error
+
+    def validate(self, workspace: OwnedWorkspace) -> Path:
+        """Return the verified workspace path without changing its contents."""
+
         path = workspace.path.resolve(strict=False)
         if workspace.root.resolve(strict=False) != self._root or path.parent != self._root or path == self._root:
-            raise WorkspaceError(f"refusing to clean a workspace outside the job root: {path}")
+            raise WorkspaceError(f"workspace is outside the configured job root: {path}")
         marker = path / _MARKER_NAME
         if not path.is_dir() or marker.is_symlink() or not marker.is_file():
-            raise WorkspaceError(f"refusing to clean an unmarked workspace: {path}")
+            raise WorkspaceError(f"workspace is unmarked or missing its ownership marker: {path}")
         try:
             marker_value = marker.read_text(encoding="ascii").strip()
         except OSError as error:
             raise WorkspaceError(f"could not read workspace ownership marker: {path}") from error
         if marker_value != workspace.identifier:
             raise WorkspaceError(f"workspace ownership marker does not match: {path}")
-        try:
-            shutil.rmtree(path)
-        except OSError as error:
-            raise WorkspaceError(f"could not clean job workspace: {path}") from error
+        return path

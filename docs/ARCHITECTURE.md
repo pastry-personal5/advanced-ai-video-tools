@@ -8,10 +8,11 @@ The current CLI slice ends after preflight. The backend also has an application
 service that executes the media-preparation slice: it creates an owned
 workspace, normalizes clips sequentially when required, writes the concat
 manifest, concatenates exactly once, verifies the merged result (including the
-FFV1/PCM contract on the normalization path), and then applies the
-success/cancellation/failure retention policy. This service is
-not exposed as a complete user job yet. Frame extraction, upscaling, final
-encoding and publication, job queuing, and GUI work remain unimplemented. The
+FFV1/PCM contract on the normalization path), and either cleans a standalone
+workspace or retains a caller-owned one. A composable extraction service turns
+that merged timeline into a verified exact-CFR RGB PNG sequence while retaining
+the merged audio source. These services are not exposed as a complete user job
+yet. Upscaling, final encoding and publication, job queuing, and GUI work remain unimplemented. The
 implemented boundaries are:
 
 - `core.models`: immutable job intent, exact rationals, typed stream inventory,
@@ -28,11 +29,12 @@ implemented boundaries are:
 - `video.probe`: pure FFprobe arguments, bounded invocation, and defensive typed JSON parsing
 - `video.compatibility`: typed stream-copy findings and normalize-all-or-none strategy selection
 - `video.manifest`: ordered absolute concat paths with FFmpeg token escaping
-- `video.commands`: lossless normalization, concat arguments, and a typed media-preparation plan
+- `video.commands`: lossless normalization, concat and RGB PNG extraction arguments, exact frame-count calculation, and typed preparation/extraction plans
 - `video.policy`: shared SDR BT.709 predicates used by preflight and command builders
 - `services.preflight`: shared path, media-policy, sizing, concat-strategy, audio,
   and disk-margin validation
 - `services.media_preparation`: sequential normalize-all-or-none execution, one concat, measured stage progress, merged-result verification, and workspace retention policy
+- `services.frame_extraction`: cancellable exact-CFR extraction, measured progress, RGB PNG inventory verification, and retained merged-audio handoff
 - `cli`: human-readable and JSON preflight reports
 
 The Vulkan smoke test uses an owned temporary directory, explicitly selects
@@ -272,7 +274,7 @@ Create a UTF-8 concat manifest in the job workspace using ordered, absolute, saf
 - Perform explicit BT.709 YUV-to-RGB conversion for the PNG sequence; do not rely on unspecified automatic color interpretation.
 - Use a single zero-padded naming convention that preserves lexical and numeric order.
 - Choose and record an explicit constant output frame rate. Variable-frame-rate conversion must be visible to the user.
-- Extract or map the concatenated primary audio independently for later muxing and retain its exact relationship to the video timeline.
+- Retain the verified merged media as the primary-audio source for later muxing, preserving its exact relationship to the video timeline without a needless additional audio copy.
 - Record the expected frame count for validation after upscaling.
 
 ### 6. Upscale once

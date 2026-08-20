@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from ai_video_tools.core.models import AudioStream, ConcatStrategy, JobPlan, MediaProbe, Rational, VideoStream
-from ai_video_tools.video.commands import NormalizationSpec, build_concat_command, build_media_preparation_plan, build_normalization_command
+from ai_video_tools.video.commands import FRAME_FILENAME_TEMPLATE, NormalizationSpec, build_concat_command, build_frame_extraction_command, build_frame_extraction_plan, build_media_preparation_plan, build_normalization_command, expected_frame_count
 from ai_video_tools.video.manifest import concat_manifest_text
 from ai_video_tools.video.probe import build_ffprobe_command
 
@@ -103,6 +103,41 @@ def test_concat_and_ffprobe_builders_are_shell_free_and_explicit() -> None:
     assert "0:v:0" in concat and "0:a:0" in concat
     assert concat[concat.index("-c") + 1] == "copy"
     assert probe[-1] == "clip with spaces.mp4"
+
+
+def test_frame_extraction_builder_enforces_exact_rgb_png_contract(tmp_path: Path) -> None:
+    """Extraction explicitly converts limited BT.709 YUV at the frozen rational rate."""
+
+    merged_path = tmp_path / "merged with spaces.mkv"
+    merged = _probe(merged_path, video=_video(color_range="tv"), audios=(_audio(),))
+    job = _job((merged,), ConcatStrategy.STREAM_COPY, "stereo")
+    command = build_frame_extraction_command(Path("ffmpeg"), merged, tmp_path / "frames", Rational(30000, 1001))
+    plan = build_frame_extraction_plan(job, Path("ffmpeg"), merged, tmp_path)
+    video_filter = command[command.index("-vf") + 1]
+
+    assert command[command.index("-i") - 1] == "-noautorotate"
+    assert command[command.index("-map") + 1] == "0:2"
+    assert "-an" in command and "-sn" in command and "-dn" in command
+    assert "in_color_matrix=bt709:out_color_matrix=bt709:in_range=tv:out_range=pc" in video_filter
+    assert "format=pix_fmts=rgb24" in video_filter
+    assert "fps=fps=30000/1001:round=near" in video_filter
+    assert command[command.index("-c:v") + 1] == "png"
+    assert command[-1] == str(tmp_path / "frames" / FRAME_FILENAME_TEMPLATE)
+    assert expected_frame_count(merged, Rational(30000, 1001)) == 37
+    assert plan.expected_frame_count == 37
+    assert plan.audio_source_path == merged_path
+
+
+def test_frame_extraction_rejects_unsafe_media_contracts(tmp_path: Path) -> None:
+    """Low-level extraction cannot silently reinterpret color, rotation, or audio."""
+
+    with pytest.raises(ValueError, match="limited-range"):
+        build_frame_extraction_command(Path("ffmpeg"), _probe(tmp_path / "full.mkv", video=_video(color_range="pc")), tmp_path / "frames", Rational(24, 1))
+    with pytest.raises(ValueError, match="rotated"):
+        build_frame_extraction_command(Path("ffmpeg"), _probe(tmp_path / "rotated.mkv", video=_video(color_range="tv", rotation=90)), tmp_path / "frames", Rational(24, 1))
+    silent_merged = _probe(tmp_path / "merged.mkv", video=_video(color_range="tv"))
+    with pytest.raises(ValueError, match="audio presence"):
+        build_frame_extraction_plan(_job((silent_merged,), ConcatStrategy.STREAM_COPY, "stereo"), Path("ffmpeg"), silent_merged, tmp_path)
 
 
 def test_manifest_preserves_order_and_escapes_apostrophes(tmp_path: Path) -> None:

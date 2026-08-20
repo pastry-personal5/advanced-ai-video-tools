@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from ai_video_tools.core.models import ConcatStrategy, JobPlan, Rational
+from ai_video_tools.services.frame_extraction import FrameExtractionExecutor
 from ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerifier
 from ai_video_tools.storage.workspaces import WorkspaceManager
 from ai_video_tools.system.processes import SubprocessRunner
@@ -124,3 +125,39 @@ def test_media_preparation_executor_runs_real_ffmpeg_and_cleans_success(tmp_path
     assert Decimal("0.78") <= result.merged_probe.duration <= Decimal("0.85")
     assert not result.merged_probe.path.exists()
     assert not any(manager.root.iterdir())
+
+
+@pytest.mark.integration
+def test_caller_owned_preparation_extracts_exact_rgb_frame_sequence(tmp_path: Path) -> None:
+    """A retained merged timeline becomes one verified RGB PNG sequence."""
+
+    ffmpeg_name = shutil.which("ffmpeg")
+    ffprobe_name = shutil.which("ffprobe")
+    if ffmpeg_name is None or ffprobe_name is None:
+        pytest.skip("FFmpeg and FFprobe are required for integration tests")
+    ffmpeg = Path(ffmpeg_name)
+    ffprobe = Path(ffprobe_name)
+    sources = (tmp_path / "first.mp4", tmp_path / "second.mp4")
+    _generate_source(ffmpeg, sources[0], Decimal("0.2"))
+    _generate_source(ffmpeg, sources[1], None)
+    prober = FFprobeClient(ffprobe)
+    probes = tuple(prober.probe(path) for path in sources)
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "unused-output.mp4", True, probes, Rational(10, 1), 3840, 2160, 4, ConcatStrategy.NORMALIZE, "mono", ("audio timelines require normalization",), 100, 120, assume_bt709=True)
+    manager = WorkspaceManager(tmp_path / "jobs")
+    workspace = manager.create()
+    runner = SubprocessRunner()
+    preparation = MediaPreparationExecutor(manager, runner, MergedOutputVerifier(prober), command_timeout_seconds=30)
+    extraction = FrameExtractionExecutor(manager, runner, command_timeout_seconds=30)
+
+    prepared = preparation.execute_in_workspace(job, ffmpeg, workspace)
+    extracted = extraction.execute(prepared, job, ffmpeg, workspace=workspace)
+
+    assert prepared.merged_probe.path.is_file()
+    assert extracted.frame_count == 8
+    assert extracted.expected_frame_count == 8
+    assert extracted.audio_source_path == prepared.merged_probe.path
+    assert (extracted.frames_directory / "frame-000000001.png").is_file()
+    assert (extracted.frames_directory / "frame-000000008.png").is_file()
+    assert len(tuple(extracted.frames_directory.iterdir())) == 8
+    manager.cleanup(workspace)
+    assert not workspace.path.exists()

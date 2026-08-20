@@ -93,6 +93,24 @@ def test_executor_runs_normalization_then_one_concat_and_cleans_success(tmp_path
     assert [event.stage for event in events if event.completed == event.total] == [PipelineStage.NORMALIZE, PipelineStage.CONCATENATE, PipelineStage.VERIFY, PipelineStage.CLEANUP]
 
 
+def test_composable_executor_retains_verified_merged_media_for_caller(tmp_path: Path) -> None:
+    """A full-job owner can continue using merged media before final cleanup."""
+
+    runner = RecordingRunner()
+    executor, manager = _executor(tmp_path, runner)
+    workspace = manager.create()
+    events: list[ProgressEvent] = []
+
+    result = executor.execute_in_workspace(_job(), Path("ffmpeg"), workspace, progress=events.append)
+
+    assert result.workspace_identifier == workspace.identifier
+    assert result.merged_probe.path == workspace.path / "merged.mkv"
+    assert result.merged_probe.path.is_file()
+    assert PipelineStage.CLEANUP not in {event.stage for event in events}
+    manager.cleanup(workspace)
+    assert not workspace.path.exists()
+
+
 def test_process_failure_retains_workspace_and_stops_before_concat(tmp_path: Path) -> None:
     """A failed normalization retains diagnostics and prevents concat."""
 
@@ -119,6 +137,21 @@ def test_cancellation_cleans_workspace_after_process_termination(tmp_path: Path)
         executor.execute(_job(), Path("ffmpeg"), CancellationToken())
 
     assert not any(manager.root.iterdir())
+
+
+def test_composable_cancellation_leaves_cleanup_to_caller(tmp_path: Path) -> None:
+    """A full-job owner retains control of cancellation cleanup boundaries."""
+
+    runner = RecordingRunner(cancel_at=1)
+    executor, manager = _executor(tmp_path, runner)
+    workspace = manager.create()
+
+    with pytest.raises(PreparationCancelled) as captured:
+        executor.execute_in_workspace(_job(), Path("ffmpeg"), workspace, CancellationToken())
+
+    assert captured.value.workspace_path == workspace.path
+    assert workspace.path.is_dir()
+    manager.cleanup(workspace)
 
 
 def test_verification_failure_retains_workspace(tmp_path: Path) -> None:

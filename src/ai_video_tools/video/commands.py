@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 from ai_video_tools.core.models import ConcatStrategy, JobPlan, MediaProbe, Rational
@@ -12,6 +12,7 @@ from ai_video_tools.video.compatibility import CompatibilityReport, analyze_clip
 from ai_video_tools.video.policy import has_ambiguous_color_tags, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
 
 _SAFE_CHANNEL_LAYOUT = re.compile(r"^[A-Za-z0-9_.()+-]+$")
+FRAME_FILENAME_TEMPLATE = "frame-%09d.png"
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,17 @@ class MediaPreparationPlan:
     concat_manifest_path: Path
     concat_command: tuple[str, ...]
     merged_output_path: Path
+
+
+@dataclass(frozen=True)
+class FrameExtractionPlan:
+    """One exact-CFR RGB PNG extraction from the verified merged timeline."""
+
+    frames_directory: Path
+    frame_pattern: Path
+    command: tuple[str, ...]
+    expected_frame_count: int
+    audio_source_path: Path | None
 
 
 def _duration(probe: MediaProbe) -> Decimal:
@@ -149,3 +161,48 @@ def build_media_preparation_plan(job: JobPlan, ffmpeg: Path, workspace: Path) ->
         concat_inputs = tuple(probe.path for probe in job.probes)
     concat_command = build_concat_command(ffmpeg, manifest, merged, has_audio=job.output_audio_layout is not None)
     return MediaPreparationPlan(compatibility, tuple(normalization_commands), concat_inputs, manifest, concat_command, merged)
+
+
+def expected_frame_count(probe: MediaProbe, frame_rate: Rational) -> int:
+    """Calculate the nearest positive CFR frame count without using floats."""
+
+    if not frame_rate.positive:
+        raise ValueError("frame extraction rate must be positive")
+    video = probe.primary_video
+    if video is None:
+        raise ValueError("frame extraction requires a primary video stream")
+    duration = video.duration if video.duration is not None else probe.duration
+    if duration is None or duration <= 0:
+        raise ValueError("frame extraction requires a positive merged-video duration")
+    exact_count = duration * Decimal(frame_rate.numerator) / Decimal(frame_rate.denominator)
+    return max(1, int(exact_count.to_integral_value(rounding=ROUND_HALF_UP)))
+
+
+def build_frame_extraction_command(ffmpeg: Path, merged: MediaProbe, frames_directory: Path, frame_rate: Rational) -> tuple[str, ...]:
+    """Build one shell-free limited-BT.709 YUV to full-range RGB PNG decode."""
+
+    if not frame_rate.positive:
+        raise ValueError("frame extraction rate must be positive")
+    video = merged.primary_video
+    if video is None:
+        raise ValueError("frame extraction requires a primary video stream")
+    if video.rotation:
+        raise ValueError("rotated merged video cannot be extracted")
+    if (video.color_space, video.color_transfer, video.color_primaries) != ("bt709", "bt709", "bt709") or video.color_range not in {"tv", "limited"}:
+        raise ValueError("frame extraction requires explicitly limited-range SDR BT.709 video")
+    frame_pattern = frames_directory / FRAME_FILENAME_TEMPLATE
+    video_filter = f"scale=w=iw:h=ih:flags=lanczos+accurate_rnd+full_chroma_int:in_color_matrix=bt709:out_color_matrix=bt709:in_range=tv:out_range=pc,format=pix_fmts=rgb24,fps=fps={frame_rate}:round=near"
+    return (str(ffmpeg), "-hide_banner", "-nostdin", "-y", "-noautorotate", "-i", str(merged.path), "-map", f"0:{video.index}", "-an", "-sn", "-dn", "-vf", video_filter, "-c:v", "png", "-pix_fmt", "rgb24", "-compression_level", "6", "-fps_mode", "passthrough", "-start_number", "1", "-f", "image2", str(frame_pattern))
+
+
+def build_frame_extraction_plan(job: JobPlan, ffmpeg: Path, merged: MediaProbe, workspace: Path) -> FrameExtractionPlan:
+    """Plan deterministic frame extraction while retaining merged audio in place."""
+
+    if merged.path.resolve(strict=False).parent != workspace.resolve(strict=False):
+        raise ValueError("merged media must be a direct child of the owned workspace")
+    frames_directory = workspace / "frames"
+    command = build_frame_extraction_command(ffmpeg, merged, frames_directory, job.output_frame_rate)
+    audio_source = merged.path if job.output_audio_layout is not None else None
+    if (audio_source is None) != (merged.primary_audio is None):
+        raise ValueError("merged audio presence differs from the job plan")
+    return FrameExtractionPlan(frames_directory, frames_directory / FRAME_FILENAME_TEMPLATE, command, expected_frame_count(merged, job.output_frame_rate), audio_source)
