@@ -1,6 +1,31 @@
 # Architecture
 
-This document is the authoritative technical overview for AI Video Tools. It describes the intended architecture while the repository is in its foundation stage. Update it when an implementation decision changes the pipeline, component boundaries, job states, or media policies.
+This document is the authoritative technical overview for AI Video Tools. It describes both the implemented foundation and the intended processing architecture. Update it when an implementation decision changes the pipeline, component boundaries, job states, or media policies.
+
+## Implementation status
+
+The current executable slice ends after preflight; it does not concatenate,
+upscale, encode, publish media, or open a GUI yet. The implemented boundaries
+are:
+
+- `core.models`: immutable job intent, exact rationals, typed stream inventory,
+  issue codes, concat strategy, and frozen execution plans
+- `storage.naming`: timezone-aware automatic names and process-local destination
+  reservation with filesystem collision checks
+- `storage.paths`: Qt-standard application data and cache locations
+- `system.platform`: macOS 26.5.2 and Apple Silicon support gate
+- `system.tools`: explicit-path-first discovery, executable inspection, x4plus
+  model-pair validation, and a cached 16 × 16 inference smoke test that proves
+  the Real-ESRGAN Vulkan backend can create output
+- `video.probe`: bounded FFprobe invocation and defensive typed JSON parsing
+- `services.preflight`: shared path, media-policy, sizing, concat-strategy, audio,
+  and disk-margin validation
+- `cli`: human-readable and JSON preflight reports
+
+The Vulkan smoke test uses an owned temporary directory, explicitly selects
+`realesrgan-x4plus`, and uses a 32-pixel diagnostic tile. It does not change the
+processing default of automatic tiling. Unit tests replace external processes,
+so the normal test suite remains independent of GPU hardware and model files.
 
 ## Design goals
 

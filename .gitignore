@@ -1,0 +1,23 @@
+.DS_Store
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.pylint.d/
+.cache/
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+
+# Large or generated media artifacts and user-supplied models
+output/
+jobs/
+models/
+*.partial
+*.mp4
+*.mkv
+*.mov
+*.png

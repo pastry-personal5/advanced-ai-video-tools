@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-video-tools"
+version = "0.1.0"
+description = "Quality-first FFmpeg and Real-ESRGAN video preparation tools"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "PySide6>=6.10,<7",
+]
+
+[project.scripts]
+ai-video-tools = "ai_video_tools.cli:main"
+
+[dependency-groups]
+dev = [
+  "black>=25.1,<27",
+  "pycodestyle>=2.14,<3",
+  "pylint>=3.3,<5",
+  "pytest>=8.4,<10",
+  "pytest-cov>=6.2,<8",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_video_tools"]
+
+[tool.black]
+# Black requires a finite value even though this project imposes no line limit.
+line-length = 9999
+target-version = ["py310"]
+
+[tool.pylint.main]
+py-version = "3.10"
+source-roots = ["src"]
+ignore-paths = ["^tests/fixtures/"]
+
+[tool.pylint.messages_control]
+disable = [
+  "line-too-long",
+  "duplicate-code",
+  "fixme",
+  "too-few-public-methods",
+  "too-many-arguments",
+  "too-many-instance-attributes",
+  "too-many-locals",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["ai_video_tools"]

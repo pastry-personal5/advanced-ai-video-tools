@@ -1,8 +1,25 @@
 # AI Video Tools
 
-AI Video Tools is a Python application for macOS on Apple Silicon that concatenates real-world video footage with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing command owns the complete pipeline; a PySide6 desktop GUI provides a convenient front end to that same core behavior.
+AI Video Tools is a Python project for macOS on Apple Silicon that concatenates real-world video footage with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing service will own the complete pipeline; a PySide6 desktop GUI will provide a convenient front end to that same core behavior.
 
-> **Status:** foundation stage. The repository currently contains project guidance only; source code, packaging, and executable commands will be added as implementation begins.
+> **Status:** executable foundation. Typed job and media models, external-tool
+> discovery, collision-safe output naming, FFprobe parsing, and the shared
+> preflight service are implemented and tested. Media processing and the
+> PySide6 GUI are the next implementation stages.
+
+## Implemented foundation
+
+- Reproducible Python packaging with `uv` and a committed lockfile
+- Immutable models for job intent, probed streams, issues, and execution plans
+- Exact rational frame-rate and sample-aspect-ratio handling
+- Automatic timezone-aware `ai-video-...mp4` names with collision reservation
+- Explicit-path-first discovery of FFmpeg, FFprobe, Real-ESRGAN, and x4plus models
+- A tiny cached Real-ESRGAN inference smoke test that verifies the Vulkan backend
+- Safe FFprobe JSON parsing with typed stream and metadata inventory
+- Preflight gates for platform, paths, SDR BT.709, rotation, streams, timing,
+  audio layout, dimensions, AI scale, concat strategy, and disk margin
+- Human-readable and JSON CLI reports through `ai-video-tools preflight`
+- Fast tests that require no GPU, network, model download, or real media
 
 ## Planned features
 
@@ -110,31 +127,42 @@ The `realesrgan-x4plus` parameter and binary model files are required. The appli
 
 ## Getting started
 
-There is not yet a runnable application in this repository. Once packaging and source files are present, setup will use `uv` (the module entry point may change):
+Install the Python environment and inspect the implemented CLI:
 
 ```bash
 uv sync --dev
 uv run ai-video-tools --help
+uv run ai-video-tools preflight --help
 ```
 
 `uv sync` creates and manages the project virtual environment automatically. Activating it manually is optional. The executable locations for FFmpeg, FFprobe, and Real-ESRGAN should be configurable when they are not available on `PATH`.
 
-The intended CLI shape is:
+Run preflight against one or more real clips:
 
 ```bash
-uv run ai-video-tools process \
+uv run ai-video-tools preflight \
   --input clip-01.mp4 \
   --input clip-02.mp4 \
   --output-dir ./output \
-  --model realesrgan-x4plus \
-  --height 2160
+  --realesrgan /path/to/realesrgan-ncnn-vulkan \
+  --model-dir /path/to/models \
+  --json
 ```
 
-This interface is a design target until the CLI entry point is implemented. For example, a job created in Korea on August 21, 2026 could produce `ai-video-20260821-143052-123456+0900.mp4`.
+Preflight does not modify media. It reserves the proposed output only for the
+duration of the diagnostic command and exits with status 0 when the plan is
+ready or 2 when a blocking issue remains. Missing color tags require
+`--assume-bt709`; unsupported secondary streams require
+`--acknowledge-dropped-streams`. For example, a job created in Korea on August
+21, 2026 could propose `ai-video-20260821-143052-123456+0900.mp4`.
+
+The future `process` command and GUI will consume the same `JobRequest`,
+`PreflightReport`, and `JobPlan` types. They are intentionally not exposed as
+working commands yet.
 
 ## Development commands
 
-The project will expose its routine development tasks through a `Makefile`. Once the Python project and tool configuration have been added, the intended commands are:
+The `Makefile` is the canonical interface for routine development tasks:
 
 ```bash
 make install    # Synchronize runtime and development dependencies with uv
@@ -142,22 +170,23 @@ make format     # Format Python source with Black
 make lint       # Run Pylint and pycodestyle
 make test       # Run the automated test suite
 make check      # Run formatting checks, linters, and tests
-make run        # Launch the GUI application
+make run        # Show the current CLI entry point (GUI not implemented yet)
 ```
 
 Use the `Makefile` as the canonical developer interface. Run an underlying tool directly through `uv run` only when diagnosing or configuring it, for example `uv run pylint src tests`.
 
-## Proposed project structure
+## Current project structure
 
 ```text
 ai-videol-tools-v2/
 ├── src/ai_video_tools/
-│   ├── gui/            # PySide6 windows, dialogs, widgets, and view models
-│   ├── cli.py          # Thin command-line front end
-│   ├── services/       # Shared pipeline and job orchestration
-│   ├── video/          # FFmpeg probing, concatenation, and encoding
-│   ├── upscale/        # realesrgan-ncnn-vulkan process adapter
-│   └── __main__.py     # Application entry point
+│   ├── core/           # Immutable domain and preflight result models
+│   ├── services/       # Shared preflight application service
+│   ├── storage/        # Qt-standard paths and output reservation
+│   ├── system/         # Host policy and prerequisite discovery
+│   ├── video/          # FFprobe invocation and typed JSON parsing
+│   ├── cli.py          # Thin preflight command-line adapter
+│   └── __main__.py     # Module entry point
 ├── tests/              # Automated tests and lightweight fixtures
 ├── docs/
 │   └── ARCHITECTURE.md # Pipeline and component specification
@@ -166,10 +195,12 @@ ai-videol-tools-v2/
 ├── README.md
 ├── Makefile            # Canonical development commands
 ├── uv.lock             # Reproducible dependency lockfile
+├── setup.cfg           # pycodestyle configuration (unsupported in pyproject)
 └── pyproject.toml
 ```
 
-This layout is a recommendation, not a description of files that already exist.
+The processing service, FFmpeg command builders, upscaling adapter, job queue,
+and GUI will extend these boundaries rather than duplicating preflight logic.
 
 ## Engineering principles
 

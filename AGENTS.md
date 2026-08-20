@@ -116,7 +116,7 @@ validate → probe → concatenate/normalize → extract frames
 - Pylint is the primary semantic and quality linter.
 - pycodestyle enforces the project's selected PEP 8 style checks.
 - Configure Black, Pylint, and pycodestyle centrally in `pyproject.toml` where each tool supports it.
-- Keep overlapping rules compatible. Use one project-wide line length and disable rules that conflict with Black rather than reformatting Black output.
+- The project imposes no maximum characters per line. Do not wrap code or prose solely to satisfy a line-length limit. Black requires a finite configured width, so `9999` is the project sentinel for effectively unlimited lines; pycodestyle `E501` and Pylint `line-too-long` must remain disabled. Keep intentional multiline formatting when it materially improves readability.
 - Use the repository `Makefile` as the canonical interface for routine tasks. Keep targets small, non-interactive, and suitable for local development and CI.
 
 The intended target names are:

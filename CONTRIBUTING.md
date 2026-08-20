@@ -12,7 +12,7 @@ Read:
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the processing pipeline and system boundaries
 - [AGENTS.md](AGENTS.md) for repository-wide implementation rules
 
-Check the repository before choosing a framework, dependency, entry point, or command. The project is in its foundation stage, so proposed paths in the documentation may not exist yet.
+Check the repository before choosing a framework, dependency, entry point, or command. The typed core and preflight CLI exist; the processing service and GUI remain design contracts until their modules are implemented and tested.
 
 ## Development environment
 
@@ -29,7 +29,7 @@ The project uses:
 
 Install FFmpeg, FFprobe, `realesrgan-ncnn-vulkan`, its model files, and working Vulkan support separately. The project does not bundle or automatically download them. Contributors may configure explicit executable paths or make the tools available on `PATH`.
 
-Once project metadata exists, install development dependencies with:
+Install development dependencies with:
 
 ```bash
 make install
@@ -76,6 +76,8 @@ Use Real-ESRGAN automatic GPU and tiling defaults with TTA disabled. Retry only 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the complete contract.
 
 ## Quality checks
+
+The project has no maximum line length. Black uses `9999` as an effectively unlimited sentinel because it requires a numeric width; pycodestyle and Pylint line-length diagnostics are disabled. Use multiline formatting for clarity, not merely to meet a character count.
 
 The intended Make targets are:
 

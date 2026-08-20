@@ -1,0 +1,111 @@
+"""Tests for defensive conversion of FFprobe JSON."""
+
+from pathlib import Path
+
+from ai_video_tools.core.models import Rational
+from ai_video_tools.video.probe import parse_probe_document
+
+
+def test_probe_parser_preserves_exact_rates_and_stream_inventory() -> None:
+    """FFprobe values become immutable models without float conversion."""
+
+    parsed = parse_probe_document(
+        Path("clip.mov"),
+        {
+            "format": {"duration": "2.500"},
+            "chapters": [{"id": 0}],
+            "streams": [
+                {
+                    "index": 0,
+                    "codec_type": "video",
+                    "codec_name": "h264",
+                    "width": 1920,
+                    "height": 1080,
+                    "pix_fmt": "yuv420p",
+                    "sample_aspect_ratio": "1:1",
+                    "r_frame_rate": "30000/1001",
+                    "avg_frame_rate": "30000/1001",
+                    "time_base": "1/30000",
+                    "color_space": "bt709",
+                    "color_transfer": "bt709",
+                    "color_primaries": "bt709",
+                    "color_range": "tv",
+                    "side_data_list": [{"rotation": "-90.000000"}],
+                },
+                {
+                    "index": 1,
+                    "codec_type": "audio",
+                    "codec_name": "aac",
+                    "sample_rate": "48000",
+                    "channels": 2,
+                    "channel_layout": "stereo",
+                    "duration": "2.4",
+                },
+                {"index": 2, "codec_type": "subtitle", "codec_name": "mov_text"},
+            ],
+        },
+    )
+
+    assert parsed.primary_video is not None
+    assert parsed.primary_video.real_frame_rate == Rational(30000, 1001)
+    assert parsed.primary_video.rotation == 270
+    assert parsed.primary_audio is not None
+    assert parsed.primary_audio.sample_rate == 48000
+    assert parsed.other_streams[0].kind == "subtitle"
+    assert parsed.chapter_count == 1
+
+
+def test_probe_parser_treats_attached_picture_as_unsupported_attachment() -> None:
+    """Cover art cannot accidentally become the primary timeline video."""
+
+    parsed = parse_probe_document(
+        Path("with-cover.mp4"),
+        {
+            "streams": [
+                {
+                    "index": 0,
+                    "codec_type": "video",
+                    "codec_name": "mjpeg",
+                    "width": 600,
+                    "height": 600,
+                    "disposition": {"attached_pic": 1},
+                },
+                {
+                    "index": 1,
+                    "codec_type": "video",
+                    "codec_name": "h264",
+                    "width": 1920,
+                    "height": 1080,
+                    "r_frame_rate": "24/1",
+                },
+            ]
+        },
+    )
+
+    assert parsed.primary_video is not None
+    assert parsed.primary_video.index == 1
+    assert parsed.other_streams[0].kind == "attachment"
+
+
+def test_probe_parser_detects_hdr_side_data() -> None:
+    """Mastering metadata is retained as an explicit HDR signal."""
+
+    parsed = parse_probe_document(
+        Path("hdr.mp4"),
+        {
+            "streams": [
+                {
+                    "index": 0,
+                    "codec_type": "video",
+                    "codec_name": "hevc",
+                    "width": 3840,
+                    "height": 2160,
+                    "r_frame_rate": "24/1",
+                    "side_data_list": [{"side_data_type": "Mastering display metadata"}],
+                }
+            ]
+        },
+    )
+
+    assert parsed.primary_video is not None
+    assert parsed.primary_video.has_hdr_metadata
