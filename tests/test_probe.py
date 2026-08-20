@@ -1,5 +1,6 @@
 """Tests for defensive conversion of FFprobe JSON."""
 
+from decimal import Decimal
 from pathlib import Path
 
 from ai_video_tools.core.models import Rational
@@ -40,6 +41,8 @@ def test_probe_parser_preserves_exact_rates_and_stream_inventory() -> None:
                     "channels": 2,
                     "channel_layout": "stereo",
                     "duration": "2.4",
+                    "time_base": "1/48000",
+                    "start_time": "0.125",
                 },
                 {"index": 2, "codec_type": "subtitle", "codec_name": "mov_text"},
             ],
@@ -51,6 +54,8 @@ def test_probe_parser_preserves_exact_rates_and_stream_inventory() -> None:
     assert parsed.primary_video.rotation == 270
     assert parsed.primary_audio is not None
     assert parsed.primary_audio.sample_rate == 48000
+    assert parsed.primary_audio.time_base == Rational(1, 48000)
+    assert parsed.primary_audio.start_time == Decimal("0.125")
     assert parsed.other_streams[0].kind == "subtitle"
     assert parsed.chapter_count == 1
 

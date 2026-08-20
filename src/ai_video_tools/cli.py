@@ -85,6 +85,8 @@ def _json_report(report: PreflightReport) -> str:
             "ai_scale": plan.ai_scale,
             "concat_strategy": plan.concat_strategy.value,
             "output_audio_layout": plan.output_audio_layout,
+            "assume_bt709": plan.assume_bt709,
+            "acknowledge_dropped_streams": plan.acknowledge_dropped_streams,
             "normalization_reasons": list(plan.normalization_reasons),
             "estimated_peak_bytes": plan.estimated_peak_bytes,
             "required_free_bytes": plan.required_free_bytes,

@@ -4,9 +4,11 @@ This document is the authoritative technical overview for AI Video Tools. It des
 
 ## Implementation status
 
-The current executable slice ends after preflight; it does not concatenate,
-upscale, encode, publish media, or open a GUI yet. The implemented boundaries
-are:
+The current CLI slice ends after preflight. The video backend can construct and
+integration-test normalization and concat operations, but no application
+service executes a complete user job yet. Frame extraction, upscaling, final
+encoding, publication, cancellation, and GUI work remain unimplemented. The
+implemented boundaries are:
 
 - `core.models`: immutable job intent, exact rationals, typed stream inventory,
   issue codes, concat strategy, and frozen execution plans
@@ -17,7 +19,11 @@ are:
 - `system.tools`: explicit-path-first discovery, executable inspection, x4plus
   model-pair validation, and a cached 16 × 16 inference smoke test that proves
   the Real-ESRGAN Vulkan backend can create output
-- `video.probe`: bounded FFprobe invocation and defensive typed JSON parsing
+- `video.probe`: pure FFprobe arguments, bounded invocation, and defensive typed JSON parsing
+- `video.compatibility`: typed stream-copy findings and normalize-all-or-none strategy selection
+- `video.manifest`: ordered absolute concat paths with FFmpeg token escaping
+- `video.commands`: lossless normalization, concat arguments, and a typed media-preparation plan
+- `video.policy`: shared SDR BT.709 predicates used by preflight and command builders
 - `services.preflight`: shared path, media-policy, sizing, concat-strategy, audio,
   and disk-margin validation
 - `cli`: human-readable and JSON preflight reports
@@ -62,8 +68,8 @@ Defaults must be explicit in the typed job model and overridable by the CLI and 
 | Stage | Version 1 default |
 | --- | --- |
 | Normalization container | Matroska |
-| Normalization video | Lossless FFV1 |
-| Normalization audio | Lossless PCM, 48 kHz, selected primary channel layout |
+| Normalization video | Lossless FFV1 level 3, `yuv444p10le` |
+| Normalization audio | Lossless `pcm_s24le`, 48 kHz, selected primary channel layout |
 | Color | SDR BT.709 only |
 | Color range | Limited/TV; explicitly convert accepted full-range input |
 | Common canvas | First clip's resolution; preserve aspect ratio and pad |
@@ -231,11 +237,11 @@ Do not select concat or normalization behavior from filename extensions.
 
 ### 3. Normalize when required
 
-Compare the probed streams against the concat compatibility policy. If they do not match, transcode each incompatible input to one documented intermediate specification.
+Compare the probed streams against the concat compatibility policy. If every clip is compatible, retain every source for direct concat stream copy. If any clip is incompatible, normalize every clip into the same intermediate profile before concat; mixing untouched source codecs with FFV1 normalized clips would not be stream-copy compatible.
 
 Full-range color, VFR timing, missing required audio, or audio-duration mismatch forces normalization even when codec and stream layouts would otherwise be concat-compatible. Nonzero rotation metadata fails preflight instead of entering normalization.
 
-The default normalization profile is Matroska with lossless FFV1 video and lossless PCM audio at 48 kHz. Use the first clip's resolution and frame rate plus the first available primary audio channel layout unless the job overrides them. Preserve aspect ratio by padding; never stretch or crop silently.
+The default normalization profile is Matroska with FFV1 level 3 `yuv444p10le` video and `pcm_s24le` audio at 48 kHz. Use the first clip's coded resolution, sample aspect ratio, and exact frame rate plus the first available primary audio channel layout unless the job overrides them. Use quality-first Lanczos scaling, preserve display aspect ratio by padding, and never stretch or crop silently. Normalized clips use deterministic six-digit names such as `clip-000001.mkv`.
 
 Resolve the first clip's exact rational frame rate without converting through floating point. Preserve its CFR rate directly; for a VFR first clip, use FFprobe's valid rational average frame rate. Normalize every clip to that rational rate and report the conversion. For example, preserve `30000/1001` rather than rounding it to `29.97` or `30`.
 
@@ -245,7 +251,7 @@ When the job contains audio, normalize the first audio stream from each clip. In
 
 ### 4. Concatenate
 
-Create a safely escaped concat manifest in the job workspace and invoke FFmpeg with an argument list, never a shell command string.
+Create a UTF-8 concat manifest in the job workspace using ordered, absolute, safely token-escaped paths. Reject NUL and newline characters, invoke the concat demuxer with `-safe 0`, and pass FFmpeg an argument list rather than a shell command string.
 
 - Use concat-demuxer stream copy for compatible source or normalized clips.
 - Respect the user-defined clip order.

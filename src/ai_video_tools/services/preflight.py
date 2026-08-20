@@ -27,16 +27,14 @@ from ai_video_tools.storage.naming import OutputCollisionError, OutputPathRegist
 from ai_video_tools.storage.paths import job_cache_directory
 from ai_video_tools.system.platform import PlatformInfo, platform_error
 from ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
+from ai_video_tools.video.compatibility import analyze_clip_compatibility, effective_frame_rate
+from ai_video_tools.video.policy import has_ambiguous_color_tags, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
 from ai_video_tools.video.probe import FFprobeClient, MediaProber, ProbeError
 
 Clock = Callable[[], datetime]
 PlatformProvider = Callable[[], PlatformInfo]
 ProberFactory = Callable[[Toolchain], MediaProber]
 FreeSpaceProvider = Callable[[Path], int]
-
-HDR_TRANSFERS = {"smpte2084", "arib-std-b67", "smpte428"}
-WIDE_PRIMARIES = {"bt2020", "smpte431", "smpte432", "jedec-p22"}
-WIDE_SPACES = {"bt2020nc", "bt2020c", "ictcp"}
 
 
 def _local_now() -> datetime:
@@ -75,16 +73,6 @@ def select_ai_scale(source_height: int, target_height: int) -> int | None:
         if source_height * scale >= target_height:
             return scale
     return 4
-
-
-def _frame_rate(video: VideoStream) -> tuple[Rational | None, bool]:
-    real = video.real_frame_rate
-    average = video.average_frame_rate
-    if real is not None and average is not None:
-        return (average, True) if real != average else (real, False)
-    if average is not None:
-        return average, True
-    return real, False
 
 
 def _issue(
@@ -202,7 +190,7 @@ class PreflightService:
                             probes[0].path,
                         )
                     )
-                normalization_reasons = self._normalization_reasons(probes, output_rate)
+                normalization_reasons = self._normalization_reasons(probes, output_rate, output_audio_layout)
                 for reason in normalization_reasons:
                     issues.append(
                         _issue(
@@ -250,6 +238,8 @@ class PreflightService:
                 normalization_reasons=normalization_reasons,
                 estimated_peak_bytes=peak_bytes,
                 required_free_bytes=required_bytes,
+                assume_bt709=request.assume_bt709,
+                acknowledge_dropped_streams=request.acknowledge_dropped_streams,
             )
         elif reserved_output is not None:
             self._registry.release(reserved_output)
@@ -375,7 +365,7 @@ class PreflightService:
                         probe.path,
                     )
                 )
-            detected_hdr = video.has_hdr_metadata or video.color_transfer in HDR_TRANSFERS or video.color_primaries in WIDE_PRIMARIES or video.color_space in WIDE_SPACES
+            detected_hdr = is_hdr_or_wide_gamut(video)
             if detected_hdr:
                 issues.append(
                     _issue(
@@ -385,13 +375,7 @@ class PreflightService:
                         probe.path,
                     )
                 )
-            tags = (
-                video.color_space,
-                video.color_transfer,
-                video.color_primaries,
-                video.color_range,
-            )
-            unsupported_tags = video.color_space not in (None, "bt709") or video.color_transfer not in (None, "bt709") or video.color_primaries not in (None, "bt709") or video.color_range not in (None, "tv", "limited", "pc", "jpeg")
+            unsupported_tags = has_unsupported_sdr_tags(video)
             if unsupported_tags and not detected_hdr:
                 issues.append(
                     _issue(
@@ -401,7 +385,7 @@ class PreflightService:
                         probe.path,
                     )
                 )
-            elif any(tag is None for tag in tags):
+            elif has_ambiguous_color_tags(video):
                 severity = IssueSeverity.WARNING if request.assume_bt709 else IssueSeverity.ERROR
                 action = "Input will be interpreted as SDR BT.709 by acknowledgement." if request.assume_bt709 else "Acknowledge --assume-bt709 to continue."
                 issues.append(
@@ -445,7 +429,7 @@ class PreflightService:
         first_video = probes[0].primary_video
         if first_video is None:
             return None
-        rate, _ = _frame_rate(first_video)
+        rate, _ = effective_frame_rate(first_video)
         if rate is None:
             issues.append(
                 _issue(
@@ -479,59 +463,9 @@ class PreflightService:
         return None
 
     @staticmethod
-    def _normalization_reasons(probes: list[MediaProbe], output_rate: Rational) -> tuple[str, ...]:
-        reasons: list[str] = []
-        first = probes[0].primary_video
-        if first is None:
-            return ()
-        video_signature = (
-            first.codec_name,
-            first.width,
-            first.height,
-            first.pixel_format,
-            first.time_base,
-            first.sample_aspect_ratio,
-        )
-        any_audio = any(probe.primary_audio is not None for probe in probes)
-        first_audio = next(
-            (probe.primary_audio for probe in probes if probe.primary_audio is not None),
-            None,
-        )
-        for probe in probes:
-            video = probe.primary_video
-            if video is None:
-                continue
-            signature = (
-                video.codec_name,
-                video.width,
-                video.height,
-                video.pixel_format,
-                video.time_base,
-                video.sample_aspect_ratio,
-            )
-            rate, is_vfr = _frame_rate(video)
-            if signature != video_signature:
-                reasons.append(f"{probe.path.name}: video properties differ")
-            if is_vfr or rate != output_rate:
-                reasons.append(f"{probe.path.name}: frame timing requires normalization")
-            if video.color_range in {"pc", "jpeg"}:
-                reasons.append(f"{probe.path.name}: full range must convert to limited")
-            if None in (
-                video.color_space,
-                video.color_transfer,
-                video.color_primaries,
-                video.color_range,
-            ):
-                reasons.append(f"{probe.path.name}: BT.709 tags must be normalized")
-            if any_audio and probe.primary_audio is None:
-                reasons.append(f"{probe.path.name}: silence must replace missing audio")
-            audio = probe.primary_audio
-            if audio is not None and first_audio is not None:
-                if audio.sample_rate != first_audio.sample_rate or audio.channel_layout != first_audio.channel_layout:
-                    reasons.append(f"{probe.path.name}: audio properties differ")
-                if probe.duration is not None and audio.duration is not None and abs(probe.duration - audio.duration) > Decimal("0.05"):
-                    reasons.append(f"{probe.path.name}: audio duration must pad or trim")
-        return tuple(dict.fromkeys(reasons))
+    def _normalization_reasons(probes: list[MediaProbe], output_rate: Rational, output_audio_layout: str | None) -> tuple[str, ...]:
+        report = analyze_clip_compatibility(probes, output_rate, output_audio_layout)
+        return tuple(finding.message for finding in report.findings)
 
     @staticmethod
     def _estimate_peak_bytes(

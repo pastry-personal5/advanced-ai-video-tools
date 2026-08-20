@@ -142,6 +142,7 @@ class VideoStream:
     color_range: str | None
     rotation: int
     has_hdr_metadata: bool
+    start_time: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -154,6 +155,8 @@ class AudioStream:
     channels: int | None
     channel_layout: str | None
     duration: Decimal | None
+    time_base: Rational | None = None
+    start_time: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -175,18 +178,19 @@ class MediaProbe:
     audio_streams: tuple[AudioStream, ...]
     other_streams: tuple[OtherStream, ...]
     chapter_count: int = 0
+    start_time: Decimal | None = None
 
     @property
     def primary_video(self) -> VideoStream | None:
-        """Return the first video stream, if present."""
+        """Return the lowest-index video stream, if present."""
 
-        return self.video_streams[0] if self.video_streams else None
+        return min(self.video_streams, key=lambda stream: stream.index) if self.video_streams else None
 
     @property
     def primary_audio(self) -> AudioStream | None:
-        """Return the first audio stream, if present."""
+        """Return the lowest-index audio stream, if present."""
 
-        return self.audio_streams[0] if self.audio_streams else None
+        return min(self.audio_streams, key=lambda stream: stream.index) if self.audio_streams else None
 
 
 @dataclass(frozen=True)
@@ -259,6 +263,8 @@ class JobPlan:
     normalization_reasons: tuple[str, ...]
     estimated_peak_bytes: int
     required_free_bytes: int
+    assume_bt709: bool = False
+    acknowledge_dropped_streams: bool = False
 
 
 @dataclass(frozen=True)

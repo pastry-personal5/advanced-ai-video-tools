@@ -4,8 +4,11 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 
 > **Status:** executable foundation. Typed job and media models, external-tool
 > discovery, collision-safe output naming, FFprobe parsing, and the shared
-> preflight service are implemented and tested. Media processing and the
-> PySide6 GUI are the next implementation stages.
+> preflight service are implemented and tested. Typed compatibility analysis,
+> safe FFmpeg/FFprobe command construction, lossless normalization planning,
+> concat manifests, and concat stream-copy are also implemented and exercised
+> with tiny real media. Pipeline execution beyond concat and the PySide6 GUI
+> remain future stages.
 
 ## Implemented foundation
 
@@ -16,10 +19,18 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 - Explicit-path-first discovery of FFmpeg, FFprobe, Real-ESRGAN, and x4plus models
 - A tiny cached Real-ESRGAN inference smoke test that verifies the Vulkan backend
 - Safe FFprobe JSON parsing with typed stream and metadata inventory
+- Typed stream-copy compatibility findings with normalize-all-or-none planning
+- Safely escaped concat manifests using ordered absolute paths
+- Shell-free FFmpeg normalization commands with `-noautorotate`, explicit
+  BT.709 conversion, exact rational CFR, first-audio mapping, silence insertion,
+  audio padding/trimming, FFV1, and PCM
+- One concat-demuxer stream-copy command after optional normalization
 - Preflight gates for platform, paths, SDR BT.709, rotation, streams, timing,
   audio layout, dimensions, AI scale, concat strategy, and disk margin
 - Human-readable and JSON CLI reports through `ai-video-tools preflight`
-- Fast tests that require no GPU, network, model download, or real media
+- Fast tests that require no GPU, network, model download, or checked-in media;
+  the tiny FFmpeg integration fixture is generated locally and skips when the
+  user-installed FFmpeg tools are unavailable
 
 ## Planned features
 
@@ -62,8 +73,8 @@ Frame extraction turns variable-frame-rate sources into a frame sequence, so eac
 The default profile favors preservation during processing and high-quality, broadly playable output:
 
 - **Normalization container:** Matroska
-- **Normalization video:** lossless FFV1
-- **Normalization audio:** lossless PCM at 48 kHz, using the selected primary channel layout
+- **Normalization video:** lossless FFV1 level 3 in `yuv444p10le`
+- **Normalization audio:** lossless `pcm_s24le` at 48 kHz, using the selected primary channel layout
 - **Normalization canvas and frame rate:** first clip's resolution and frame rate unless explicitly overridden; preserve aspect ratio and pad rather than crop or stretch
 - **Color:** SDR BT.709 only; reject detected HDR and wide-gamut input
 - **Color range:** limited/TV; convert accepted full-range input explicitly
@@ -184,7 +195,7 @@ ai-videol-tools-v2/
 │   ├── services/       # Shared preflight application service
 │   ├── storage/        # Qt-standard paths and output reservation
 │   ├── system/         # Host policy and prerequisite discovery
-│   ├── video/          # FFprobe invocation and typed JSON parsing
+│   ├── video/          # Probing, compatibility, manifests, and FFmpeg builders
 │   ├── cli.py          # Thin preflight command-line adapter
 │   └── __main__.py     # Module entry point
 ├── tests/              # Automated tests and lightweight fixtures
@@ -199,8 +210,9 @@ ai-videol-tools-v2/
 └── pyproject.toml
 ```
 
-The processing service, FFmpeg command builders, upscaling adapter, job queue,
-and GUI will extend these boundaries rather than duplicating preflight logic.
+The processing service, frame extraction and final-encoding builders, upscaling
+adapter, job queue, and GUI will extend these boundaries rather than duplicating
+preflight or media-preparation logic.
 
 ## Engineering principles
 

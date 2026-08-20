@@ -51,6 +51,9 @@ disable = [
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
 testpaths = ["tests"]
+markers = [
+  "integration: exercises user-installed FFmpeg and FFprobe with tiny media",
+]
 
 [tool.coverage.run]
 branch = true

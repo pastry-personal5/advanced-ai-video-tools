@@ -29,6 +29,12 @@ class MediaProber(Protocol):
         """Inspect one media input."""
 
 
+def build_ffprobe_command(executable: Path, path: Path) -> tuple[str, ...]:
+    """Build the bounded client's machine-readable FFprobe invocation."""
+
+    return (str(executable), "-v", "error", "-show_streams", "-show_format", "-show_chapters", "-of", "json", str(path))
+
+
 def _decimal(value: object) -> Decimal | None:
     if value in (None, "", "N/A"):
         return None
@@ -133,6 +139,7 @@ def parse_probe_document(path: Path, document: Mapping[str, object]) -> MediaPro
                     color_range=_optional_string(stream.get("color_range")),
                     rotation=_rotation(stream),
                     has_hdr_metadata=_has_hdr_metadata(stream),
+                    start_time=_decimal(stream.get("start_time")),
                 )
             )
         elif kind == "audio":
@@ -144,12 +151,15 @@ def parse_probe_document(path: Path, document: Mapping[str, object]) -> MediaPro
                     channels=_integer(stream.get("channels")),
                     channel_layout=_optional_string(stream.get("channel_layout")),
                     duration=_decimal(stream.get("duration")),
+                    time_base=_rational(stream.get("time_base")),
+                    start_time=_decimal(stream.get("start_time")),
                 )
             )
         else:
             others.append(OtherStream(index=index, kind=kind, codec_name=codec))
     format_value = document.get("format")
     duration = _decimal(format_value.get("duration")) if isinstance(format_value, Mapping) else None
+    start_time = _decimal(format_value.get("start_time")) if isinstance(format_value, Mapping) else None
     chapters = document.get("chapters", [])
     chapter_count = len(chapters) if isinstance(chapters, list) else 0
     return MediaProbe(
@@ -159,6 +169,7 @@ def parse_probe_document(path: Path, document: Mapping[str, object]) -> MediaPro
         audio_streams=tuple(audios),
         other_streams=tuple(others),
         chapter_count=chapter_count,
+        start_time=start_time,
     )
 
 
@@ -178,17 +189,7 @@ class FFprobeClient:
     def probe(self, path: Path) -> MediaProbe:
         """Run FFprobe once and convert its JSON result."""
 
-        arguments: Sequence[str] = (
-            str(self._executable),
-            "-v",
-            "error",
-            "-show_streams",
-            "-show_format",
-            "-show_chapters",
-            "-of",
-            "json",
-            str(path),
-        )
+        arguments: Sequence[str] = build_ffprobe_command(self._executable, path)
         try:
             result = subprocess.run(
                 arguments,
