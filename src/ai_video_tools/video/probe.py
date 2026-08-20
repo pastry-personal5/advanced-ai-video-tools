@@ -44,6 +44,33 @@ def _decimal(value: object) -> Decimal | None:
         return None
 
 
+def _clock_duration(value: object) -> Decimal | None:
+    if not isinstance(value, str):
+        return None
+    parts = value.split(":")
+    if len(parts) != 3:
+        return None
+    try:
+        hours = Decimal(parts[0])
+        minutes = Decimal(parts[1])
+        seconds = Decimal(parts[2])
+    except InvalidOperation:
+        return None
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def _stream_duration(stream: Mapping[str, object]) -> Decimal | None:
+    duration = _decimal(stream.get("duration"))
+    if duration is not None:
+        return duration
+    tags = stream.get("tags")
+    if isinstance(tags, Mapping):
+        for key, value in tags.items():
+            if str(key).lower() == "duration":
+                return _clock_duration(value)
+    return None
+
+
 def _integer(value: object) -> int | None:
     try:
         parsed = Decimal(str(value))
@@ -132,7 +159,7 @@ def parse_probe_document(path: Path, document: Mapping[str, object]) -> MediaPro
                     real_frame_rate=_rational(stream.get("r_frame_rate")),
                     average_frame_rate=_rational(stream.get("avg_frame_rate")),
                     time_base=_rational(stream.get("time_base")),
-                    duration=_decimal(stream.get("duration")),
+                    duration=_stream_duration(stream),
                     color_space=_optional_string(stream.get("color_space")),
                     color_transfer=_optional_string(stream.get("color_transfer")),
                     color_primaries=_optional_string(stream.get("color_primaries")),
@@ -150,7 +177,7 @@ def parse_probe_document(path: Path, document: Mapping[str, object]) -> MediaPro
                     sample_rate=_integer(stream.get("sample_rate")),
                     channels=_integer(stream.get("channels")),
                     channel_layout=_optional_string(stream.get("channel_layout")),
-                    duration=_decimal(stream.get("duration")),
+                    duration=_stream_duration(stream),
                     time_base=_rational(stream.get("time_base")),
                     start_time=_decimal(stream.get("start_time")),
                 )

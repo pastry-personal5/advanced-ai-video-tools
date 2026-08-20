@@ -280,3 +280,19 @@ class PreflightReport:
         """Whether no blocking issue remains and a plan was produced."""
 
         return self.plan is not None and not any(issue.severity is IssueSeverity.ERROR for issue in self.issues)
+
+
+@dataclass(frozen=True)
+class ProgressEvent:
+    """Measured stage progress shared by non-GUI and future GUI callers."""
+
+    stage: PipelineStage
+    completed: int
+    total: int | None
+    message: str
+
+    def __post_init__(self) -> None:
+        if self.completed < 0:
+            raise ValueError("completed progress cannot be negative")
+        if self.total is not None and (self.total < 0 or self.completed > self.total):
+            raise ValueError("completed progress must be within the measured total")

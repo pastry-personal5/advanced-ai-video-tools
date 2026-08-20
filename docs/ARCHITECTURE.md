@@ -4,10 +4,14 @@ This document is the authoritative technical overview for AI Video Tools. It des
 
 ## Implementation status
 
-The current CLI slice ends after preflight. The video backend can construct and
-integration-test normalization and concat operations, but no application
-service executes a complete user job yet. Frame extraction, upscaling, final
-encoding, publication, cancellation, and GUI work remain unimplemented. The
+The current CLI slice ends after preflight. The backend also has an application
+service that executes the media-preparation slice: it creates an owned
+workspace, normalizes clips sequentially when required, writes the concat
+manifest, concatenates exactly once, verifies the merged result (including the
+FFV1/PCM contract on the normalization path), and then applies the
+success/cancellation/failure retention policy. This service is
+not exposed as a complete user job yet. Frame extraction, upscaling, final
+encoding and publication, job queuing, and GUI work remain unimplemented. The
 implemented boundaries are:
 
 - `core.models`: immutable job intent, exact rationals, typed stream inventory,
@@ -15,7 +19,9 @@ implemented boundaries are:
 - `storage.naming`: timezone-aware automatic names and process-local destination
   reservation with filesystem collision checks
 - `storage.paths`: Qt-standard application data and cache locations
+- `storage.workspaces`: randomly identified ownership-marked job directories and guarded cleanup confined to the configured job root
 - `system.platform`: macOS 26.5.2 and Apple Silicon support gate
+- `system.processes`: shell-free execution, bounded diagnostic tails, explicit timeouts, cooperative cancellation, and process-group termination
 - `system.tools`: explicit-path-first discovery, executable inspection, x4plus
   model-pair validation, and a cached 16 × 16 inference smoke test that proves
   the Real-ESRGAN Vulkan backend can create output
@@ -26,6 +32,7 @@ implemented boundaries are:
 - `video.policy`: shared SDR BT.709 predicates used by preflight and command builders
 - `services.preflight`: shared path, media-policy, sizing, concat-strategy, audio,
   and disk-margin validation
+- `services.media_preparation`: sequential normalize-all-or-none execution, one concat, measured stage progress, merged-result verification, and workspace retention policy
 - `cli`: human-readable and JSON preflight reports
 
 The Vulkan smoke test uses an owned temporary directory, explicitly selects

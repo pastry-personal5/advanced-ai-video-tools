@@ -6,9 +6,10 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 > discovery, collision-safe output naming, FFprobe parsing, and the shared
 > preflight service are implemented and tested. Typed compatibility analysis,
 > safe FFmpeg/FFprobe command construction, lossless normalization planning,
-> concat manifests, and concat stream-copy are also implemented and exercised
-> with tiny real media. Pipeline execution beyond concat and the PySide6 GUI
-> remain future stages.
+> concat manifests, owned workspaces, cancellable process execution, sequential
+> normalization, one concat, and merged-media verification are also implemented
+> and exercised with tiny real media. Extraction, Real-ESRGAN execution, final
+> encoding and publication, job queuing, and the PySide6 GUI remain future stages.
 
 ## Implemented foundation
 
@@ -25,6 +26,9 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
   BT.709 conversion, exact rational CFR, first-audio mapping, silence insertion,
   audio padding/trimming, FFV1, and PCM
 - One concat-demuxer stream-copy command after optional normalization
+- Ownership-marked per-job workspaces with guarded cleanup and failed-workspace retention
+- Shell-free subprocess execution with bounded diagnostics, timeouts, cancellation, and process-group termination
+- A media-preparation service that normalizes clips sequentially, writes the manifest, concatenates exactly once, reports measured stage progress, and verifies the merged intermediate—including FFV1/PCM on the normalization path—before cleanup
 - Preflight gates for platform, paths, SDR BT.709, rotation, streams, timing,
   audio layout, dimensions, AI scale, concat strategy, and disk margin
 - Human-readable and JSON CLI reports through `ai-video-tools preflight`
@@ -34,14 +38,12 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 
 ## Planned features
 
-- Concatenate multiple video clips in a user-defined order
-- Detect incompatible clip properties and normalize them when needed
 - Extract the concatenated video to frames with FFmpeg
 - Upscale frame directories with `realesrgan-ncnn-vulkan`
 - Re-encode upscaled frames and restore audio with FFmpeg
 - Configure resolution, codec, quality, audio, and output location
 - Show processing progress, logs, warnings, and actionable errors
-- Cancel long-running jobs safely
+- Connect cancellation and progress to complete jobs and the GUI
 - Preserve audio and video metadata where the selected workflow permits
 - Use hardware acceleration when a supported backend is available
 

@@ -114,3 +114,14 @@ def test_probe_parser_detects_hdr_side_data() -> None:
 
     assert parsed.primary_video is not None
     assert parsed.primary_video.has_hdr_metadata
+
+
+def test_probe_parser_reads_matroska_duration_tags() -> None:
+    """Stream-level Matroska timecodes support audio/video alignment checks."""
+
+    parsed = parse_probe_document(Path("normalized.mkv"), {"format": {"duration": "1.25"}, "streams": [{"index": 0, "codec_type": "video", "codec_name": "ffv1", "width": 64, "height": 36, "r_frame_rate": "10/1", "tags": {"DURATION": "00:00:01.200000000"}}, {"index": 1, "codec_type": "audio", "codec_name": "pcm_s24le", "sample_rate": "48000", "channels": 1, "channel_layout": "mono", "tags": {"duration": "00:00:01.200000000"}}]})
+
+    assert parsed.primary_video is not None
+    assert parsed.primary_audio is not None
+    assert parsed.primary_video.duration == Decimal("1.200000000")
+    assert parsed.primary_audio.duration == Decimal("1.200000000")
