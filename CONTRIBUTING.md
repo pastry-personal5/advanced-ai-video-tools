@@ -2,6 +2,8 @@
 
 AI Video Tools welcomes focused, reviewable improvements. Most code is expected to be AI-generated or AI-assisted, but the person accepting a change remains responsible for understanding and validating it.
 
+Version 1 targets photographic and live-action footage. Anime, animation, illustration, synthetic line art, and their specialized Real-ESRGAN models are out of scope.
+
 ## Before you start
 
 Read:
@@ -48,14 +50,28 @@ Do not combine an unrelated refactor with a feature or bug fix. Preserve existin
 
 ## Required processing behavior
 
-The central invariant is **concat first, upscale once**:
+The central invariant is **concat first, upscale at most once**:
 
 ```text
 validate → probe → normalize if needed → concat → extract frames
-         → upscale once → encode and mux audio → verify → publish
+         → upscale once if needed → encode and mux audio → verify → publish
 ```
 
 Compatible clips should use FFmpeg concat-demuxer stream copy. Incompatible clips must be normalized to a shared specification before concat. Source clips must not be upscaled independently.
+
+The default final height is 2160 pixels. Preserve the aspect ratio derived from coded dimensions and sample aspect ratio, calculate an even output width, and keep raw Real-ESRGAN scale selection internal to the pipeline.
+
+Use `realesrgan-x4plus` explicitly for AI processing. Tests must verify that the adapter does not inherit the executable's anime-oriented default and that anime-specific model names are rejected.
+
+Version 1 accepts SDR BT.709 only. Reject detected HDR and unsupported wide gamut. Require acknowledgement for ambiguous color metadata instead of silently interpreting or tone-mapping it.
+
+Produce limited-range BT.709, converting accepted full-range input explicitly. Reject nonzero rotation metadata, pass `-noautorotate` to FFmpeg, and never crop or stretch. Preserve the first clip's exact rational frame rate without float rounding.
+
+Use the first audio stream from each clip. Insert silence where a clip lacks audio, pad short audio, trim long audio to the video timeline, and require acknowledgement before dropping unsupported secondary streams.
+
+Run one job at a time in FIFO order. Overwrite destinations by default through verified atomic replacement, preserve the old file on failure, and honor no-overwrite mode. Require estimated peak disk space plus 20%, delete successful or cancelled workspaces, retain failed workspaces, and do not implement resume in v1.
+
+Use Real-ESRGAN automatic GPU and tiling defaults with TTA disabled. Retry only recognized Vulkan memory errors using the documented bounded tile sequence. Keep settings and rotating local logs in Qt standard macOS locations, and do not add telemetry or application-initiated network access.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the complete contract.
 

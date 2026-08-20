@@ -4,7 +4,7 @@ This file provides repository-wide guidance for AI coding agents and contributor
 
 ## Mission
 
-Act as a senior Python engineer building a reliable macOS Apple Silicon desktop application and CLI for an FFmpeg → `realesrgan-ncnn-vulkan` → FFmpeg video pipeline. Use PySide6 for the GUI. Deliver complete, maintainable changes with predictable media output, a responsive interface, and actionable errors.
+Act as a senior Python engineer building a reliable macOS Apple Silicon desktop application and CLI for an FFmpeg → `realesrgan-ncnn-vulkan` → FFmpeg pipeline for photographic and live-action footage. Use PySide6 for the GUI. Deliver complete, maintainable changes with predictable media output, a responsive interface, and actionable errors.
 
 The repository is in its initial stage. Do not describe proposed modules or commands as implemented until they exist and have been verified.
 
@@ -68,25 +68,28 @@ The CLI and GUI are thin adapters over the same typed job model and application 
 
 ## Canonical pipeline
 
-The primary design invariant is **concat first, upscale once**. Build one merged timeline, extract one frame sequence from it, and invoke the upscaling stage for that sequence. Do not upscale source clips separately and concatenate the results.
+The primary design invariant is **concat first, upscale at most once**. Build one merged timeline and extract one frame sequence. Invoke Real-ESRGAN once only when that merged input is below the requested height. Do not upscale source clips separately and concatenate the results.
 
 Implement every processing job as this state sequence:
 
 ```text
 validate → probe → concatenate/normalize → extract frames
-         → upscale frames → encode/mux audio → verify → publish → clean up
+         → upscale frames if needed → encode/mux audio → verify → publish → clean up
 ```
 
-- Validate all inputs, output policy, free disk space when practical, executable paths, Vulkan availability, model choice, scale, and job workspace before processing.
+- Validate all inputs, output policy, conservative peak-disk estimate plus 20% margin, executable paths, Vulkan availability, model choice, target height, resolved dimensions, AI scale, and owned job workspace before processing.
+- Accept SDR BT.709 only. Reject detected HDR or unsupported wide gamut, and require acknowledgement before treating missing or ambiguous color metadata as BT.709.
+- Reject nonzero rotation/display-matrix metadata. Version 1 never rotates video and every FFmpeg input must use `-noautorotate`.
+- Select the first audio stream from each clip. Inventory unsupported secondary streams and require acknowledgement before dropping them.
 - Treat FFmpeg, FFprobe, `realesrgan-ncnn-vulkan`, Vulkan support, and model files as user-installed prerequisites. Discover and validate them, but never bundle or automatically download them.
 - Probe every clip before choosing a concat strategy. When all streams are compatible, use FFmpeg's concat demuxer with stream copy so concatenation is lossless and avoids an extra encode. Inputs with differing codecs, time bases, dimensions, frame rates, pixel formats, or audio layouts require explicit normalization to a common intermediate specification before concat.
 - Complete concatenation before frame extraction or Real-ESRGAN invocation. The concat stage must produce one merged working video and one continuous media timeline for all later stages.
-- Extract one lossless, zero-padded frame sequence from the concatenated timeline. Select and record an explicit output frame rate; do not infer timing later from directory contents.
+- Extract one lossless, zero-padded frame sequence from the concatenated timeline. Preserve the first clip's exact rational CFR, or use its valid rational average rate for VFR, without converting through float.
 - Extract or map the concatenated audio independently so it can be muxed into the final encode. Define behavior for missing audio and multiple audio streams rather than relying on FFmpeg defaults.
-- Invoke `realesrgan-ncnn-vulkan` once per frame directory where possible. Pass the selected model, scale, GPU, tile size, thread settings, and image format explicitly.
-- Encode upscaled frames at the recorded frame rate, mux the selected audio, and apply explicit codec, pixel-format, quality, and metadata policies.
+- Invoke `realesrgan-ncnn-vulkan` at most once for the merged frame directory. Pass the selected model, resolved AI scale, GPU, tile size, thread settings, and image format explicitly. Skip AI processing by default when the merged input is already at or above the requested height.
+- Encode the processed frames at the recorded frame rate and resolved target dimensions, mux the selected audio, and apply explicit codec, pixel-format, quality, and metadata policies.
 - Verify process exit codes, expected frame count, output existence, nonzero duration, and readable output streams before publishing the result.
-- Publish through a partial file on the destination filesystem and rename only after verification. Clean job-owned workspaces on success, failure, and cancellation according to the configured retention policy.
+- Publish through a partial file on the destination filesystem and atomically replace the destination only after verification. Overwrite is the default; preserve the old file on failure or cancellation. Honor no-overwrite mode with preflight and pre-publication collision checks. Delete owned workspaces after success or cancellation; retain and report them after failure. Do not resume partial jobs in v1.
 
 ## Python standards
 
@@ -99,6 +102,8 @@ validate → probe → concatenate/normalize → extract frames
 - Prefer dataclasses, enums, or typed models for job configuration instead of unstructured dictionaries.
 - Catch narrow exception types. Preserve the original cause when translating an exception with `raise ... from ...`.
 - Use `logging` for diagnostics; do not use `print` in library or GUI code.
+- Resolve settings and logs with `QStandardPaths.StandardLocation.AppDataLocation` and job workspaces with `QStandardPaths.StandardLocation.CacheLocation`. Do not hard-code a user home directory in application logic.
+- Rotate local logs at 10 MiB with five backups. Do not add telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
 - Pass subprocess commands as argument lists with `shell=False`.
 - Set explicit timeouts where a subprocess can hang, and capture enough stderr to explain failures.
 - Pin or constrain dependencies through the project metadata; add packages with the appropriate `uv add` command and document why they are needed.
@@ -132,6 +137,7 @@ All Python tools invoked by the `Makefile` should run through `uv run`, and depe
 - Never perform video probing, encoding, filesystem scans, or inference on the GUI thread.
 - Deliver worker progress to the GUI through PySide6's thread-safe signal/slot mechanism.
 - Model job states explicitly so queued, running, cancelling, cancelled, failed, and completed states cannot be confused.
+- Run exactly one processing job at a time. Maintain later jobs in an in-memory FIFO queue and start the next only after the active job reaches a terminal state and cleanup finishes.
 - Treat cancellation as a normal state, not an exception shown as a crash.
 - Disable or guard actions that would create conflicting concurrent jobs.
 - Make progress determinate when duration or frame count is known; otherwise clearly show an indeterminate state.
@@ -142,25 +148,36 @@ All Python tools invoked by the `Makefile` should run through `uv run`, and depe
 
 - Probe every input before starting a job and validate that files are readable.
 - Do not assume clips share codec, dimensions, frame rate, pixel format, time base, or audio layout.
+- Probe color primaries, transfer characteristics, matrix coefficients, range, pixel format, and HDR metadata. Never silently tone-map, gamut-map, or reinterpret color.
+- Reject detected PQ, HLG, BT.2020, HDR mastering metadata, and other unsupported HDR or wide-gamut input. Require acknowledgement for absent, unknown, or conflicting color tags before treating them as BT.709.
+- Reject nonzero rotation/display-matrix metadata; do not normalize it. Pass `-noautorotate` for every FFmpeg input and never add a rotation filter or control. Convert accepted full-range BT.709 samples to limited/TV range explicitly.
 - Use stream-copy concatenation only when inputs are compatible; otherwise normalize or transcode explicitly.
-- Use the documented quality-first defaults unless the job overrides them: Matroska/FFV1/PCM for normalization, PNG frames, and MP4/libx264 CRF 18 slow/yuv420p with compatible audio copy or AAC-LC 256 kbit/s for final output.
-- Never upscale clips individually as an implementation shortcut. Normalization, when required, happens before concat; AI upscaling happens once after concat.
+- Force normalization for full-range color, VFR timing, missing required audio, or audio-duration mismatch even when codecs otherwise match. Rotation is a validation error, not a normalization path.
+- Use the documented quality-first defaults unless the job overrides them: Matroska/FFV1/PCM for normalization, SDR BT.709, PNG frames, a 2160-pixel final height with aspect-derived even width, and MP4/libx264 CRF 18 slow/yuv420p with unchanged compatible audio copy or AAC-LC 256 kbit/s for final output.
+- Use `realesrgan-x4plus` as the v1 model and pass `-n realesrgan-x4plus` explicitly. Never inherit the Real-ESRGAN executable's default model.
+- Never upscale clips individually as an implementation shortcut. Normalization, when required, happens before concat; AI upscaling happens at most once after concat.
+- Select the first audio stream from each clip. When any input has audio, insert normalized silence for clips without it, pad short audio, and trim long audio so the video timeline remains authoritative. Omit final audio only when every input is silent.
+- Inventory extra audio, subtitles, chapters, and attachments. Show what will be dropped and require explicit acknowledgement; never discard them silently.
+- Convert BT.709 YUV to RGB PNG explicitly before AI processing and convert RGB back to explicitly tagged BT.709 YUV during final encoding.
 - Generate concat manifests safely; escape paths according to FFmpeg's manifest format and never interpolate them into a shell command.
 - Preserve deterministic frame ordering with one documented zero-padded naming scheme shared by extraction, upscaling, and encoding.
-- Treat variable-frame-rate input as an explicit conversion decision. Record the chosen constant output frame rate and surface timing changes to the user.
-- Preserve aspect ratio by default. Cropping or stretching requires an explicit user choice.
+- Preserve the first clip's exact rational CFR, such as `30000/1001`. For a VFR first clip, use FFprobe's valid rational average rate. Normalize all clips to that rate and surface timing changes to the user; never round through a decimal float.
+- Always preserve aspect ratio through proportional scaling and padding. Cropping and stretching are unsupported in v1.
 - Write output through a temporary or partial file and promote it only after successful completion.
-- Avoid overwriting an existing output unless the user has explicitly approved it.
-- Clean up owned temporary artifacts after success, failure, and cancellation without deleting user inputs.
+- Overwrite an existing destination by default through verified atomic replacement. Never truncate it at job start. Support CLI `--no-overwrite` and the equivalent GUI setting, with a collision recheck immediately before publication.
+- Create owned workspaces beneath `QStandardPaths.StandardLocation.CacheLocation/jobs`, require estimated peak use plus a 20% margin, delete after success or cancellation, and retain after failure. Never recursively delete an unmarked workspace or a path outside the job root.
 - Record the effective processing configuration in logs to make jobs reproducible.
 
 ## AI upscaling
 
 - The required backend is `realesrgan-ncnn-vulkan`; do not silently replace it with the Python/PyTorch Real-ESRGAN implementation.
+- Version 1 supports real-world imagery only. Do not expose or select anime-, animation-, illustration-, or line-art-specific models.
+- Treat target height as the public sizing option. Resolve the AI scale internally by choosing the smallest supported 2×, 3×, or 4× scale that reaches the target; use 4× with a warning when it cannot reach the target.
 - Discover the executable from explicit configuration first, then `PATH`. Report the resolved executable and version in diagnostic logs.
-- Validate model name, model files, scale, input/output image formats, GPU selection, tile size, and device availability before processing.
+- Validate that the `realesrgan-x4plus` parameter and binary model files are available, then validate scale, input/output image formats, GPU selection, tile size, and device availability before processing.
 - Use the executable's directory input/output support instead of launching one process per frame unless a measured constraint requires otherwise.
-- Use tiling to bound GPU memory. If an out-of-memory failure is retryable, reduce tile size through a bounded, logged policy rather than retrying indefinitely.
+- Use automatic GPU selection by omitting `-g`, automatic tiling with `-t 0`, executable-default threads by omitting `-j`, and disabled TTA by omitting `-x`.
+- Retry only recognized Vulkan memory failures using tile sizes `512`, `256`, `128`, `64`, then `32`. Recreate only the owned upscale-output directory before each retry, record every attempt, and never retry another error class.
 - Do not promise a CPU fallback: this pipeline targets the NCNN Vulkan executable. Fail early with an actionable message when no compatible Vulkan device is available.
 - Do not implement automatic model downloads or redistribution. Validate user-supplied model files and document their expected source and license.
 - Store only model paths in application configuration; never copy model weights into the repository.
@@ -176,6 +193,10 @@ Add tests at the lowest practical layer:
 - GUI tests for critical interactions when supported by the chosen framework
 
 Tests must not require a GPU, network connection, large model download, or long video by default. Mark heavyweight or hardware-specific tests separately. When fixing a bug, add a regression test when feasible.
+
+Include fixtures for SDR BT.709, explicit HDR rejection, missing color tags, clips without audio, short and long audio, and unsupported secondary streams. Verify acknowledgement gates, silence insertion, trimming, final BT.709 tags, and audio/video duration alignment.
+
+Test exact rational frame rates, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion, FIFO serialization, default atomic replacement, old-file preservation on failure, no-overwrite races, disk-margin rejection, workspace retention and safe cleanup, bounded tile retries, log rotation, and the absence of application-initiated network calls.
 
 Use the narrowest effective validation during iteration. Before completion, run `make check` when it exists and is affordable. Use `uv run` for focused diagnostics that have no Make target. Never claim a check passed unless it was actually run; if a check cannot run, report the command, reason, and next-best validation.
 

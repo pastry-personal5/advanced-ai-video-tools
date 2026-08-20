@@ -5,6 +5,7 @@ This document is the authoritative technical overview for AI Video Tools. It des
 ## Design goals
 
 - Provide one reliable processing pipeline through both a CLI and desktop GUI.
+- Optimize photographic and live-action footage; anime, animation, illustration, and synthetic line art are outside the v1 product scope.
 - Concatenate clips before AI upscaling so Real-ESRGAN runs once per job.
 - Preserve source streams without re-encoding when concat inputs are compatible.
 - Keep the GUI responsive and make progress, cancellation, errors, and cleanup predictable.
@@ -25,27 +26,119 @@ Each job creates one merged media timeline before frame extraction or AI process
 
 For compatible clips, FFmpeg's concat demuxer joins streams with stream copy. This is lossless and avoids an unnecessary encode. The relevant streams must match, including codec, time base, resolution, frame rate, pixel format, and audio layout.
 
-When clips are incompatible, the pipeline normalizes them to one explicit intermediate specification and then concatenates the normalized results. Normalization is a compatibility step, not AI upscaling. The merged result is still upscaled once.
+When clips are incompatible, the pipeline normalizes them to one explicit intermediate specification and then concatenates the normalized results. Normalization is a compatibility step, not AI upscaling. When the merged result is below the requested height, it is upscaled once.
 
-This approach provides one frame-number sequence, one audio timeline, one Real-ESRGAN invocation, and one final encoding policy for the whole job.
+This approach provides one frame-number sequence, one audio timeline, at most one Real-ESRGAN invocation, and one final encoding policy for the whole job.
 
 ## Default media profile
 
-Defaults must be explicit in the typed job model and overridable by the CLI and GUI.
+Defaults must be explicit in the typed job model and overridable by the CLI and GUI only within the supported real-image product scope.
 
 | Stage | Version 1 default |
 | --- | --- |
 | Normalization container | Matroska |
 | Normalization video | Lossless FFV1 |
 | Normalization audio | Lossless PCM, 48 kHz, selected primary channel layout |
+| Color | SDR BT.709 only |
+| Color range | Limited/TV; explicitly convert accepted full-range input |
 | Common canvas | First clip's resolution; preserve aspect ratio and pad |
-| Constant frame rate | First clip's frame rate |
+| Rotation | Unsupported; reject nonzero metadata and disable auto-rotation |
+| Constant frame rate | First clip's exact rational rate |
 | Frame sequence | Lossless PNG with deterministic zero-padded names |
+| Real-ESRGAN model | `realesrgan-x4plus` |
+| Final display height | 2160 pixels |
+| Final display width | Derived from coded dimensions and sample aspect ratio, then rounded to an even integer |
 | Final container | MP4 with fast-start metadata |
 | Final video | `libx264`, CRF 18, slow preset, `yuv420p` |
-| Final audio | Stream copy when MP4-compatible; otherwise AAC-LC, 256 kbit/s, 48 kHz |
+| Final audio | First audio stream; copy only when unchanged and MP4-compatible, otherwise AAC-LC, 256 kbit/s, 48 kHz |
 
-Mixed resolution, aspect ratio, frame rate, variable frame rate, or channel layout triggers a visible normalization warning. Never crop, stretch, discard a stream, or change timing silently. Extra audio streams, subtitles, chapters, and attachments require an explicit policy; until supported, report them before processing and require acknowledgement rather than silently dropping them.
+Mixed resolution, aspect ratio, frame rate, variable frame rate, or channel layout triggers a visible normalization warning. Never crop, stretch, discard a stream, or change timing silently. Report extra audio streams, subtitles, chapters, and attachments before processing and drop them only after explicit acknowledgement.
+
+### Output sizing
+
+Treat target height, not raw AI scale, as the user-facing sizing control. The default target is 2160 pixels.
+
+Calculate output width from coded dimensions and sample aspect ratio. Supported inputs have no rotation transform:
+
+```text
+source_aspect_ratio = (coded_width × sample_aspect_ratio) ÷ coded_height
+raw_width = target_height × source_aspect_ratio
+output_width = nearest even integer to raw_width
+```
+
+Both final dimensions must be positive and even for the default `yuv420p` profile. FFmpeg's equivalent aspect-preserving rule is `scale=-2:2160`. Record the resolved dimensions in the frozen job configuration and show them before processing.
+
+Version 1 never rotates video. Reject nonzero rotation or display-matrix metadata during preflight, pass `-noautorotate` on every FFmpeg input, and expose no rotation filter or user control. Inputs must already be upright. Preserve aspect ratio through proportional scaling and padding only; cropping and stretching are unsupported.
+
+For input below the target, choose the smallest supported Real-ESRGAN scale in 2×, 3×, or 4× whose intermediate height reaches or exceeds the target. Resize that intermediate once during final encoding to reach the exact output dimensions. If even 4× is below the target, use 4× and warn that final sizing includes conventional FFmpeg enlargement.
+
+For input at or above the target height, skip Real-ESRGAN by default and resize directly to the requested dimensions. A future explicit enhancement mode may allow AI processing without enlargement, but it is not part of the v1 default.
+
+### Color policy
+
+Version 1 supports SDR BT.709 only. Probe color primaries, transfer characteristics, matrix coefficients, range, pixel format, and mastering metadata before processing.
+
+- Reject detected PQ, HLG, BT.2020, HDR mastering metadata, and other explicit HDR or unsupported wide-gamut signaling with an actionable message.
+- Accept explicitly tagged SDR BT.709.
+- When color tags are absent, unknown, or internally inconsistent, require user acknowledgement before interpreting the input as BT.709.
+- Convert BT.709 YUV to the RGB PNG frame representation explicitly, then convert processed RGB frames back to BT.709 for encoding.
+- Tag the final stream explicitly with BT.709 primaries, transfer characteristics, and matrix coefficients. Do not tone-map, gamut-map, or retag silently.
+
+### Audio and secondary-stream policy
+
+Select the first audio stream from each clip. The first available selected stream in input order defines the normalized channel layout. If no input contains audio, omit audio from the final output.
+
+Preserve the video timeline as authoritative:
+
+- Insert matching PCM silence for a clip with no audio when the job otherwise contains audio.
+- Pad a selected audio stream that ends before its clip's video duration.
+- Trim a selected audio stream that exceeds its clip's video duration.
+- After concat, pad or trim once more if necessary so final audio duration matches final video duration.
+
+Additional audio streams, subtitles, chapters, and attachments are unsupported in v1. Inventory them during probe, show exactly what will be dropped, and require explicit acknowledgement in the GUI or CLI before processing. Stream-copy audio only when no padding, trimming, resampling, layout conversion, or container conversion is required; otherwise encode with the default AAC-LC profile.
+
+## Operational defaults
+
+### Queue and concurrency
+
+Run one processing job at a time. Additional jobs remain in an in-memory FIFO queue and may be reordered or removed before they start. Do not run concurrent FFmpeg or Real-ESRGAN pipelines. A cancelled active job reaches `cancelled` before the next queued job starts.
+
+Version 1 does not resume partial jobs. Restart failed, cancelled, or interrupted jobs from the beginning.
+
+### Output replacement
+
+Overwrite an existing destination by default. Never truncate or remove it when the job starts: write the complete result to a partial file on the destination filesystem, verify that partial file, then atomically replace the destination. Failure or cancellation before publication leaves the existing destination unchanged. Successful replacement does not keep a backup.
+
+The CLI provides `--no-overwrite`, and the GUI provides an overwrite setting that is enabled by default. In no-overwrite mode, reject an existing destination during preflight and recheck immediately before publication to detect a file created while the job was running.
+
+### Workspace and disk safety
+
+Resolve the cache root with `QStandardPaths.StandardLocation.CacheLocation`; on macOS the intended job root is `~/Library/Caches/AI Video Tools/jobs/`. Create one randomly identified, ownership-marked directory per job.
+
+Before starting, calculate a conservative peak-disk estimate covering normalized clips, the merged intermediate, input and output PNG sequences, partial output, and process overhead. Require available space of at least `estimated_peak × 1.20`. Refuse to start when the estimate cannot be computed or the margin is unavailable.
+
+- Delete the owned workspace after success.
+- Delete it after cancellation once all child processes have terminated.
+- Retain it after failure and report its path for diagnosis.
+- Never treat an unmarked directory as an owned workspace, and never recursively delete outside the configured job root.
+
+### Real-ESRGAN runtime
+
+- Use automatic GPU selection by omitting `-g`.
+- Start with automatic tiling via `-t 0`.
+- Use executable-default worker threads by omitting `-j`.
+- Disable TTA by omitting `-x`.
+- Retry only a recognized Vulkan allocation or out-of-memory failure. After the automatic attempt, retry with tile sizes `512`, `256`, `128`, `64`, then `32`, stopping after the first success.
+- Before each retry, delete and recreate only the owned upscale-output directory so partial frames cannot be mistaken for a complete result.
+- Record every attempt, resolved device, tile size, and failure. Do not retry unrelated errors or loop beyond the defined sequence.
+
+### Configuration, logs, and networking
+
+Resolve persistent configuration with `QStandardPaths.StandardLocation.AppDataLocation`, corresponding to `~/Library/Application Support/AI Video Tools/` on macOS. Store executable paths, recent locations, and user preferences there; do not store credentials or model binaries.
+
+Write local logs under the application-data directory. Rotate at 10 MiB with five backup files, redact sensitive path or environment data where practical, and expose the log location in the GUI and CLI diagnostics.
+
+Version 1 performs no telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
 
 ## System boundaries
 
@@ -61,7 +154,7 @@ GUI ─────┘                       │
 
 - **CLI:** parses arguments, creates a typed job request, and renders progress and errors. It contains no media-processing logic.
 - **GUI:** creates the same typed job request and consumes the same progress events. It contains no backend command construction.
-- **Job model:** holds validated inputs, output policy, concat and normalization settings, frame rate, model, scale, device, tiling, encoding, audio, temporary-file, and overwrite policies.
+- **Job model:** holds validated inputs, output policy, concat and normalization settings, color interpretation and range, rational frame rate, target height, resolved dimensions, model, resolved AI runtime, encoding, selected audio, dropped-stream acknowledgement, workspace, retention, and overwrite mode, which defaults to replace.
 - **Pipeline service:** owns stage transitions, orchestration, cancellation, error translation, and cleanup.
 - **Process adapters:** build argument arrays, launch external tools without a shell, parse progress, capture diagnostic output, and translate exit failures.
 - **Workspace/output manager:** owns job-specific temporary paths, verifies ownership before cleanup, and atomically publishes the final output.
@@ -72,9 +165,11 @@ GUI ─────┘                       │
 
 - Resolve FFmpeg, FFprobe, and `realesrgan-ncnn-vulkan` from explicit configuration first, then `PATH`.
 - Verify that resolved executables can launch on Apple Silicon and that the Real-ESRGAN installation can access a working Vulkan device and its selected model files.
+- Require the `realesrgan-x4plus` parameter and binary files and resolve them during preflight. Never inherit the executable's default model implicitly.
 - Do not install, download, update, or modify external tools as part of preflight.
-- Validate readable inputs, distinct output, overwrite policy, model files, scale, Vulkan device, and workspace.
-- Estimate required temporary space when practical; frame sequences can be substantially larger than their source videos.
+- Validate readable inputs, zero or absent rotation metadata, distinct output, overwrite mode, model files, target height, resolved dimensions, AI scale, Vulkan device, owned workspace, conservative disk estimate, and 20% free-space margin.
+- Reject detected HDR or unsupported wide gamut. Require acknowledgement for missing or ambiguous color tags and for every unsupported secondary stream that will be dropped.
+- Calculate a conservative peak temporary-space estimate; frame sequences can be substantially larger than their source videos.
 - Freeze the effective job configuration before starting so logs and retries are reproducible.
 
 ### 2. Probe
@@ -83,9 +178,11 @@ Run FFprobe for every input and parse machine-readable output. Record:
 
 - Video and audio stream selection
 - Codec, dimensions, sample aspect ratio, and pixel format
-- Average and real frame rates, time base, duration, and start time
+- Average and real frame rates as exact rationals, time base, duration, and start time
 - Audio codec, sample rate, channel layout, and duration
+- Color primaries, transfer characteristics, matrix coefficients, range, pixel format, and HDR mastering metadata
 - Rotation and other metadata that affects rendered orientation
+- All additional audio, video, subtitle, chapter, and attachment streams
 
 Do not select concat or normalization behavior from filename extensions.
 
@@ -93,7 +190,15 @@ Do not select concat or normalization behavior from filename extensions.
 
 Compare the probed streams against the concat compatibility policy. If they do not match, transcode each incompatible input to one documented intermediate specification.
 
-The default normalization profile is Matroska with lossless FFV1 video and lossless PCM audio at 48 kHz. Use the first clip's resolution, frame rate, and primary channel layout unless the job overrides them. Preserve aspect ratio by padding; never stretch or crop silently.
+Full-range color, VFR timing, missing required audio, or audio-duration mismatch forces normalization even when codec and stream layouts would otherwise be concat-compatible. Nonzero rotation metadata fails preflight instead of entering normalization.
+
+The default normalization profile is Matroska with lossless FFV1 video and lossless PCM audio at 48 kHz. Use the first clip's resolution and frame rate plus the first available primary audio channel layout unless the job overrides them. Preserve aspect ratio by padding; never stretch or crop silently.
+
+Resolve the first clip's exact rational frame rate without converting through floating point. Preserve its CFR rate directly; for a VFR first clip, use FFprobe's valid rational average frame rate. Normalize every clip to that rational rate and report the conversion. For example, preserve `30000/1001` rather than rounding it to `29.97` or `30`.
+
+Pass `-noautorotate` for every FFmpeg input and do not add rotation filters. Convert accepted full-range BT.709 input explicitly to limited/TV range; do not relabel range metadata without converting sample values.
+
+When the job contains audio, normalize the first audio stream from each clip. Insert silence for clips without audio, pad short streams, and trim long streams to each clip's authoritative video duration before concat.
 
 ### 4. Concatenate
 
@@ -107,36 +212,41 @@ Create a safely escaped concat manifest in the job workspace and invoke FFmpeg w
 ### 5. Extract frames and audio
 
 - Decode the merged video into one lossless PNG sequence.
+- Pass `-noautorotate` during frame extraction and verify that no rotation transform reaches the output.
+- Perform explicit BT.709 YUV-to-RGB conversion for the PNG sequence; do not rely on unspecified automatic color interpretation.
 - Use a single zero-padded naming convention that preserves lexical and numeric order.
 - Choose and record an explicit constant output frame rate. Variable-frame-rate conversion must be visible to the user.
-- Extract or map the selected concatenated audio independently for later muxing.
+- Extract or map the concatenated primary audio independently for later muxing and retain its exact relationship to the video timeline.
 - Record the expected frame count for validation after upscaling.
 
 ### 6. Upscale once
 
-Invoke `realesrgan-ncnn-vulkan` with the extracted directory as input and one output directory. Pass model, scale, GPU, tile size, thread settings, and image format explicitly.
+When the merged input is below the target height, invoke `realesrgan-ncnn-vulkan` with the extracted directory as input and one output directory. Pass `-n realesrgan-x4plus`, the resolved AI scale, `-t 0`, and PNG output explicitly. Omit `-g`, `-j`, and `-x` to use automatic GPU selection, executable-default threads, and disabled TTA. Skip this stage when the input is already at or above the target height.
 
-Use directory processing rather than one subprocess per frame. If GPU memory exhaustion supports a retry, use a bounded and logged tile-size reduction policy. Do not silently switch to another Real-ESRGAN implementation or promise a CPU fallback.
+Do not expose anime-specific models in the v1 CLI, GUI, or configuration. Reject an anime model name with a clear validation error rather than silently substituting it.
+
+Use directory processing rather than one subprocess per frame. Retry only recognized Vulkan memory failures with the defined `512 → 256 → 128 → 64 → 32` tile sequence. Do not silently switch to another Real-ESRGAN implementation or promise a CPU fallback.
 
 Before encoding, verify that output frame numbers match the input set exactly. Missing, duplicate, unreadable, or unexpected frames fail the stage.
 
 ### 7. Encode and mux
 
-- Encode the upscaled sequence at the recorded output frame rate. The default is MP4 using `libx264`, CRF 18, the slow preset, `yuv420p`, and fast-start metadata.
-- Apply explicit video codec, quality, pixel format, and color metadata policies even when defaults are used.
-- Copy the selected primary audio stream when it is compatible with MP4; otherwise encode AAC-LC at 256 kbit/s and 48 kHz.
-- Define behavior for no audio, multiple audio streams, subtitles, chapters, and attachments; do not rely on implicit FFmpeg selection.
+- Resize the processed sequence to the resolved even width and exact target height while preserving the source aspect ratio. Never crop or stretch. Encode at the recorded output frame rate. The default is MP4 using `libx264`, CRF 18, the slow preset, `yuv420p`, and fast-start metadata.
+- Convert RGB frames explicitly to BT.709 YUV and set BT.709 primaries, transfer, and matrix metadata on the final stream.
+- Copy the selected primary audio only when it is unchanged and compatible with MP4; otherwise encode AAC-LC at 256 kbit/s and 48 kHz.
+- Pad final audio with silence or trim it so its duration matches the authoritative final video timeline. Omit audio when every input is silent.
+- Map only supported streams explicitly; never rely on FFmpeg's implicit stream selection.
 - Write to a partial output located on the destination filesystem.
 
 ### 8. Verify, publish, and clean up
 
-Probe the partial output and verify readable streams, nonzero duration, expected dimensions, expected frame rate, and audio presence according to policy. Only then atomically rename it to the requested destination.
+Probe the partial output and verify readable streams, nonzero duration, expected dimensions, expected frame rate, no rotation transform, explicit BT.709 signaling, expected audio presence, and audio/video duration agreement. Only then atomically replace the requested destination. Preserve any existing destination until this publication step succeeds.
 
-On success, failure, or cancellation, terminate owned child processes and delete only job-owned temporary artifacts. A diagnostic retention option may preserve the workspace, but its location must be reported clearly.
+On success or cancellation, terminate owned child processes and delete only the owned job workspace. On failure, retain the workspace and report its path clearly. Version 1 does not resume it.
 
 ## Job state model
 
-The pipeline should expose explicit states:
+The pipeline exposes a FIFO queue with one active job and these explicit states:
 
 ```text
 queued
@@ -156,12 +266,13 @@ Progress events include the job ID, stage, measured completed work, measured tot
 - Treat nonzero exit codes, malformed probe output, missing frames, and failed output verification as typed failures.
 - Cancellation must terminate the active process tree and wait for termination before workspace deletion.
 - Never modify or delete source inputs.
-- Never overwrite an existing destination without the job's explicit overwrite policy.
+- Default to atomic destination replacement after verification. Never truncate the existing file early. In no-overwrite mode, reject collisions during preflight and recheck immediately before publication.
 - Avoid loading full videos or unbounded frame batches into Python memory.
 
 ## Testing boundaries
 
 - Unit-test job validation, compatibility decisions, command construction, state transitions, progress parsing, path escaping, and cleanup ownership with process fakes.
+- Unit-test exact rational frame-rate handling, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion decisions, default atomic replacement, preservation of the old file on failure, no-overwrite races, disk-margin rejection, FIFO scheduling, workspace retention, log rotation, and the bounded tile retry sequence.
 - Integration-test FFprobe, concat, extraction, and encoding with tiny generated media fixtures.
 - Contract-test the Real-ESRGAN adapter with a fake executable that copies or transforms small image fixtures predictably.
 - Test orchestration without a GUI, GPU, network, or real model weights.

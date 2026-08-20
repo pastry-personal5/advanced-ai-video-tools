@@ -1,6 +1,6 @@
 # AI Video Tools
 
-AI Video Tools is a Python application for macOS on Apple Silicon that concatenates video with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing command owns the complete pipeline; a PySide6 desktop GUI provides a convenient front end to that same core behavior.
+AI Video Tools is a Python application for macOS on Apple Silicon that concatenates real-world video footage with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing command owns the complete pipeline; a PySide6 desktop GUI provides a convenient front end to that same core behavior.
 
 > **Status:** foundation stage. The repository currently contains project guidance only; source code, packaging, and executable commands will be added as implementation begins.
 
@@ -17,21 +17,23 @@ AI Video Tools is a Python application for macOS on Apple Silicon that concatena
 - Preserve audio and video metadata where the selected workflow permits
 - Use hardware acceleration when a supported backend is available
 
+Version 1 is designed for photographic and live-action imagery. Anime, animation, illustration, and synthetic line-art enhancement are outside the product target.
+
 ## Core processing pipeline
 
 ### Key design decision: concat first, upscale once
 
 Merge all clips into one video before extracting or upscaling frames. When every clip has compatible streams—especially the same codec, resolution, frame rate, pixel format, time base, and audio layout—use FFmpeg's concat demuxer with stream copy. This is the cleanest path because concatenation does not re-encode the source streams.
 
-If the clips are incompatible, normalize them to a shared intermediate specification first, then concatenate those normalized clips. In either case, create one merged timeline and run that timeline through the upscaling stage exactly once. Do not upscale each input clip independently and concatenate the upscaled results.
+If the clips are incompatible, normalize them to a shared intermediate specification first, then concatenate those normalized clips. In either case, create one merged timeline and run Real-ESRGAN at most once, when the merged input is below the requested height. Do not upscale each input clip independently and concatenate the upscaled results.
 
 The canonical job is one ordered pipeline:
 
 1. **Probe:** use FFprobe to read stream layout, dimensions, frame rate, duration, time base, codecs, and audio properties for every input.
 2. **Concatenate:** join clips in the requested order with FFmpeg. Prefer concat-demuxer stream copy for compatible streams; normalize incompatible inputs before joining them. The result is one merged working video.
 3. **Extract:** decode the concatenated video into a lossless, sequentially named frame directory and retain the concatenated audio separately.
-4. **Upscale once:** pass the merged video's input and output frame directories to `realesrgan-ncnn-vulkan` with the selected model, scale, GPU, tile size, and image format.
-5. **Re-encode:** encode the upscaled frames with FFmpeg using the selected output codec and quality settings, then mux the retained audio into the final video.
+4. **Upscale when needed:** when the merged input is below the target height, pass its frame directory to `realesrgan-ncnn-vulkan` once with the selected model and smallest useful supported AI scale.
+5. **Re-encode:** resize the processed frames to the exact target height while preserving the source aspect ratio, encode them with FFmpeg using the selected output settings, and mux the retained audio into the final video.
 6. **Finalize:** validate the output, atomically move it to the requested destination, and remove job-owned temporary files.
 
 The Python core must expose this workflow as one CLI operation. The GUI must call the same application service rather than maintaining a second pipeline. Progress should cover each stage, and cancellation must terminate active child processes and clean up only artifacts owned by the current job.
@@ -46,13 +48,46 @@ The default profile favors preservation during processing and high-quality, broa
 - **Normalization video:** lossless FFV1
 - **Normalization audio:** lossless PCM at 48 kHz, using the selected primary channel layout
 - **Normalization canvas and frame rate:** first clip's resolution and frame rate unless explicitly overridden; preserve aspect ratio and pad rather than crop or stretch
+- **Color:** SDR BT.709 only; reject detected HDR and wide-gamut input
+- **Color range:** limited/TV; convert accepted full-range input explicitly
+- **Rotation:** unsupported in v1; reject nonzero rotation metadata and disable FFmpeg auto-rotation
 - **Extracted/upscaled frames:** lossless PNG with deterministic zero-padded names
+- **Upscaling model:** `realesrgan-x4plus` for real-world imagery
+- **Final dimensions:** 2160 pixels high; calculate an even width from coded dimensions and sample aspect ratio
 - **Final container:** MP4 with fast-start metadata
 - **Final video:** H.264 through `libx264`, CRF 18, slow preset, and `yuv420p`
-- **Final audio:** copy the selected primary stream when it is MP4-compatible; otherwise encode AAC-LC at 256 kbit/s and 48 kHz
-- **Additional streams:** warn rather than silently discard extra audio, subtitles, chapters, or attachments
+- **Final audio:** first audio stream, copied when compatible and unchanged; otherwise AAC-LC at 256 kbit/s and 48 kHz
+- **Additional streams:** require acknowledgement, then drop extra audio, subtitles, chapters, and attachments
 
 All media choices must be overridable from the shared job model. Mixed-resolution or variable-frame-rate inputs must produce a visible normalization warning before processing.
+
+The default output height is exactly 2160 pixels. Calculate width from the merged video's coded dimensions and sample aspect ratio, then round to the nearest even integer required by `yuv420p`. For a 16:9 source, the result is 3840 × 2160. The equivalent FFmpeg sizing rule is `scale=-2:2160`.
+
+Version 1 never rotates video. Inputs must already be upright and have zero or absent rotation/display-matrix metadata. Preflight rejects nonzero rotation, every FFmpeg decode uses `-noautorotate`, and the GUI and CLI expose no rotation control. Scaling always preserves aspect ratio; cropping and stretching are unsupported.
+
+When the merged video is shorter than 2160 pixels, use the smallest Real-ESRGAN scale of 2×, 3×, or 4× that reaches or exceeds the target, then resize once to the exact dimensions during final encoding. If 4× does not reach 2160, use 4× and report that the final FFmpeg resize includes additional conventional enlargement. Inputs already at or above 2160 skip Real-ESRGAN by default and resize directly to the requested output height.
+
+### Color and audio policy
+
+Version 1 accepts SDR BT.709 video only. Preflight must reject HDR transfer functions, BT.2020 or other unsupported wide-gamut signaling, and clearly explain why the job cannot continue. Missing or ambiguous color metadata requires acknowledgement before the input is interpreted and tagged as BT.709; the application must never tone-map or change color interpretation silently.
+
+For each clip, select its first audio stream. If a clip has no audio but another clip does, insert silence matching that clip's video duration and the job's normalized audio layout. If no input contains audio, produce no audio track. Pad audio that ends early with silence and trim audio that runs long so the audio timeline exactly matches the video timeline.
+
+Extra audio streams, subtitles, chapters, and attachments are unsupported in v1. List them during preflight and require explicit acknowledgement before dropping them. Audio stream copy is allowed only when no padding, trimming, resampling, layout conversion, or container-incompatible change is required; otherwise use the default AAC-LC encoding profile.
+
+### Operational defaults
+
+- Preserve the first clip's exact rational frame rate, such as `30000/1001`; normalize VFR or mixed-rate inputs to it without float rounding.
+- Run one active processing job and keep later jobs in an in-memory FIFO queue.
+- Overwrite an existing destination by default, but only by atomically replacing it after the new partial output passes verification. A failed or cancelled job leaves the existing file intact. Users may opt out with CLI or GUI no-overwrite mode.
+- Store job workspaces under `~/Library/Caches/AI Video Tools/jobs/` using Qt's application cache location.
+- Require a conservative peak-disk estimate plus a 20% free-space margin before starting.
+- Delete workspaces after success or cancellation; retain and report them after failure.
+- Do not resume partial jobs in v1.
+- Let Real-ESRGAN choose the GPU and worker threads, start with automatic tiling, and keep TTA disabled.
+- Retry recognized Vulkan memory failures only with bounded tile sizes of 512, 256, 128, 64, then 32.
+- Store settings and rotating local logs under `~/Library/Application Support/AI Video Tools/`.
+- Rotate logs at 10 MiB with five backups. Perform no telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
 
 ## Requirements
 
@@ -69,6 +104,8 @@ Expected runtime requirements include:
 - A Vulkan-capable GPU and working Vulkan driver
 
 Users install FFmpeg, FFprobe, `realesrgan-ncnn-vulkan`, Vulkan support, and model files themselves. The application does not bundle or automatically download these components. It discovers explicit executable paths first and then `PATH`, and fails preflight with an actionable message when a required component is missing or incompatible.
+
+The `realesrgan-x4plus` parameter and binary model files are required. The application must pass `-n realesrgan-x4plus` explicitly and must not rely on the executable's built-in default model. Anime-specific models are not exposed in the v1 GUI or CLI.
 
 ## Getting started
 
@@ -89,7 +126,7 @@ uv run ai-video-tools process \
   --input clip-02.mp4 \
   --output combined-upscaled.mp4 \
   --model realesrgan-x4plus \
-  --scale 4
+  --height 2160
 ```
 
 This interface is a design target until the CLI entry point is implemented.
@@ -142,7 +179,7 @@ This layout is a recommendation, not a description of files that already exist.
 - Prefer structured subprocess arguments over shell command strings.
 - Preserve frame order with deterministic, zero-padded filenames.
 - Protect user inputs and existing outputs; use temporary outputs and promote them only after success.
-- Make temporary-file cleanup reliable after success, failure, and cancellation.
+- Apply the workspace policy reliably: delete after success or cancellation and retain failed workspaces for diagnosis.
 - Keep tests fast by mocking heavyweight inference and using very small media fixtures.
 - Avoid bundling model weights or generated videos in Git.
 
