@@ -158,14 +158,14 @@ message actions.
 
 ### 1. Audit and interaction specification
 
-- [ ] Capture the current GUI hierarchy, workflows, focus order, and state transitions.
-- [ ] Identify usability failures using concrete scenarios: first run, valid job, blocked preflight, acknowledgement, queued job, active cancellation, failure, and tool misconfiguration.
+- [x] Capture the current GUI hierarchy, workflows, focus order, and state transitions. See [Phase 1 GUI Audit and Interaction Specification](1-enhance-gui-audit.md).
+- [x] Identify usability failures using concrete scenarios: first run, valid job, blocked preflight, acknowledgement, queued job, active cancellation, failure, and tool misconfiguration. See [Phase 1 GUI Audit and Interaction Specification](1-enhance-gui-audit.md).
 - [x] Approve the information architecture: a far-left two-icon rail, mutually exclusive Job Creation and Queue Monitoring views, and a persistent bottom message area.
 - [x] Approve removal of the v1 `Video processing jobs` and `One job runs at a time • Default output height: {settings.target_height}p` labels.
 - [x] Approve the dark-theme visual direction and Codex-created app-owned icon set.
 - [ ] Define typography, spacing, density, and final icon inventory details.
-- [ ] Define wireframes for empty, editing, validating, queued, running, failed, cancelled, and completed states.
-- [ ] Establish measurable accessibility and window-resizing criteria.
+- [x] Define wireframes for empty, editing, validating, queued, running, failed, cancelled, and completed states. See [Phase 1 GUI Audit and Interaction Specification](1-enhance-gui-audit.md).
+- [x] Establish measurable accessibility and window-resizing criteria. See [Phase 1 GUI Audit and Interaction Specification](1-enhance-gui-audit.md).
 
 ### 2. Presentation architecture
 
@@ -305,6 +305,10 @@ message actions.
 - Supporting operating systems or hardware outside the approved target.
 
 ## Implementation evidence
+
+### Audit and interaction specification — completed
+
+- Added [Phase 1 GUI Audit and Interaction Specification](1-enhance-gui-audit.md) covering the current hierarchy, focus-order risk, workflows, findings, state transitions, target wireframes, accessibility criteria, and minimum-window behavior.
 
 ### Header simplification slice — completed
 

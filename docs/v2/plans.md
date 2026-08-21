@@ -101,3 +101,4 @@ A phase is complete only when:
 | 2026-08-22 | Move advanced options and External Tools to a separate `Edit` → `Preferences` window; remove the main-window External Tools button. Do not implement retry support. |
 | 2026-08-22 | Use `Status`, `Job Name`, and `Remove` queue columns; show stage and whole-job progress; allow no-confirmation removal of cancelled/failed rows; show selected-job details and the job-start output name in `Job Messages`. |
 | 2026-08-22 | Keep messages session-only with local timestamps, no severity/filter/action controls, automatic `Job Messages` activation, the empty state `No job is selected.`, and exactly five visible lines per tab. Completed jobs append to `Global Messages`; errors remain inline. |
+| 2026-08-22 | Complete the Phase 1 audit and interaction specification, covering the current GUI hierarchy, workflows, usability findings, target state wireframes, focus criteria, and 1536 × 1536 resizing behavior. |
