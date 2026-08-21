@@ -146,6 +146,24 @@ def test_verification_failure_preserves_destination_and_diagnostic_workspace(tmp
     assert not tuple(tmp_path.glob(".*.partial.mp4"))
 
 
+def test_final_verification_failure_reports_exact_frame_timing_operands(tmp_path: Path) -> None:
+    """Terminal timing failures carry exact FFprobe and tolerance values."""
+
+    manager, workspace, prepared, upscaled, job, toolchain = _inputs(tmp_path)
+    executor = FinalizationExecutor(manager, FinalRunner(), FinalOutputVerifier(FinalProbe(rate=Rational(12, 1), time_base=Rational(1, 1000))), command_timeout_seconds=5)
+
+    with pytest.raises(FinalizationFailed) as captured:
+        executor.execute(prepared, upscaled, job, toolchain, workspace=workspace)
+
+    message = str(captured.value)
+    assert "final video frame timing mismatch" in message
+    assert "expected=10/1" in message
+    assert "effective=12/1" in message
+    assert "time_base=1/1000" in message
+    assert "frame_period_delta=1/60s" in message
+    assert "tolerance=<1/1000s" in message
+
+
 def test_cancellation_discards_partial_and_cleans_owned_workspace(tmp_path: Path) -> None:
     """Cancellation is terminal cleanup, not a retained processing failure."""
 

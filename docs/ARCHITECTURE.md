@@ -329,7 +329,7 @@ This stage is implemented as a shell-free command plan and cancellable service b
 
 This stage is implemented for explicit overwrite, explicit no-overwrite, and generated destinations. The no-clobber publication operation is atomic rather than only a pre-publication existence check.
 
-Probe the partial output and verify readable streams, nonzero duration, expected dimensions, expected frame timing, no rotation transform, explicit signaling matching the frozen first-clip color profile, expected audio presence, and audio/video duration agreement. Frame-rate verification compares frame periods and accepts only differences smaller than one tick of the probed stream time base, because container timestamp quantization can produce a different but equivalent FFprobe fraction. Only then atomically replace the requested destination. Preserve any existing destination until this publication step succeeds.
+Probe the partial output and verify readable streams, nonzero duration, expected dimensions, expected frame timing, no rotation transform, explicit signaling matching the frozen first-clip color profile, expected audio presence, and audio/video duration agreement. Frame-rate verification compares frame periods and accepts only differences smaller than one tick of the probed stream time base, because container timestamp quantization can produce a different but equivalent FFprobe fraction. A rejected merged or final rate reports the expected and effective rates, FFprobe real and average fractions, time base, VFR classification, exact frame-period delta, and strict accepted tolerance. Only then atomically replace the requested destination. Preserve any existing destination until this publication step succeeds.
 
 On success or cancellation, terminate owned child processes and delete only the owned job workspace. On failure, retain the workspace and report its path clearly. Version 1 does not resume it.
 
@@ -362,7 +362,7 @@ Progress events include the job ID, stage, measured completed work, measured tot
 
 - Unit-test job validation, compatibility decisions, command construction, state transitions, progress parsing, path escaping, and cleanup ownership with process fakes.
 - Unit-test timezone-aware automatic names, microsecond formatting, UTC offsets, queued-path reservations, numeric collision suffixes, exact rational frame-rate handling, quantized-CFR recognition, time-base-derived verification tolerance, genuine VFR classification, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion decisions, default atomic replacement for explicit paths, preservation of the old file on failure, no-overwrite races, disk-margin rejection, FIFO scheduling, workspace retention, log rotation, and the bounded tile retry sequence.
-- Integration-test FFprobe, concat, extraction, and encoding with tiny generated media fixtures.
+- Integration-test FFprobe, concat, extraction, and encoding with tiny generated media fixtures, including a nominal 16 fps ProRes/MOV stream quantized on a `1/600` clock and its normalized FFV1/Matroska result.
 - Contract-test the Real-ESRGAN adapter with a fake executable that copies or transforms small image fixtures predictably.
 - Test orchestration without a GUI, GPU, network, or real model weights.
 - Reserve end-to-end Vulkan tests for an explicitly marked hardware-enabled suite.

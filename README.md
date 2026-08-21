@@ -38,11 +38,12 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 - Cancellable exact-rational frame extraction with explicit limited-range YUV-to-RGB conversion using the frozen BT.709 or SMPTE 170M matrix, deterministic nine-digit PNG names, structural RGB PNG validation, contiguous numbering, plausible frame-count checks, and retention of merged audio for later muxing
 - Strict `realesrgan-x4plus` directory execution with the frozen 2×/3×/4× scale, automatic GPU and threads, automatic tiling first, bounded allocation-failure retries at `512 → 256 → 128 → 64 → 32`, cancellation, attempt diagnostics, skip behavior, and exact output-frame verification
 - Explicit final MP4 encoding from RGB frames with exact rational CFR, limited-range conversion and frozen first-clip color tags, H.264 CRF 3 slow `yuv420p`, first-audio copy only when exact and MP4-safe, otherwise aligned 48 kHz AAC-LC at 256 kbit/s
-- Probe-gated publication using same-filesystem partials, atomic replacement for explicit overwrite, atomic no-clobber for generated/no-overwrite paths, old-output preservation on failure or cancellation, success/cancellation cleanup, and failed-workspace retention
+- Probe-gated publication using same-filesystem partials, atomic replacement for explicit overwrite, atomic no-clobber for generated/no-overwrite paths, old-output preservation on failure or cancellation, actionable exact frame-timing diagnostics, success/cancellation cleanup, and failed-workspace retention
 - A synchronous full-job pipeline service with explicit lifecycle transitions, measured validation/probe progress, one shared cancellation token and workspace, typed terminal results, reservation release, clean cancellation, and failed-workspace retention
 - Preflight gates for platform, paths, explicit matching SDR BT.709 or SMPTE 170M profiles, rotation, streams, timestamp-aware CFR/VFR timing,
   audio layout, dimensions, AI scale, concat strategy, and disk margin
 - Human-readable and JSON CLI results through `ai-video-tools preflight` and `ai-video-tools process`, with measured text progress on stderr
+- One-time Loguru bootstrap with human-readable stderr output, a thread-safe rotating `10 MB` local file retained for five rotations, stable job/stage context, privacy-conscious command redaction, and CLI-visible log paths
 - Fast tests that require no GPU, network, model download, or checked-in media;
   the tiny FFmpeg integration fixture is generated locally and skips when the
   user-installed FFmpeg tools are unavailable
@@ -54,7 +55,7 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 
 - Run one active job with an in-memory FIFO queue
 - Add the PySide6 GUI with progress, cancellation, warnings, and actionable errors
-- Add persistent settings and rotating local diagnostics
+- Add persistent settings
 
 Version 1 is designed for photographic and live-action imagery. Anime, animation, illustration, and synthetic line-art enhancement are outside the product target.
 

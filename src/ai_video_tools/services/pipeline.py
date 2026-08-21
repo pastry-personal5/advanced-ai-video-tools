@@ -6,6 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+from uuid import uuid4
+
+from loguru import logger
 
 from ai_video_tools.core.models import IssueSeverity, JobPlan, JobRequest, JobState, PipelineStage, PreflightReport, ProgressEvent, Toolchain
 from ai_video_tools.services.finalization import FinalOutputVerifier, FinalizationCancelled, FinalizationExecutor, FinalizationFailed, FinalizationResult
@@ -118,6 +121,7 @@ class JobLifecycle:
     def __init__(self, callback: StateCallback | None = None) -> None:
         self._callback = callback
         self._state = JobState.QUEUED
+        logger.info("Job state={}", self._state.value)
         if callback is not None:
             callback(self._state)
 
@@ -133,6 +137,7 @@ class JobLifecycle:
         if state not in _ALLOWED_TRANSITIONS[self._state]:
             raise InvalidJobStateTransition(f"cannot transition a job from {self._state.value} to {state.value}")
         self._state = state
+        logger.info("Job state={}", state.value)
         if self._callback is not None:
             self._callback(state)
 
@@ -171,10 +176,18 @@ class PipelineService:
         """Pass one workspace and cancellation token through every stage."""
 
         preparation, extraction, upscaling, finalization = self._stage_runners(toolchain)
-        prepared = preparation.execute_in_workspace(plan, toolchain.ffmpeg.path, workspace, token, progress)
-        extracted = extraction.execute(prepared, plan, toolchain.ffmpeg.path, workspace=workspace, cancellation=token, progress=progress)
-        upscaled = upscaling.execute(extracted, plan, toolchain, workspace=workspace, cancellation=token, progress=progress)
-        return finalization.execute(prepared, upscaled, plan, toolchain, workspace=workspace, cancellation=token, progress=progress)
+        with logger.contextualize(stage=PipelineStage.NORMALIZE.value):
+            logger.info("Starting media preparation")
+            prepared = preparation.execute_in_workspace(plan, toolchain.ffmpeg.path, workspace, token, progress)
+        with logger.contextualize(stage=PipelineStage.EXTRACT.value):
+            logger.info("Starting frame extraction")
+            extracted = extraction.execute(prepared, plan, toolchain.ffmpeg.path, workspace=workspace, cancellation=token, progress=progress)
+        with logger.contextualize(stage=PipelineStage.UPSCALE.value):
+            logger.info("Starting AI upscale scale={} model={}", plan.ai_scale or "skip", plan.model_name)
+            upscaled = upscaling.execute(extracted, plan, toolchain, workspace=workspace, cancellation=token, progress=progress)
+        with logger.contextualize(stage=PipelineStage.ENCODE.value):
+            logger.info("Starting final encoding and publication")
+            return finalization.execute(prepared, upscaled, plan, toolchain, workspace=workspace, cancellation=token, progress=progress)
 
     @staticmethod
     def _emit_cleanup(progress: ProgressCallback | None, completed: int, message: str) -> None:
@@ -207,12 +220,14 @@ class PipelineService:
             raise PipelineFailed(self._blocking_message(report), PipelineStage.VALIDATE, preflight=report)
         return report, plan, toolchain
 
-    def run(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, state_changed: StateCallback | None = None) -> PipelineResult:
-        """Execute one complete job, retaining failures and cleaning cancellation."""
+    def _run_job(self, request: JobRequest, cancellation: CancellationToken | None, progress: ProgressCallback | None, state_changed: StateCallback | None) -> PipelineResult:
+        """Execute one contextualized job, retaining failures and cleaning cancellation."""
 
         token = cancellation or CancellationToken()
         lifecycle = JobLifecycle(state_changed)
-        report, plan, toolchain = self._validate(request, token, lifecycle, progress)
+        with logger.contextualize(stage=PipelineStage.VALIDATE.value):
+            report, plan, toolchain = self._validate(request, token, lifecycle, progress)
+            logger.info("Preflight accepted output={}x{} rate={} concat={} ffmpeg={} ffprobe={} realesrgan={}", plan.output_width, plan.output_height, plan.output_frame_rate, plan.concat_strategy.value, toolchain.ffmpeg.path.name, toolchain.ffprobe.path.name, toolchain.realesrgan.path.name)
         reservation = plan.output_path
         workspace: OwnedWorkspace | None = None
         try:
@@ -223,6 +238,7 @@ class PipelineService:
             lifecycle.transition(JobState.RUNNING)
             try:
                 workspace = self._workspace_manager.create()
+                logger.info("Created owned workspace identifier={}", workspace.identifier)
             except WorkspaceError as error:
                 lifecycle.transition(JobState.FAILED)
                 raise PipelineFailed(f"Could not create the job workspace: {error}", PipelineStage.VALIDATE, preflight=report) from error
@@ -252,3 +268,20 @@ class PipelineService:
             return PipelineResult(report, finalized)
         finally:
             self._preflight.registry.release(reservation)
+
+    def run(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, state_changed: StateCallback | None = None) -> PipelineResult:
+        """Execute one complete job with stable privacy-conscious log context."""
+
+        job_id = uuid4().hex
+        with logger.contextualize(job_id=job_id, stage=JobState.QUEUED.value):
+            logger.info("Job submitted input_count={} target_height={} model={}", len(request.inputs), request.target_height, request.model_name)
+            try:
+                result = self._run_job(request, cancellation, progress, state_changed)
+            except PipelineCancelled as error:
+                logger.info("Job cancelled stage={} workspace_retained={}", error.stage.value, bool(error.workspace_path and error.workspace_path.exists()))
+                raise
+            except PipelineFailed as error:
+                logger.error("Job failed stage={} workspace_retained={} diagnostic_bytes={}", error.stage.value, bool(error.workspace_path and error.workspace_path.exists()), len(error.diagnostic_tail.encode("utf-8")))
+                raise
+            logger.info("Job completed workspace_identifier={}", result.finalization.workspace_identifier)
+            return result

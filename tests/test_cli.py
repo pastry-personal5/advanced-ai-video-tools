@@ -27,6 +27,14 @@ from ai_video_tools.system.processes import ProcessResult
 from ai_video_tools.video.finalization import FinalAudioMode
 
 
+@pytest.fixture(autouse=True)
+def _isolated_logging(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep CLI bootstrap diagnostics inside the test boundary."""
+
+    monkeypatch.setattr(cli, "configure_logging", lambda **_kwargs: None)
+    monkeypatch.setattr(cli, "current_log_path", lambda: tmp_path / "ai-video-tools.log")
+
+
 class FakeRegistry:
     """Record release of a diagnostic-only output reservation."""
 
@@ -175,6 +183,7 @@ def test_process_json_reports_completed_output_and_parsed_policy(tmp_path: Path,
     assert result == 0
     assert not captured.err
     assert payload["status"] == "completed"
+    assert payload["log_path"] == str(tmp_path / "ai-video-tools.log")
     assert payload["output_path"] == str(output)
     assert payload["audio_mode"] == "none"
     assert service.request is not None
@@ -213,6 +222,7 @@ def test_process_runtime_failure_reports_stage_workspace_and_exit_one(tmp_path: 
     assert not captured.out
     assert "Processing failed during upscale" in captured.err
     assert "synthetic failure" in captured.err
+    assert f"Log: {tmp_path / 'ai-video-tools.log'}" in captured.err
 
 
 def test_process_cancellation_returns_shell_status_130(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:

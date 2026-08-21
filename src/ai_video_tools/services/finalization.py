@@ -7,6 +7,8 @@ from dataclasses import dataclass, replace as dataclass_replace
 from decimal import Decimal
 from pathlib import Path
 
+from loguru import logger
+
 from ai_video_tools.core.models import JobPlan, MediaProbe, OverwriteMode, PipelineStage, ProgressEvent, Toolchain, VideoStream
 from ai_video_tools.services.media_preparation import PreparationResult
 from ai_video_tools.services.upscaling import UpscalingResult
@@ -14,7 +16,7 @@ from ai_video_tools.storage.naming import OutputCollisionError
 from ai_video_tools.storage.publication import AtomicOutputPublisher, PartialOutput, PublicationError
 from ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceError, WorkspaceManager
 from ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessError, ProcessResult, ProcessRunner
-from ai_video_tools.video.compatibility import effective_frame_rate, frame_rates_equivalent
+from ai_video_tools.video.compatibility import assess_frame_timing
 from ai_video_tools.video.finalization import FinalAudioMode, FinalEncodingPlan, build_final_encoding_plan
 from ai_video_tools.video.frames import FrameInventoryError, FrameInventoryVerifier
 from ai_video_tools.video.probe import MediaProber, ProbeError
@@ -75,9 +77,10 @@ class FinalOutputVerifier:
             failures.append("final video is not H.264 yuv420p")
         if (video.width, video.height) != (job.output_width, job.output_height):
             failures.append("final video dimensions differ from the frozen output size")
-        rate, variable = effective_frame_rate(video)
-        if variable or rate is None or not frame_rates_equivalent(rate, job.output_frame_rate, video.time_base):
-            failures.append("final video frame timing differs from the expected CFR beyond its timestamp precision")
+        timing = assess_frame_timing(video, job.output_frame_rate)
+        logger.debug("Final frame timing {}", timing.diagnostic())
+        if not timing.accepted:
+            failures.append(f"final video frame timing mismatch ({timing.diagnostic()})")
         if video.rotation:
             failures.append("final video contains unsupported rotation metadata")
         expected_color = (job.output_color_profile.matrix.value, job.output_color_profile.transfer, job.output_color_profile.primaries)

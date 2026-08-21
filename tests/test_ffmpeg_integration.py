@@ -22,6 +22,7 @@ from ai_video_tools.storage.workspaces import WorkspaceManager
 from ai_video_tools.system.platform import PlatformInfo
 from ai_video_tools.system.processes import SubprocessRunner
 from ai_video_tools.video.commands import NormalizationSpec, build_concat_command, build_normalization_command
+from ai_video_tools.video.compatibility import effective_frame_rate, frame_rates_equivalent
 from ai_video_tools.video.manifest import write_concat_manifest
 from ai_video_tools.video.probe import FFprobeClient
 
@@ -53,6 +54,41 @@ def _generate_source(ffmpeg: Path, output: Path, audio_duration: Decimal | None,
     _run(arguments)
 
 
+def _generate_quantized_prores(ffmpeg: Path, output: Path, width: int) -> None:
+    """Create nominal 16 fps MOV media whose 1/600 clock quantizes frame ticks."""
+
+    _run(
+        [
+            str(ffmpeg),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"testsrc2=size={width}x36:rate=16",
+            "-frames:v",
+            "81",
+            "-an",
+            "-c:v",
+            "prores_ks",
+            "-profile:v",
+            "1",
+            "-pix_fmt",
+            "yuv422p10le",
+            "-colorspace",
+            "smpte170m",
+            "-color_range",
+            "tv",
+            "-video_track_timescale",
+            "600",
+            str(output),
+        ]
+    )
+
+
 def _audio_packet_end(ffprobe: Path, media: Path) -> Decimal:
     result = subprocess.run([str(ffprobe), "-v", "error", "-select_streams", "a:0", "-show_entries", "packet=pts_time,duration_time", "-of", "csv=p=0", str(media)], check=False, capture_output=True, text=True, timeout=30, shell=False)
     assert result.returncode == 0, result.stderr
@@ -75,6 +111,44 @@ class FixedToolDiscovery:
         """Return the frozen integration toolchain without a GPU smoke test."""
 
         return self.toolchain
+
+
+@pytest.mark.integration
+def test_quantized_sixteen_fps_prores_normalizes_concats_and_verifies(tmp_path: Path) -> None:
+    """Real MOV and Matroska clocks preserve nominal 16/1 through preparation."""
+
+    ffmpeg_name = shutil.which("ffmpeg")
+    ffprobe_name = shutil.which("ffprobe")
+    if ffmpeg_name is None or ffprobe_name is None:
+        pytest.skip("FFmpeg and FFprobe are required for integration tests")
+    ffmpeg = Path(ffmpeg_name)
+    prober = FFprobeClient(Path(ffprobe_name))
+    sources = (tmp_path / "quantized-first.mov", tmp_path / "quantized-second.mov")
+    _generate_quantized_prores(ffmpeg, sources[0], 64)
+    _generate_quantized_prores(ffmpeg, sources[1], 66)
+    probes = tuple(prober.probe(path) for path in sources)
+    first_video = probes[0].primary_video
+    assert first_video is not None
+    assert first_video.real_frame_rate == Rational(16, 1)
+    assert first_video.average_frame_rate != Rational(16, 1)
+    assert first_video.time_base == Rational(1, 600)
+    assert effective_frame_rate(first_video) == (Rational(16, 1), False)
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "unused-output.mp4", True, probes, Rational(16, 1), 3840, 2160, 4, ConcatStrategy.NORMALIZE, None, ("dimensions differ",), 100, 120, SMPTE170M_PROFILE)
+    manager = WorkspaceManager(tmp_path / "jobs")
+    workspace = manager.create()
+    executor = MediaPreparationExecutor(manager, SubprocessRunner(), MergedOutputVerifier(prober), command_timeout_seconds=30)
+
+    result = executor.execute_in_workspace(job, ffmpeg, workspace)
+
+    merged_video = result.merged_probe.primary_video
+    assert result.normalization_count == 2
+    assert merged_video is not None
+    assert merged_video.time_base is not None
+    merged_rate, variable = effective_frame_rate(merged_video)
+    assert not variable
+    assert merged_rate == Rational(16, 1)
+    assert frame_rates_equivalent(merged_rate, Rational(16, 1), merged_video.time_base)
+    manager.cleanup(workspace)
 
 
 def _write_fake_upscaler(executable: Path, ffmpeg: Path, invocation_log: Path) -> None:

@@ -19,6 +19,7 @@ from ai_video_tools.core.models import (
 )
 from ai_video_tools.services.pipeline import PipelineCancelled, PipelineFailed, PipelineResult, PipelineService
 from ai_video_tools.services.preflight import PreflightService
+from ai_video_tools.system.diagnostics import configure_logging, current_log_path
 from ai_video_tools.system.processes import CancellationToken
 
 
@@ -76,6 +77,7 @@ def _json_report(report: PreflightReport) -> str:
     plan = report.plan
     payload: dict[str, object] = {
         "ready": report.ready,
+        "log_path": str(current_log_path()) if current_log_path() is not None else None,
         "issues": [
             {
                 "severity": issue.severity.value,
@@ -128,6 +130,8 @@ def _text_report(report: PreflightReport) -> str:
                 f"Required workspace free space: {plan.required_free_bytes:,} bytes",
             )
         )
+    if current_log_path() is not None:
+        lines.append(f"Log: {current_log_path()}")
     return "\n".join(lines)
 
 
@@ -139,6 +143,7 @@ def _json_processing_result(result: PipelineResult) -> str:
     video = probe.primary_video
     payload = {
         "status": "completed",
+        "log_path": str(current_log_path()) if current_log_path() is not None else None,
         "output_path": str(result.output_path),
         "output_dimensions": [plan.output_width, plan.output_height],
         "output_frame_rate": str(plan.output_frame_rate),
@@ -173,6 +178,8 @@ def _text_processing_result(result: PipelineResult) -> str:
         f"Video: {plan.output_width}x{plan.output_height} at {plan.output_frame_rate}",
         f"Audio: {result.finalization.audio_mode.value}",
     ]
+    if current_log_path() is not None:
+        lines.append(f"Log: {current_log_path()}")
     for issue in result.preflight.issues:
         location = f" [{issue.path}]" if issue.path else ""
         lines.append(f"WARNING {issue.code.value}{location}: {issue.message}")
@@ -192,10 +199,17 @@ def _processing_error_payload(status: str, error: PipelineFailed | PipelineCance
             "message": str(error),
             "workspace_path": str(error.workspace_path) if error.workspace_path is not None else None,
             "diagnostic_tail": error.diagnostic_tail if isinstance(error, PipelineFailed) and error.diagnostic_tail else None,
+            "log_path": str(current_log_path()) if current_log_path() is not None else None,
         },
         indent=2,
         sort_keys=True,
     )
+
+
+def _with_log_path(message: str) -> str:
+    """Append the configured local diagnostic path to human-readable output."""
+
+    return f"{message}\nLog: {current_log_path()}" if current_log_path() is not None else message
 
 
 def _run_preflight(parsed: argparse.Namespace) -> int:
@@ -215,7 +229,7 @@ def _run_processing(parsed: argparse.Namespace) -> int:
     try:
         result = PipelineService().run(_request(parsed), cancellation=token, progress=None if parsed.as_json else _progress)
     except PipelineCancelled as error:
-        rendered = _processing_error_payload("cancelled", error) if parsed.as_json else f"Processing cancelled during {error.stage.value}: {error}"
+        rendered = _processing_error_payload("cancelled", error) if parsed.as_json else _with_log_path(f"Processing cancelled during {error.stage.value}: {error}")
         (sys.stdout if parsed.as_json else sys.stderr).write(rendered + "\n")
         return 130
     except PipelineFailed as error:
@@ -227,7 +241,7 @@ def _run_processing(parsed: argparse.Namespace) -> int:
             else:
                 sys.stderr.write(_text_report(error.preflight) + "\n")
             return 2
-        rendered = _processing_error_payload("failed", error) if parsed.as_json else f"Processing failed during {error.stage.value}: {error}"
+        rendered = _processing_error_payload("failed", error) if parsed.as_json else _with_log_path(f"Processing failed during {error.stage.value}: {error}")
         (sys.stdout if parsed.as_json else sys.stderr).write(rendered + "\n")
         return 1
     finally:
@@ -246,6 +260,7 @@ def main(arguments: list[str] | None = None) -> int:
 
     QCoreApplication.setOrganizationName("AI Video Tools")
     QCoreApplication.setApplicationName("AI Video Tools")
+    configure_logging(stderr=not parsed.as_json)
     if parsed.command == "preflight":
         return _run_preflight(parsed)
     return _run_processing(parsed)

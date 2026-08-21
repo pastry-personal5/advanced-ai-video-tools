@@ -9,13 +9,13 @@ from pathlib import Path
 import pytest
 
 from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, Rational, VideoStream
-from ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerifier, PreparationCancelled, PreparationFailed
+from ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerificationError, MergedOutputVerifier, PreparationCancelled, PreparationFailed
 from ai_video_tools.storage.workspaces import WorkspaceManager
 from ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult
 
 
-def _video(*, width: int = 64, duration: Decimal = Decimal("1"), codec: str = "h264") -> VideoStream:
-    return VideoStream(0, codec, width, 36, "yuv420p", Rational(1, 1), Rational(10, 1), Rational(10, 1), Rational(1, 10240), duration, "bt709", "bt709", "bt709", "tv", 0, False)
+def _video(*, width: int = 64, duration: Decimal = Decimal("1"), codec: str = "h264", rate: Rational = Rational(10, 1), average_rate: Rational | None = None, time_base: Rational = Rational(1, 10240)) -> VideoStream:
+    return VideoStream(0, codec, width, 36, "yuv420p", Rational(1, 1), rate, average_rate or rate, time_base, duration, "bt709", "bt709", "bt709", "tv", 0, False)
 
 
 def _probe(path: Path, *, width: int = 64) -> MediaProbe:
@@ -189,3 +189,32 @@ def test_merged_verifier_accepts_rate_rounding_below_one_timestamp_tick(tmp_path
     result = MergedOutputVerifier(QuantizedProber()).verify(path, job, ConcatStrategy.NORMALIZE)
 
     assert result is merged
+
+
+def test_merged_verifier_reports_exact_frame_timing_operands(tmp_path: Path) -> None:
+    """A retained preparation failure identifies every rate decision input."""
+
+    path = tmp_path / "merged.mkv"
+    path.write_bytes(b"media")
+    merged = MediaProbe(path, Decimal("2"), (_video(duration=Decimal("2"), codec="ffv1", rate=Rational(12, 1), time_base=Rational(1, 1000)),), (), ())
+
+    class MismatchedProber:
+        """Return a deterministic mismatched rate."""
+
+        def probe(self, _path: Path) -> MediaProbe:
+            """Return the prepared mismatch."""
+
+            return merged
+
+    with pytest.raises(MergedOutputVerificationError) as captured:
+        MergedOutputVerifier(MismatchedProber()).verify(path, _job(), ConcatStrategy.NORMALIZE)
+
+    message = str(captured.value)
+    assert "merged video frame timing mismatch" in message
+    assert "expected=10/1" in message
+    assert "effective=12/1" in message
+    assert "r_frame_rate=12/1" in message
+    assert "avg_frame_rate=12/1" in message
+    assert "time_base=1/1000" in message
+    assert "frame_period_delta=1/60s" in message
+    assert "tolerance=<1/1000s" in message

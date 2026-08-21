@@ -13,6 +13,8 @@ from pathlib import Path
 from threading import Event
 from typing import BinaryIO, Protocol
 
+from loguru import logger
+
 DIAGNOSTIC_LIMIT_BYTES = 64 * 1024
 TERMINATION_GRACE_SECONDS = 5.0
 
@@ -84,6 +86,22 @@ class ProcessRunner(Protocol):
         """Execute one command or raise a typed process failure."""
 
 
+def redacted_command(command: Sequence[str]) -> tuple[str, ...]:
+    """Return a log-safe argument array with absolute paths hidden."""
+
+    home = str(Path.home())
+    redacted = []
+    for argument in command:
+        value = str(argument)
+        if os.path.isabs(value):
+            redacted.append("<absolute-path>")
+        elif home and home in value:
+            redacted.append(value.replace(home, "<home>"))
+        else:
+            redacted.append(value)
+    return tuple(redacted)
+
+
 def _read_tail(handle: BinaryIO) -> str:
     handle.flush()
     handle.seek(0, os.SEEK_END)
@@ -123,23 +141,31 @@ class SubprocessRunner:
         if timeout_seconds <= 0:
             raise ValueError("process timeout must be positive")
         if cancellation.cancelled:
+            logger.info("Process cancelled before launch executable={}", Path(arguments[0]).name)
             raise ProcessCancelled("process cancelled before launch", arguments)
+        started_at = time.monotonic()
+        logger.debug("Launching process executable={} arguments={} timeout_seconds={}", Path(arguments[0]).name, redacted_command(arguments), timeout_seconds)
         with tempfile.TemporaryFile(mode="w+b") as stdout_file, tempfile.TemporaryFile(mode="w+b") as stderr_file:
             try:
                 process_context = subprocess.Popen(arguments, stdin=subprocess.DEVNULL, stdout=stdout_file, stderr=stderr_file, shell=False, start_new_session=True, close_fds=True)
             except OSError as error:
+                logger.error("Process launch failed executable={} error_type={}", Path(arguments[0]).name, type(error).__name__)
                 raise ProcessError(f"could not launch {Path(arguments[0]).name}: {error}", arguments) from error
             with process_context as process:
                 deadline = time.monotonic() + timeout_seconds
                 while process.poll() is None:
                     if cancellation.wait(0.05):
                         _terminate_process_group(process)
+                        logger.info("Process cancelled executable={} elapsed_seconds={:.3f}", Path(arguments[0]).name, time.monotonic() - started_at)
                         raise ProcessCancelled("process cancelled", arguments, _read_tail(stdout_file), _read_tail(stderr_file))
                     if time.monotonic() >= deadline:
                         _terminate_process_group(process)
+                        logger.error("Process timed out executable={} elapsed_seconds={:.3f}", Path(arguments[0]).name, time.monotonic() - started_at)
                         raise ProcessTimeoutError(f"{Path(arguments[0]).name} exceeded its {timeout_seconds:g}-second timeout", arguments, _read_tail(stdout_file), _read_tail(stderr_file))
                 stdout_tail = _read_tail(stdout_file)
                 stderr_tail = _read_tail(stderr_file)
                 if process.returncode != 0:
+                    logger.error("Process failed executable={} returncode={} elapsed_seconds={:.3f}", Path(arguments[0]).name, process.returncode, time.monotonic() - started_at)
                     raise ProcessExecutionError(arguments, process.returncode, stdout_tail, stderr_tail)
+                logger.debug("Process completed executable={} returncode={} elapsed_seconds={:.3f}", Path(arguments[0]).name, process.returncode, time.monotonic() - started_at)
                 return ProcessResult(arguments, process.returncode, stdout_tail, stderr_tail)

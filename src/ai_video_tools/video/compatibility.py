@@ -58,6 +58,37 @@ class CompatibilityReport:
         return self.strategy is ConcatStrategy.STREAM_COPY
 
 
+@dataclass(frozen=True)
+class FrameTimingAssessment:
+    """Auditable comparison between probed timing and the frozen job CFR."""
+
+    expected_rate: Rational
+    effective_rate: Rational | None
+    real_rate: Rational | None
+    average_rate: Rational | None
+    time_base: Rational | None
+    variable: bool
+    period_delta: Fraction | None
+    tolerance: Fraction | None
+    equivalent: bool
+
+    @property
+    def accepted(self) -> bool:
+        """Whether the stream is CFR and equivalent within timestamp precision."""
+
+        return not self.variable and self.equivalent
+
+    def diagnostic(self) -> str:
+        """Render stable values suitable for retained-workspace errors."""
+
+        def rate_text(value: Rational | None) -> str:
+            return str(value) if value is not None else "missing"
+
+        delta_text = f"{self.period_delta}s" if self.period_delta is not None else "unavailable"
+        tolerance_text = f"<{self.tolerance}s" if self.tolerance is not None else "exact-only"
+        return f"expected={self.expected_rate}, effective={rate_text(self.effective_rate)}, r_frame_rate={rate_text(self.real_rate)}, avg_frame_rate={rate_text(self.average_rate)}, time_base={rate_text(self.time_base)}, variable={str(self.variable).lower()}, frame_period_delta={delta_text}, tolerance={tolerance_text}"
+
+
 def effective_frame_rate(video: VideoStream) -> tuple[Rational | None, bool]:
     """Return the nominal CFR unless rate disagreement exceeds one timestamp tick."""
 
@@ -80,6 +111,18 @@ def frame_rates_equivalent(actual: Rational, expected: Rational, time_base: Rati
     actual_period = Fraction(actual.denominator, actual.numerator)
     expected_period = Fraction(expected.denominator, expected.numerator)
     return abs(actual_period - expected_period) < time_base.as_fraction()
+
+
+def assess_frame_timing(video: VideoStream, expected: Rational) -> FrameTimingAssessment:
+    """Return the complete time-base-aware decision used by verifiers."""
+
+    effective, variable = effective_frame_rate(video)
+    period_delta = None
+    if effective is not None and effective.positive and expected.positive:
+        period_delta = abs(Fraction(effective.denominator, effective.numerator) - Fraction(expected.denominator, expected.numerator))
+    tolerance = video.time_base.as_fraction() if video.time_base is not None and video.time_base.positive else None
+    equivalent = effective is not None and frame_rates_equivalent(effective, expected, video.time_base)
+    return FrameTimingAssessment(expected, effective, video.real_frame_rate, video.average_frame_rate, video.time_base, variable, period_delta, tolerance, equivalent)
 
 
 def _finding(path: Path, reason: CompatibilityReason, detail: str) -> CompatibilityFinding:

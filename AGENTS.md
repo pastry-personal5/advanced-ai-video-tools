@@ -88,7 +88,7 @@ validate → probe → concatenate/normalize → extract frames
 - Extract or map the concatenated audio independently so it can be muxed into the final encode. Define behavior for missing audio and multiple audio streams rather than relying on FFmpeg defaults.
 - Invoke `realesrgan-ncnn-vulkan` at most once for the merged frame directory. Pass the selected model, resolved AI scale, GPU, tile size, thread settings, and image format explicitly. Skip AI processing by default when the merged input is already at or above the requested height.
 - Encode the processed frames at the recorded frame rate and resolved target dimensions, mux the selected audio, and apply explicit codec, pixel-format, quality, and metadata policies.
-- Verify process exit codes, expected frame count, output existence, nonzero duration, and readable output streams before publishing the result.
+- Verify process exit codes, expected frame count, output existence, nonzero duration, and readable output streams before publishing the result. Frame-timing failures must report expected, effective, real and average rates, time base, VFR classification, period delta, and accepted tolerance.
 - Generate and reserve the default `ai-video-<local timestamp and offset>.mp4` destination when the job is created. Generated names never overwrite older output. For explicit paths, publish through a partial file on the destination filesystem and atomically replace only after verification; overwrite remains the default. Preserve the old file on failure or cancellation. Honor no-overwrite mode with collision checks. Delete owned workspaces after success or cancellation; retain and report them after failure. Do not resume partial jobs in v1.
 
 ## Python standards

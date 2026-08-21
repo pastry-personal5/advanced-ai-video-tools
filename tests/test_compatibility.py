@@ -4,7 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from ai_video_tools.core.models import AudioStream, ConcatStrategy, MediaProbe, Rational, VideoStream
-from ai_video_tools.video.compatibility import CompatibilityReason, analyze_clip_compatibility, effective_frame_rate, frame_rates_equivalent
+from ai_video_tools.video.compatibility import CompatibilityReason, analyze_clip_compatibility, assess_frame_timing, effective_frame_rate, frame_rates_equivalent
 
 
 def _video(**changes: object) -> VideoStream:
@@ -66,6 +66,17 @@ def test_quantized_cfr_uses_nominal_rate_and_time_base_tolerance() -> None:
     assert effective_frame_rate(video) == (Rational(16, 1), False)
     assert frame_rates_equivalent(Rational(18227, 1139), Rational(16, 1), Rational(1, 1000))
     assert not frame_rates_equivalent(Rational(30000, 1001), Rational(30, 1), Rational(1, 30000))
+
+
+def test_frame_timing_assessment_exposes_all_verification_operands() -> None:
+    """A rejected rate includes enough exact evidence for diagnosis."""
+
+    video = _video(real_frame_rate=Rational(30, 1), average_frame_rate=Rational(30000, 1001), time_base=Rational(1, 30000))
+
+    assessment = assess_frame_timing(video, Rational(16, 1))
+
+    assert not assessment.accepted
+    assert assessment.diagnostic() == "expected=16/1, effective=30000/1001, r_frame_rate=30/1, avg_frame_rate=30000/1001, time_base=1/30000, variable=true, frame_period_delta=437/15000s, tolerance=<1/30000s"
 
 
 def test_matching_smpte170m_matrix_is_stream_copy_compatible() -> None:

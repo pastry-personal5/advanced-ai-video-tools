@@ -7,6 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from loguru import logger
 
 from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, JobState, MediaProbe, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolInfo, Toolchain, VideoStream
 from ai_video_tools.services.finalization import FinalizationCancelled, FinalizationResult
@@ -174,6 +175,25 @@ def test_success_runs_each_stage_once_in_order_and_releases_reservation(tmp_path
     assert preflight.registry.released == [report.plan.output_path]
     assert not any(manager.root.iterdir())
     assert [event.stage for event in events] == [PipelineStage.VALIDATE, PipelineStage.VALIDATE]
+
+
+def test_pipeline_logs_one_stable_job_id_across_stage_contexts(tmp_path: Path) -> None:
+    """Operational logs correlate one job without exposing its source paths."""
+
+    report = _report(tmp_path)
+    calls: list[str] = []
+    service, _preflight, _manager = _service(tmp_path, report, calls)
+    messages: list[str] = []
+    sink_id = logger.add(messages.append, level="INFO", format="{extra[job_id]}|{extra[stage]}|{message}")
+    try:
+        service.run(JobRequest((tmp_path / "source.mp4",), tmp_path))
+    finally:
+        logger.remove(sink_id)
+
+    records = [message.strip().split("|", 2) for message in messages]
+    assert len({record[0] for record in records}) == 1
+    assert {record[1] for record in records} >= {"queued", "validate", "normalize", "extract", "upscale", "encode"}
+    assert str(tmp_path) not in "\n".join(messages)
 
 
 def test_validation_failure_never_creates_workspace(tmp_path: Path) -> None:

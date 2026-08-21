@@ -74,7 +74,7 @@ Run one job at a time in FIFO order. Generate and reserve a timezone-aware `ai-v
 
 Use Real-ESRGAN automatic GPU and tiling defaults with TTA disabled. Retry only recognized Vulkan memory errors using the documented bounded tile sequence. Keep settings and rotating local logs in Qt standard macOS locations, and do not add telemetry or application-initiated network access.
 
-Application modules use Loguru and never configure sinks independently. The eventual application bootstrap owns stderr and rotating-file sink configuration; direct CLI output remains separate from diagnostic logging.
+Application modules use Loguru and never configure sinks independently. The shared application bootstrap owns stderr and rotating-file sink configuration; direct CLI output remains separate from diagnostic logging.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the complete contract.
 

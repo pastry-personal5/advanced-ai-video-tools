@@ -7,11 +7,13 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
+from loguru import logger
+
 from ai_video_tools.core.models import ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, VideoStream
 from ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceError, WorkspaceManager
 from ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessError, ProcessResult, ProcessRunner
 from ai_video_tools.video.commands import MediaPreparationPlan, build_media_preparation_plan
-from ai_video_tools.video.compatibility import effective_frame_rate, frame_rates_equivalent
+from ai_video_tools.video.compatibility import assess_frame_timing
 from ai_video_tools.video.manifest import write_concat_manifest
 from ai_video_tools.video.probe import MediaProber, ProbeError
 
@@ -93,9 +95,10 @@ class MergedOutputVerifier:
             failures.append("merged output must contain exactly one video stream")
         if (video.width, video.height) != (baseline_video.width, baseline_video.height):
             failures.append("merged video dimensions differ from the normalization canvas")
-        rate, variable = effective_frame_rate(video)
-        if variable or rate is None or not frame_rates_equivalent(rate, job.output_frame_rate, video.time_base):
-            failures.append("merged video frame timing differs from the expected CFR beyond its timestamp precision")
+        timing = assess_frame_timing(video, job.output_frame_rate)
+        logger.debug("Merged frame timing {}", timing.diagnostic())
+        if not timing.accepted:
+            failures.append(f"merged video frame timing mismatch ({timing.diagnostic()})")
         if video.rotation:
             failures.append("merged video contains unsupported rotation metadata")
         expected_color = (job.output_color_profile.matrix.value, job.output_color_profile.transfer, job.output_color_profile.primaries)

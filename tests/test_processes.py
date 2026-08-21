@@ -7,7 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.system.processes import CancellationToken, DIAGNOSTIC_LIMIT_BYTES, ProcessCancelled, ProcessExecutionError, ProcessTimeoutError, SubprocessRunner
+from ai_video_tools.system.processes import CancellationToken, DIAGNOSTIC_LIMIT_BYTES, ProcessCancelled, ProcessExecutionError, ProcessTimeoutError, SubprocessRunner, redacted_command
+
+
+def test_command_redaction_hides_absolute_paths_and_home_fragments() -> None:
+    """Diagnostic command arrays retain structure without exposing local paths."""
+
+    home = str(Path.home())
+    command = ("ffmpeg", "-i", f"{home}/private/source.mov", "filter=value", "/private/tmp/output.mp4")
+
+    assert redacted_command(command) == ("ffmpeg", "-i", "<absolute-path>", "filter=value", "<absolute-path>")
 
 
 def test_process_runner_captures_success_output() -> None:
