@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ai-video-tools"
-version = "0.1.0"
+version = "1.0.0"
 description = "Quality-first FFmpeg and Real-ESRGAN video preparation tools"
 readme = "README.md"
 license = { file = "LICENSE" }
