@@ -8,6 +8,8 @@ Act as a senior Python engineer building a reliable macOS Apple Silicon desktop 
 
 Version 1.0.0 is the completed release baseline, and version 2 is the active development target. Preserve every established version 1 contract unless the user makes an explicit version 2 design decision that supersedes it. Do not infer new version 2 features, platforms, media policies, or compatibility promises from the target name alone.
 
+For v2 work, read `docs/v2/plans.md`, then `docs/v2/implement.md`, then the relevant phase file completely before implementation. The current execution phase is `docs/v2/1-enhance-gui.md`; `docs/v2/2-rename-project.md` is defined for subsequent rename work. Do not implement Phase 2 while Phase 1 remains active unless the user explicitly redirects the execution order. Update checklist status and implementation evidence as work progresses; do not describe planned work as implemented.
+
 The repository is in its initial stage. Do not describe proposed modules or commands as implemented until they exist and have been verified.
 
 ## Success criteria

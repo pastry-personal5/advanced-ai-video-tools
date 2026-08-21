@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Set version 2 as the active development target while retaining v1.0.0 as the released behavior baseline.
+- Established GUI enhancement as Phase 1 and project renaming as a required v2 goal.
+- Defined project renaming as Phase 2 with explicit identity, compatibility, persistent-data migration, packaging, legal, and verification gates.
+- Defined the Phase 1 video-preview scope as the currently selected source clip only.
+- Defined the Phase 1 source preview as playback-only, without timeline or media-editing features.
+- Selected PySide6 `QMediaPlayer` and `QVideoWidget` as the planned Phase 1 preview backend, isolated from FFmpeg and Real-ESRGAN processing.
+- Defined the Phase 1 widget as a non-color-accurate convenience preview while retaining FFprobe-backed preflight and the processing pipeline as the authoritative media contract.
+- Defined unsupported native preview formats as a non-blocking state with no FFmpeg proxy fallback.
+- Defined full-width Phase 1 preview playback with exact unrotated aspect preservation and no crop, stretch, or rotation.
 
 ## [1.0.0] - 2026-08-21
 
