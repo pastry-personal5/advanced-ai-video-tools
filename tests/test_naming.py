@@ -1,7 +1,9 @@
 """Tests for output naming and in-process reservations."""
 
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
@@ -13,11 +15,26 @@ from ai_video_tools.storage.naming import (
 )
 
 
-def test_automatic_name_includes_microseconds_and_numeric_offset() -> None:
-    """The default filename freezes an unambiguous local creation time."""
+def test_automatic_name_includes_local_second_and_compact_uuid7() -> None:
+    """The basename combines readable local time with an RFC 9562 identifier."""
 
     created = datetime(2026, 8, 21, 14, 30, 52, 123456, tzinfo=timezone(timedelta(hours=9)))
-    assert automatic_output_basename(created) == "ai-video-20260821-143052-123456+0900.mp4"
+    name = automatic_output_basename(created)
+
+    match = re.fullmatch(r"ai-video-20260821-143052-([0-9a-f]{32})\.mp4", name)
+    assert match is not None
+    identifier = UUID(hex=match.group(1))
+    assert identifier.version == 7
+    assert identifier.int >> 80 == 1_787_290_252_123
+    assert identifier.int >> 62 & 0b11 == 0b10
+
+
+def test_automatic_names_use_fresh_uuid_payloads() -> None:
+    """Jobs created in the same clock tick still receive distinct basenames."""
+
+    created = datetime(2026, 8, 21, tzinfo=timezone.utc)
+
+    assert automatic_output_basename(created) != automatic_output_basename(created)
 
 
 def test_automatic_name_requires_timezone() -> None:
@@ -29,12 +46,15 @@ def test_automatic_name_requires_timezone() -> None:
 
 def test_generated_reservations_avoid_disk_and_queue_collisions(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Generated outputs never overwrite an existing or queued output."""
 
     registry = OutputPathRegistry()
     created = datetime(2026, 8, 21, tzinfo=timezone.utc)
-    base = tmp_path / automatic_output_basename(created)
+    basename = "ai-video-20260821-000000-0198ca56c40070008000000000000000.mp4"
+    monkeypatch.setattr("ai_video_tools.storage.naming.automatic_output_basename", lambda _created_at: basename)
+    base = tmp_path / basename
     base.touch()
 
     first = registry.reserve_generated(tmp_path, created)

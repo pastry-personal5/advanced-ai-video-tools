@@ -179,16 +179,16 @@ The CLI provides `--no-overwrite`, and the GUI provides an overwrite setting tha
 Generate the default output basename when the job is created, not when processing starts or finishes. Use the timezone-aware local wall clock and this ASCII-only format:
 
 ```text
-ai-video-YYYYMMDD-HHMMSS-ffffffZZZZ.mp4
+ai-video-YYYYMMDD-HHMMSS-<compact-UUIDv7>.mp4
 ```
 
-For example: `ai-video-20260821-143052-123456+0900.mp4`.
+For example: `ai-video-20260821-143052-01a022ccf35b7a1e8b0bf554b4c36db2.mp4`.
 
 - `ai-video-` is the fixed prefix.
-- `ffffff` is six-digit microsecond precision.
-- `ZZZZ` is the signed numeric local UTC offset, such as `+0900` or `-0700`, which disambiguates repeated wall-clock times.
+- `YYYYMMDD-HHMMSS` is the creation time rendered in the job's local timezone.
+- `compact-UUIDv7` is an RFC 9562 UUIDv7 rendered as 32 lowercase hexadecimal characters without hyphens. Its 48-bit Unix-millisecond timestamp is derived from the same absolute creation instant, so repeated or ambiguous local wall-clock seconds remain distinguishable.
 - The selected output directory remains separate from the generated basename. The CLI uses `--output-dir`; the GUI exposes an output-directory picker.
-- Capture and freeze the timestamp, offset, basename, and resolved path in the job model so queued jobs do not change names later.
+- Capture and freeze the timestamp, compact UUIDv7, basename, and resolved path in the job model so queued jobs do not change names later.
 - Reserve the resolved path against both the filesystem and all queued or active jobs. If it collides, append `-01`, `-02`, and so on before `.mp4` until a free path is reserved.
 - Automatically generated paths never replace an older output. The general default-overwrite policy applies only to an explicit user-supplied destination path.
 
@@ -216,6 +216,10 @@ Before starting, calculate a conservative peak-disk estimate covering normalized
 ### Configuration, logs, and networking
 
 Resolve persistent configuration with `QStandardPaths.StandardLocation.AppDataLocation`, corresponding to `~/Library/Application Support/AI Video Tools/` on macOS. Store executable paths, recent locations, and user preferences there; do not store credentials or model binaries.
+
+The settings document is typed, JSON-encoded, and explicitly schema-versioned. Version 1 persists FFmpeg, FFprobe, Real-ESRGAN, and model-directory overrides; recent input and output directories; target height; and overwrite preference. It uses mode `0600`, a same-directory temporary file, file synchronization, and atomic replacement so readers never observe a partial write. Malformed documents are quarantined and safe defaults are restored. Unsupported newer schema versions remain untouched and produce an explicit error rather than being mistaken for corruption. Unknown fields within the current schema are ignored for minor forward compatibility.
+
+Dropped-stream acknowledgement is bound to one job's probed stream inventory. It is never persisted or reused, because doing so would silently waive the explicit warning for different inputs.
 
 Loguru is the application logging API. Configure it once at application startup; backend, CLI, and future GUI modules import the shared Loguru `logger` and must not install their own sinks. Keep user-facing CLI stdout/stderr rendering separate from diagnostic logging.
 
@@ -361,7 +365,7 @@ Progress events include the job ID, stage, measured completed work, measured tot
 ## Testing boundaries
 
 - Unit-test job validation, compatibility decisions, command construction, state transitions, progress parsing, path escaping, and cleanup ownership with process fakes.
-- Unit-test timezone-aware automatic names, microsecond formatting, UTC offsets, queued-path reservations, numeric collision suffixes, exact rational frame-rate handling, quantized-CFR recognition, time-base-derived verification tolerance, genuine VFR classification, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion decisions, default atomic replacement for explicit paths, preservation of the old file on failure, no-overwrite races, disk-margin rejection, FIFO scheduling, workspace retention, log rotation, and the bounded tile retry sequence.
+- Unit-test timezone-aware automatic names, UUIDv7 version/variant/timestamp bits, compact lowercase formatting, queued-path reservations, numeric collision suffixes, exact rational frame-rate handling, quantized-CFR recognition, time-base-derived verification tolerance, genuine VFR classification, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion decisions, default atomic replacement for explicit paths, preservation of the old file on failure, no-overwrite races, disk-margin rejection, FIFO scheduling, workspace retention, log rotation, and the bounded tile retry sequence.
 - Integration-test FFprobe, concat, extraction, and encoding with tiny generated media fixtures, including a nominal 16 fps ProRes/MOV stream quantized on a `1/600` clock and its normalized FFV1/Matroska result.
 - Contract-test the Real-ESRGAN adapter with a fake executable that copies or transforms small image fixtures predictably.
 - Test orchestration without a GUI, GPU, network, or real model weights.

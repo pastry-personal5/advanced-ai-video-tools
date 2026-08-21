@@ -17,14 +17,15 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 > now composes those stages with shared cancellation, progress, state transitions,
 > reservation release, and terminal workspace policy. The `process` CLI command
 > exposes that complete pipeline with text or JSON terminal results and cooperative
-> Ctrl-C cancellation. Job queuing and the PySide6 GUI remain future stages.
+> Ctrl-C cancellation. Typed persistent settings and bounded local diagnostics are
+> available for frontends. Job queuing and the PySide6 GUI remain future stages.
 
 ## Implemented foundation
 
 - Reproducible Python packaging with `uv` and a committed lockfile
 - Immutable models for job intent, probed streams, issues, and execution plans
 - Exact rational frame-rate and sample-aspect-ratio handling
-- Automatic timezone-aware `ai-video-...mp4` names with collision reservation
+- Automatic local-time `ai-video-...mp4` names with compact UUIDv7 identifiers and collision reservation
 - Explicit-path-first discovery of FFmpeg, FFprobe, Real-ESRGAN, and x4plus models
 - A tiny cached Real-ESRGAN inference smoke test that verifies the Vulkan backend
 - Safe FFprobe JSON parsing with typed stream and metadata inventory
@@ -44,6 +45,7 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
   audio layout, dimensions, AI scale, concat strategy, and disk margin
 - Human-readable and JSON CLI results through `ai-video-tools preflight` and `ai-video-tools process`, with measured text progress on stderr
 - One-time Loguru bootstrap with human-readable stderr output, a thread-safe rotating `10 MB` local file retained for five rotations, stable job/stage context, privacy-conscious command redaction, and CLI-visible log paths
+- Typed schema-versioned JSON settings for tool overrides, recent input/output directories, target height, and overwrite preference, with private file permissions, atomic replacement, corruption quarantine, and protection against silently destroying newer schemas
 - Fast tests that require no GPU, network, model download, or checked-in media;
   the tiny FFmpeg integration fixture is generated locally and skips when the
   user-installed FFmpeg tools are unavailable
@@ -55,7 +57,6 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 
 - Run one active job with an in-memory FIFO queue
 - Add the PySide6 GUI with progress, cancellation, warnings, and actionable errors
-- Add persistent settings
 
 Version 1 is designed for photographic and live-action imagery. Anime, animation, illustration, and synthetic line-art enhancement are outside the product target.
 
@@ -120,7 +121,7 @@ Extra audio streams, subtitles, chapters, and attachments are unsupported in v1.
 - Preserve the first clip's nominal exact rational CFR, such as `16/1` or `30000/1001`, without float rounding. Treat `r_frame_rate` and `avg_frame_rate` as the same CFR when their frame periods differ by less than one tick of the stream time base; otherwise treat the first clip as VFR and use its rational average rate. Verify merged and final rates with the same timestamp-derived tolerance rather than literal fraction equality.
 - Run one active processing job and keep later jobs in an in-memory FIFO queue.
 - Overwrite an existing destination by default, but only by atomically replacing it after the new partial output passes verification. A failed or cancelled job leaves the existing file intact. Users may opt out with CLI or GUI no-overwrite mode.
-- Generate the default filename when the job is created using local time: `ai-video-YYYYMMDD-HHMMSS-ffffffZZZZ.mp4`, where `ZZZZ` is the numeric UTC offset such as `+0900` or `-0700`. Place it in the selected output directory and reserve a unique path so automatic naming never overwrites an earlier generated output.
+- Generate the default filename when the job is created using local time: `ai-video-YYYYMMDD-HHMMSS-<compact-UUIDv7>.mp4`. The compact UUID is the standard 32 lowercase hexadecimal characters without hyphens, and its embedded Unix-millisecond timestamp comes from the same timezone-aware creation instant. Place the file in the selected output directory and reserve a unique path so automatic naming never overwrites an earlier generated output.
 - Store job workspaces under `~/Library/Caches/AI Video Tools/jobs/` using Qt's application cache location.
 - Require a conservative peak-disk estimate plus a 20% free-space margin before starting.
 - Delete workspaces after success or cancellation; retain and report them after failure.
@@ -128,6 +129,7 @@ Extra audio streams, subtitles, chapters, and attachments are unsupported in v1.
 - Let Real-ESRGAN choose the GPU and worker threads, start with automatic tiling, and keep TTA disabled.
 - Retry recognized Vulkan memory failures only with bounded tile sizes of 512, 256, 128, 64, then 32.
 - Store settings and Loguru-managed local logs under `~/Library/Application Support/AI Video Tools/`.
+- Persist only non-secret, non-job-specific preferences. Dropped-stream acknowledgement is deliberately per job and is never remembered across inputs. Settings writes use a private same-directory temporary file and atomic replacement; malformed documents are quarantined, while unknown newer schema versions are preserved and rejected explicitly.
 - Configure Loguru once at startup with stderr and queued file sinks, rotate at 10 MiB, retain five backups, and avoid production exception-value exposure. Perform no telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
 
 ## Requirements
@@ -177,7 +179,7 @@ uv run ai-video-tools preflight \
 Preflight does not modify media. It reserves the proposed output only for the
 duration of the diagnostic command and exits with status 0 when the plan is
 ready or 2 when a blocking issue remains. Missing matrix/range metadata and explicit color conflicts are rejected, while missing transfer/primary tags are ignored without defaults. Unsupported secondary streams require `--acknowledge-dropped-streams`. For example, a job created in Korea on August
-21, 2026 could propose `ai-video-20260821-143052-123456+0900.mp4`.
+21, 2026 could propose `ai-video-20260821-143052-01a022ccf35b7a1e8b0bf554b4c36db2.mp4`.
 
 Run the complete pipeline with the same job arguments:
 

@@ -70,9 +70,9 @@ Produce limited-range output using the frozen first-clip color profile, converti
 
 Use the first audio stream from each clip. Insert silence where a clip lacks audio, pad short audio, trim long audio to the video timeline, and require acknowledgement before dropping unsupported secondary streams.
 
-Run one job at a time in FIFO order. Generate and reserve a timezone-aware `ai-video-` filename when each job is created; generated paths never overwrite older output. Explicit paths overwrite by default through verified atomic replacement, preserve the old file on failure, and honor no-overwrite mode. Require estimated peak disk space plus 20%, delete successful or cancelled workspaces, retain failed workspaces, and do not implement resume in v1.
+Run one job at a time in FIFO order. Generate and reserve an `ai-video-YYYYMMDD-HHMMSS-<compact-UUIDv7>.mp4` filename from the timezone-aware creation instant of each job; generated paths never overwrite older output. Explicit paths overwrite by default through verified atomic replacement, preserve the old file on failure, and honor no-overwrite mode. Require estimated peak disk space plus 20%, delete successful or cancelled workspaces, retain failed workspaces, and do not implement resume in v1.
 
-Use Real-ESRGAN automatic GPU and tiling defaults with TTA disabled. Retry only recognized Vulkan memory errors using the documented bounded tile sequence. Keep settings and rotating local logs in Qt standard macOS locations, and do not add telemetry or application-initiated network access.
+Use Real-ESRGAN automatic GPU and tiling defaults with TTA disabled. Retry only recognized Vulkan memory errors using the documented bounded tile sequence. Keep settings and rotating local logs in Qt standard macOS locations, and do not add telemetry or application-initiated network access. Settings are typed, schema-versioned, private, and atomically replaced; do not persist credentials, model binaries, or per-job dropped-stream acknowledgement.
 
 Application modules use Loguru and never configure sinks independently. The shared application bootstrap owns stderr and rotating-file sink configuration; direct CLI output remains separate from diagnostic logging.
 

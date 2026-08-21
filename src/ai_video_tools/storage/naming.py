@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from secrets import randbits
+from uuid import UUID
 
 from ai_video_tools.core.models import OverwriteMode
 
@@ -14,11 +16,26 @@ class OutputCollisionError(FileExistsError):
 
 
 def automatic_output_basename(created_at: datetime) -> str:
-    """Build the canonical local-time output basename."""
+    """Build the canonical local-time basename with a compact UUIDv7."""
 
     if created_at.tzinfo is None or created_at.utcoffset() is None:
         raise ValueError("created_at must be timezone-aware")
-    return created_at.strftime("ai-video-%Y%m%d-%H%M%S-%f%z.mp4")
+    identifier = _uuid7(created_at)
+    return f"{created_at.strftime('ai-video-%Y%m%d-%H%M%S')}-{identifier.hex}.mp4"
+
+
+def _uuid7(created_at: datetime) -> UUID:
+    """Create an RFC 9562 UUIDv7 using the frozen job-creation instant."""
+
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    delta = created_at.astimezone(timezone.utc) - epoch
+    timestamp_ms = delta.days * 86_400_000 + delta.seconds * 1_000 + delta.microseconds // 1_000
+    if not 0 <= timestamp_ms < 1 << 48:
+        raise ValueError("created_at is outside the UUIDv7 timestamp range")
+    random_a = randbits(12)
+    random_b = randbits(62)
+    value = timestamp_ms << 80 | 0x7 << 76 | random_a << 64 | 0b10 << 62 | random_b
+    return UUID(int=value)
 
 
 class OutputPathRegistry:
