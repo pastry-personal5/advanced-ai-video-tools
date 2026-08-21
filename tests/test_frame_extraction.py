@@ -80,6 +80,7 @@ def test_extraction_retains_frames_and_merged_audio_for_job_owner(tmp_path: Path
 
     assert result.frame_count == 20
     assert result.expected_frame_count == 20
+    assert (result.frame_width, result.frame_height) == (64, 36)
     assert result.frame_pattern == workspace.path / "frames" / "frame-%09d.png"
     assert result.audio_source_path == workspace.path / "merged.mkv"
     assert result.audio_source_path.is_file()
@@ -119,7 +120,7 @@ def test_extraction_rejects_implausible_frame_count(tmp_path: Path) -> None:
     executor, _manager, workspace = _executor(tmp_path, RecordingExtractionRunner(tuple(range(1, 18))))
     prepared, job = _prepared(workspace)
 
-    with pytest.raises(FrameExtractionFailed, match="count is implausible"):
+    with pytest.raises(FrameExtractionFailed, match="count differs"):
         executor.execute(prepared, job, Path("ffmpeg"), workspace=workspace)
 
 

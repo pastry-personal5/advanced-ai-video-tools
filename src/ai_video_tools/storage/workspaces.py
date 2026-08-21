@@ -88,3 +88,23 @@ class WorkspaceManager:
         if marker_value != workspace.identifier:
             raise WorkspaceError(f"workspace ownership marker does not match: {path}")
         return path
+
+    def recreate_direct_child(self, workspace: OwnedWorkspace, name: str) -> Path:
+        """Safely replace one named direct-child directory of an owned workspace."""
+
+        if not name or Path(name).name != name or name in {".", ".."}:
+            raise WorkspaceError(f"invalid workspace child name: {name!r}")
+        workspace_path = self.validate(workspace)
+        target = workspace_path / name
+        if target.is_symlink() or (target.exists() and not target.is_dir()):
+            raise WorkspaceError(f"workspace child is not a safe directory: {target}")
+        if target.is_dir():
+            try:
+                shutil.rmtree(target)
+            except OSError as error:
+                raise WorkspaceError(f"could not reset workspace child: {target}") from error
+        try:
+            target.mkdir()
+        except OSError as error:
+            raise WorkspaceError(f"could not create workspace child: {target}") from error
+        return target

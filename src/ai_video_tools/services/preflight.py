@@ -27,6 +27,7 @@ from ai_video_tools.storage.naming import OutputCollisionError, OutputPathRegist
 from ai_video_tools.storage.paths import job_cache_directory
 from ai_video_tools.system.platform import PlatformInfo, platform_error
 from ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
+from ai_video_tools.upscaling.realesrgan import select_ai_scale
 from ai_video_tools.video.compatibility import analyze_clip_compatibility, effective_frame_rate
 from ai_video_tools.video.policy import has_ambiguous_color_tags, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
 from ai_video_tools.video.probe import FFprobeClient, MediaProber, ProbeError
@@ -62,17 +63,6 @@ def aspect_width(video: VideoStream, target_height: int) -> int:
     half_width = raw_width / 2
     rounded_half = (2 * half_width.numerator + half_width.denominator) // (2 * half_width.denominator)
     return max(2, 2 * rounded_half)
-
-
-def select_ai_scale(source_height: int, target_height: int) -> int | None:
-    """Choose the smallest supported AI scale that reaches the target."""
-
-    if source_height >= target_height:
-        return None
-    for scale in (2, 3, 4):
-        if source_height * scale >= target_height:
-            return scale
-    return 4
 
 
 def _issue(
@@ -178,7 +168,7 @@ class PreflightService:
             output_rate = self._validate_media(probes, request, issues)
             output_audio_layout = self._resolve_audio_layout(probes, issues)
             first_video = probes[0].primary_video
-            if first_video is not None and output_rate is not None:
+            if first_video is not None and output_rate is not None and request.target_height > 0:
                 output_width = aspect_width(first_video, request.target_height)
                 ai_scale = select_ai_scale(first_video.height, request.target_height)
                 if ai_scale == 4 and first_video.height * ai_scale < request.target_height:
@@ -240,6 +230,8 @@ class PreflightService:
                 required_free_bytes=required_bytes,
                 assume_bt709=request.assume_bt709,
                 acknowledge_dropped_streams=request.acknowledge_dropped_streams,
+                model_name=request.model_name,
+                overwrite_mode=request.overwrite_mode,
             )
         elif reserved_output is not None:
             self._registry.release(reserved_output)

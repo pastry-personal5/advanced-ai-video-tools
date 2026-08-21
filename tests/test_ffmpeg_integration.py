@@ -10,9 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import ConcatStrategy, JobPlan, Rational
+from ai_video_tools.core.models import ConcatStrategy, JobPlan, Rational, ToolInfo, Toolchain
+from ai_video_tools.services.finalization import FinalOutputVerifier, FinalizationExecutor
 from ai_video_tools.services.frame_extraction import FrameExtractionExecutor
 from ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerifier
+from ai_video_tools.services.upscaling import UpscalingResult
 from ai_video_tools.storage.workspaces import WorkspaceManager
 from ai_video_tools.system.processes import SubprocessRunner
 from ai_video_tools.video.commands import NormalizationSpec, build_concat_command, build_normalization_command
@@ -160,4 +162,53 @@ def test_caller_owned_preparation_extracts_exact_rgb_frame_sequence(tmp_path: Pa
     assert (extracted.frames_directory / "frame-000000008.png").is_file()
     assert len(tuple(extracted.frames_directory.iterdir())) == 8
     manager.cleanup(workspace)
+    assert not workspace.path.exists()
+
+
+@pytest.mark.integration
+def test_terminal_pipeline_encodes_verifies_atomically_replaces_and_cleans(tmp_path: Path) -> None:
+    """Real frames and normalized audio become one verified quality-first MP4."""
+
+    ffmpeg_name = shutil.which("ffmpeg")
+    ffprobe_name = shutil.which("ffprobe")
+    if ffmpeg_name is None or ffprobe_name is None:
+        pytest.skip("FFmpeg and FFprobe are required for integration tests")
+    ffmpeg = Path(ffmpeg_name)
+    ffprobe = Path(ffprobe_name)
+    sources = (tmp_path / "audio.mp4", tmp_path / "silent.mp4")
+    _generate_source(ffmpeg, sources[0], Decimal("0.2"))
+    _generate_source(ffmpeg, sources[1], None)
+    prober = FFprobeClient(ffprobe)
+    probes = tuple(prober.probe(path) for path in sources)
+    output = tmp_path / "ai-video-integration.mp4"
+    output.write_bytes(b"previous complete output")
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), output, False, probes, Rational(10, 1), 64, 36, None, ConcatStrategy.NORMALIZE, "mono", ("audio timelines require normalization",), 100, 120, assume_bt709=True)
+    toolchain = Toolchain(ToolInfo(ffmpeg, "integration"), ToolInfo(ffprobe, "integration"), ToolInfo(Path("realesrgan-ncnn-vulkan"), "unused"), tmp_path / "models")
+    manager = WorkspaceManager(tmp_path / "jobs")
+    workspace = manager.create()
+    runner = SubprocessRunner()
+    preparation = MediaPreparationExecutor(manager, runner, MergedOutputVerifier(prober), command_timeout_seconds=30)
+    extraction = FrameExtractionExecutor(manager, runner, command_timeout_seconds=30)
+    finalization = FinalizationExecutor(manager, runner, FinalOutputVerifier(prober), command_timeout_seconds=30)
+
+    prepared = preparation.execute_in_workspace(job, ffmpeg, workspace)
+    extracted = extraction.execute(prepared, job, ffmpeg, workspace=workspace)
+    upscaled = UpscalingResult(extracted.frames_directory, extracted.frame_pattern, extracted.frame_count, extracted.frame_width, extracted.frame_height, None, True, extracted.audio_source_path, (), workspace.identifier)
+    result = finalization.execute(prepared, upscaled, job, toolchain, workspace=workspace)
+
+    assert result.output_path == output
+    assert result.output_probe.path == output
+    assert result.output_probe.primary_video is not None
+    assert result.output_probe.primary_video.codec_name == "h264"
+    assert result.output_probe.primary_video.pixel_format == "yuv420p"
+    assert (result.output_probe.primary_video.width, result.output_probe.primary_video.height) == (64, 36)
+    assert result.output_probe.primary_video.real_frame_rate == Rational(10, 1)
+    assert result.output_probe.primary_video.color_space == "bt709"
+    assert result.output_probe.primary_video.color_transfer == "bt709"
+    assert result.output_probe.primary_video.color_primaries == "bt709"
+    assert result.output_probe.primary_video.color_range == "tv"
+    assert result.output_probe.primary_audio is not None
+    assert result.output_probe.primary_audio.codec_name == "aac"
+    assert result.output_probe.primary_audio.sample_rate == 48000
+    assert output.stat().st_size > len(b"previous complete output")
     assert not workspace.path.exists()

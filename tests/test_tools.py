@@ -71,6 +71,28 @@ def test_vulkan_smoke_test_failure_is_actionable(tmp_path: Path) -> None:
         ToolDiscovery(failing_runner).discover(ToolOverrides(executable, executable, executable, models))
 
 
+def test_realesrgan_help_usage_accepts_the_tools_nonzero_help_exit(tmp_path: Path) -> None:
+    """The upstream binary's successful help text is usable despite exit 255."""
+
+    executable = _executable(tmp_path / "tool")
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "realesrgan-x4plus.param").touch()
+    (models / "realesrgan-x4plus.bin").touch()
+
+    def upstream_style_runner(arguments: Sequence[str], _timeout: float) -> subprocess.CompletedProcess[str]:
+        if "-o" in arguments:
+            Path(arguments[arguments.index("-o") + 1]).write_bytes(b"upscaled")
+            return subprocess.CompletedProcess(arguments, 0, "", "")
+        if "-h" in arguments:
+            return subprocess.CompletedProcess(arguments, 255, "", "Usage: realesrgan-ncnn-vulkan -i infile -o outfile")
+        return subprocess.CompletedProcess(arguments, 0, "tool version 1", "")
+
+    tools = ToolDiscovery(upstream_style_runner).discover(ToolOverrides(executable, executable, executable, models))
+
+    assert tools.realesrgan.version.startswith("Usage: realesrgan-ncnn-vulkan")
+
+
 def test_path_fallback_discovers_standard_executable_names(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Unset overrides fall back to the user's PATH as documented."""
 

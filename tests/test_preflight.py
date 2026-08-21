@@ -14,6 +14,7 @@ from ai_video_tools.core.models import (
     JobRequest,
     MediaProbe,
     OtherStream,
+    OverwriteMode,
     Rational,
     ToolInfo,
     Toolchain,
@@ -134,6 +135,8 @@ def test_ready_plan_freezes_name_dimensions_rate_and_scale(tmp_path: Path) -> No
     assert (report.plan.output_width, report.plan.output_height) == (3840, 2160)
     assert report.plan.output_frame_rate == Rational(30000, 1001)
     assert report.plan.ai_scale == 2
+    assert report.plan.model_name == "realesrgan-x4plus"
+    assert report.plan.overwrite_mode is OverwriteMode.REPLACE
     assert report.plan.concat_strategy is ConcatStrategy.STREAM_COPY
     assert report.plan.required_free_bytes >= report.plan.estimated_peak_bytes
     service.registry.release(report.plan.output_path)
@@ -144,6 +147,16 @@ def test_aspect_width_uses_sample_aspect_ratio_and_even_rounding() -> None:
 
     video = _video(width=720, height=576, sample_aspect_ratio=Rational(16, 15))
     assert aspect_width(video, 2160) == 2880
+
+
+def test_nonpositive_target_height_is_a_validation_issue_not_an_exception(tmp_path: Path) -> None:
+    """Strict scale policy remains behind the user-facing request validator."""
+
+    source = _input(tmp_path)
+    report = _service(tmp_path, {source: _probe(source)}).run(JobRequest((source,), tmp_path, target_height=0))
+
+    assert not report.ready
+    assert any(issue.code is IssueCode.INVALID_OUTPUT and "Target height" in issue.message for issue in report.issues)
 
 
 @pytest.mark.parametrize(

@@ -54,13 +54,13 @@ class ToolDiscovery:
             raise ToolDiscoveryError(f"{name} from {source} is not an executable file: {candidate}")
         return candidate.resolve()
 
-    def _inspect(self, name: str, path: Path, argument: str) -> ToolInfo:
+    def _inspect(self, name: str, path: Path, argument: str, nonzero_success_marker: str | None = None) -> ToolInfo:
         try:
             result = self._runner((str(path), argument), 10.0)
         except (OSError, subprocess.TimeoutExpired) as error:
             raise ToolDiscoveryError(f"could not launch {name}: {error}") from error
         combined = "\n".join(part for part in (result.stdout, result.stderr) if part)
-        if result.returncode != 0:
+        if result.returncode != 0 and (nonzero_success_marker is None or nonzero_success_marker not in combined):
             detail = combined.strip().splitlines()
             suffix = f": {detail[0]}" if detail else ""
             raise ToolDiscoveryError(f"{name} validation failed{suffix}")
@@ -87,7 +87,7 @@ class ToolDiscovery:
         return Toolchain(
             ffmpeg=self._inspect("ffmpeg", ffmpeg_path, "-version"),
             ffprobe=self._inspect("ffprobe", ffprobe_path, "-version"),
-            realesrgan=self._inspect("realesrgan-ncnn-vulkan", realesrgan_path, "-h"),
+            realesrgan=self._inspect("realesrgan-ncnn-vulkan", realesrgan_path, "-h", "Usage: realesrgan-ncnn-vulkan"),
             model_directory=resolved_model_directory,
         )
 

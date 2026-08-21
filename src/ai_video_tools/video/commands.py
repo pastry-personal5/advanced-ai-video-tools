@@ -9,10 +9,10 @@ from pathlib import Path
 
 from ai_video_tools.core.models import ConcatStrategy, JobPlan, MediaProbe, Rational
 from ai_video_tools.video.compatibility import CompatibilityReport, analyze_clip_compatibility
+from ai_video_tools.video.frames import FRAME_FILENAME_TEMPLATE
 from ai_video_tools.video.policy import has_ambiguous_color_tags, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
 
 _SAFE_CHANNEL_LAYOUT = re.compile(r"^[A-Za-z0-9_.()+-]+$")
-FRAME_FILENAME_TEMPLATE = "frame-%09d.png"
 
 
 @dataclass(frozen=True)

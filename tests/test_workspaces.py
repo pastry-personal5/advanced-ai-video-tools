@@ -50,3 +50,20 @@ def test_filesystem_root_cannot_be_configured_as_job_root() -> None:
 
     with pytest.raises(WorkspaceError, match="filesystem root"):
         WorkspaceManager(Path("/"))
+
+
+def test_recreate_direct_child_removes_only_verified_owned_content(tmp_path: Path) -> None:
+    """Retry cleanup cannot escape the workspace or retain stale output."""
+
+    manager = WorkspaceManager(tmp_path / "jobs")
+    workspace = manager.create()
+    output = workspace.path / "upscaled"
+    output.mkdir()
+    (output / "partial.png").write_bytes(b"partial")
+
+    recreated = manager.recreate_direct_child(workspace, "upscaled")
+
+    assert recreated == output
+    assert not any(recreated.iterdir())
+    with pytest.raises(WorkspaceError, match="invalid"):
+        manager.recreate_direct_child(workspace, "../outside")

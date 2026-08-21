@@ -265,6 +265,8 @@ class JobPlan:
     required_free_bytes: int
     assume_bt709: bool = False
     acknowledge_dropped_streams: bool = False
+    model_name: str = "realesrgan-x4plus"
+    overwrite_mode: OverwriteMode = OverwriteMode.REPLACE
 
 
 @dataclass(frozen=True)

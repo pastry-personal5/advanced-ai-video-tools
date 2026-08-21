@@ -9,8 +9,12 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 > concat manifests, owned workspaces, cancellable process execution, sequential
 > normalization, one concat, and merged-media verification are also implemented
 > and exercised with tiny real media. Caller-owned composition and exact-CFR RGB
-> PNG extraction are implemented as backend services. Real-ESRGAN execution,
-> final encoding and publication, job queuing, and the PySide6 GUI remain future stages.
+> PNG extraction are implemented as backend services. Cancellable directory-mode
+> Real-ESRGAN execution, skip policy, bounded memory retries, and exact output-frame
+> verification are implemented. Quality-first final MP4 encoding, final probe
+> verification, atomic replacement/no-clobber publication, and terminal workspace
+> cleanup are implemented and exercised with real FFmpeg. Full-job orchestration,
+> job queuing, a processing CLI command, and the PySide6 GUI remain future stages.
 
 ## Implemented foundation
 
@@ -31,6 +35,9 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 - Shell-free subprocess execution with bounded diagnostics, timeouts, cancellation, and process-group termination
 - A media-preparation service that normalizes clips sequentially, writes the manifest, concatenates exactly once, reports measured stage progress, and verifies the merged intermediate—including FFV1/PCM on the normalization path—with either standalone cleanup or caller-owned retention
 - Cancellable exact-rational frame extraction with explicit limited BT.709 YUV-to-RGB conversion, deterministic nine-digit PNG names, structural RGB PNG validation, contiguous numbering, plausible frame-count checks, and retention of merged audio for later muxing
+- Strict `realesrgan-x4plus` directory execution with the frozen 2×/3×/4× scale, automatic GPU and threads, automatic tiling first, bounded allocation-failure retries at `512 → 256 → 128 → 64 → 32`, cancellation, attempt diagnostics, skip behavior, and exact output-frame verification
+- Explicit final MP4 encoding from RGB frames with exact rational CFR, limited-range BT.709 conversion and tags, H.264 CRF 18 slow `yuv420p`, first-audio copy only when exact and MP4-safe, otherwise aligned 48 kHz AAC-LC at 256 kbit/s
+- Probe-gated publication using same-filesystem partials, atomic replacement for explicit overwrite, atomic no-clobber for generated/no-overwrite paths, old-output preservation on failure or cancellation, success/cancellation cleanup, and failed-workspace retention
 - Preflight gates for platform, paths, SDR BT.709, rotation, streams, timing,
   audio layout, dimensions, AI scale, concat strategy, and disk margin
 - Human-readable and JSON CLI reports through `ai-video-tools preflight`
@@ -40,13 +47,10 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 
 ## Planned features
 
-- Upscale frame directories with `realesrgan-ncnn-vulkan`
-- Re-encode upscaled frames and restore audio with FFmpeg
-- Configure resolution, codec, quality, audio, and output location
-- Show processing progress, logs, warnings, and actionable errors
-- Connect cancellation and progress to complete jobs and the GUI
-- Preserve audio and video metadata where the selected workflow permits
-- Use hardware acceleration when a supported backend is available
+- Compose the implemented stages into one stateful processing service and CLI command
+- Run one active job with an in-memory FIFO queue
+- Add the PySide6 GUI with progress, cancellation, warnings, and actionable errors
+- Add persistent settings and rotating local diagnostics
 
 Version 1 is designed for photographic and live-action imagery. Anime, animation, illustration, and synthetic line-art enhancement are outside the product target.
 
@@ -195,9 +199,10 @@ Use the `Makefile` as the canonical developer interface. Run an underlying tool 
 ai-videol-tools-v2/
 ├── src/ai_video_tools/
 │   ├── core/           # Immutable domain and preflight result models
-│   ├── services/       # Shared preflight, preparation, and extraction services
-│   ├── storage/        # Qt-standard paths and output reservation
+│   ├── services/       # Shared preflight and composable processing-stage services
+│   ├── storage/        # Qt-standard paths, reservations, workspaces, and publication
 │   ├── system/         # Host policy and prerequisite discovery
+│   ├── upscaling/      # Real-ESRGAN policy and safe argument construction
 │   ├── video/          # Probing, compatibility, manifests, and FFmpeg builders
 │   ├── cli.py          # Thin preflight command-line adapter
 │   └── __main__.py     # Module entry point
@@ -213,9 +218,8 @@ ai-videol-tools-v2/
 └── pyproject.toml
 ```
 
-The full-job pipeline service, final-encoding builders, upscaling adapter, job
-queue, and GUI will extend these boundaries rather than duplicating preflight,
-media-preparation, or frame-extraction logic.
+The full-job pipeline service, job queue, processing CLI command, and GUI will
+extend these boundaries rather than duplicating the implemented processing stages.
 
 ## Engineering principles
 

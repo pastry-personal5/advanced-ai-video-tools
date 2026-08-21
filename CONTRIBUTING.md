@@ -12,7 +12,7 @@ Read:
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the processing pipeline and system boundaries
 - [AGENTS.md](AGENTS.md) for repository-wide implementation rules
 
-Check the repository before choosing a framework, dependency, entry point, or command. The typed core, preflight CLI, compatibility analysis, normalization/concat/extraction command builders, owned-workspace manager, cancellable process runner, composable media-preparation executor, and verified RGB PNG extraction service exist. AI upscaling, final encoding and publication, job queuing, and the GUI remain design contracts until their modules are implemented and tested.
+Check the repository before choosing a framework, dependency, entry point, or command. The typed core, preflight CLI, compatibility analysis, safe media command builders, owned-workspace manager, cancellable process runner, composable preparation/extraction/upscaling/finalization services, strict Real-ESRGAN adapter, output verification, and atomic publisher exist. Full-job orchestration, a processing CLI command, job queuing, and the GUI remain design contracts until their modules are implemented and tested.
 
 ## Development environment
 
