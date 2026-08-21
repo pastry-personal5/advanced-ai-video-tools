@@ -182,6 +182,7 @@ def test_runtime_loads_settings_and_owns_clean_queue_shutdown(qt_app: QApplicati
 
     assert runtime.settings.target_height == 1080
     assert runtime.model.rowCount(QModelIndex()) == 0
-    assert "1080p" in runtime.window.findChild(QLabel, "subtitleLabel").text()
+    assert runtime.window.findChild(QLabel, "titleLabel") is None
+    assert runtime.window.findChild(QLabel, "subtitleLabel") is None
     runtime.window.close()
     runtime.shutdown()

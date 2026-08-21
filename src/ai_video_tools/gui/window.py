@@ -34,16 +34,10 @@ class MainWindow(QMainWindow):
 
         self.editor = JobEditor(settings)
 
-        title = QLabel("Video processing jobs")
-        title.setObjectName("titleLabel")
-        title.setStyleSheet("font-size: 20px; font-weight: 600;")
-        self.subtitle = QLabel(f"One job runs at a time • Default output height: {settings.target_height}p")
-        self.subtitle.setObjectName("subtitleLabel")
         self.settings_button = QPushButton("External Tools…")
         self.settings_button.setObjectName("externalToolsButton")
         self.settings_button.setEnabled(tool_validator is not None and settings_store is not None)
         heading_row = QHBoxLayout()
-        heading_row.addWidget(self.subtitle, 1)
         heading_row.addWidget(self.settings_button)
 
         self.job_list = QListView()
@@ -87,7 +81,6 @@ class MainWindow(QMainWindow):
         log_label.setWordWrap(True)
 
         layout = QVBoxLayout()
-        layout.addWidget(title)
         layout.addLayout(heading_row)
         layout.addWidget(self.editor)
         layout.addWidget(self.job_list, 1)
@@ -182,7 +175,6 @@ class MainWindow(QMainWindow):
         if not isinstance(value, ApplicationSettings):
             return
         self._settings = value
-        self.subtitle.setText(f"One job runs at a time • Default output height: {value.target_height}p")
         self.editor.apply_settings(value)
         if self._submission is not None:
             self._submission.apply_settings(value)
