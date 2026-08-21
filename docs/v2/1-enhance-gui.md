@@ -105,6 +105,19 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 - Codex creates the GUI icon set as app-owned vector artwork, including navigation-rail, source-preview, and queue icons. Do not add third-party icon assets or an unreviewed platform icon dependency.
 - Generated icons must remain legible at the supported display scale, work against the dark background, and expose accessible names independently of their artwork.
 
+### Typography, spacing, density, and final icon inventory
+
+- Use the native macOS system sans font through Qt's system-font APIs; do not bundle a custom typeface.
+- Use these initial type roles: 17 pt semibold section headings, 13 pt regular body/control text, 12 pt secondary text, and 12 pt fixed-width text for the two log tails. Respect system text scaling and allow long text to wrap or elide safely.
+- Use an 8 px spacing grid with 4 px icon-to-label gaps, 8 px control gaps, 16 px group padding, 24 px view margins, and 32 px separation between major regions.
+- Use comfortable macOS density: 32 px minimum interactive-control height, 32 × 32 px icon-button hit area, 32 px queue/source rows, and at least 8 px between adjacent hit targets. Do not add a compact-density mode in v2.
+- Generate the final icon inventory as app-owned monochrome vector artwork:
+  - Navigation rail: `Job Creation` (document-plus) and `Queue Monitoring` (stacked list).
+  - Source preview: `Previous clip` (bar plus double-left triangles), `Play/Pause`, `Beginning` (bar plus single-left triangle), `End` (single-right triangle plus bar), and `Next clip` (double-right triangles plus bar).
+  - Queue: `Remove` (trash) for cancelled and failed rows only.
+- Keep source-list actions (`Add Clips…`, `Remove`, `Move Up`, `Move Down`) and `Edit` → `Preferences` text-labeled rather than adding extra icon-only controls. Do not add status/severity icons in v2.
+- Draw icons at an 18 px visual mark inside the 32 × 32 px hit area, use the same stroke/fill treatment throughout, and provide accessible names and tooltips independently of the artwork.
+
 ### Source-list input and preview interpretation
 
 - Allow users to drag local video files from the operating system file manager into the source-clip list. Dropped files are appended in drop order and remain subject to existing local-file validation.
@@ -145,8 +158,6 @@ Phase 1 must build on these capabilities instead of duplicating them.
 All product decisions affecting the current layout and preview slice are approved.
 Before implementation, only these compact implementation details remain:
 
-- Typography, spacing, density, semantic color tokens, and minimum-contrast values for the dark theme.
-- Final icon inventory, sizing, and spacing beyond the already approved controls.
 - Exact splitter proportions and internal spacing within the fixed 1536 × 1536 window.
 
 Retain native Qt focus/accessibility behavior, keep preflight acknowledgement as
@@ -163,7 +174,7 @@ message actions.
 - [x] Approve the information architecture: a far-left two-icon rail, mutually exclusive Job Creation and Queue Monitoring views, and a persistent bottom message area.
 - [x] Approve removal of the v1 `Video processing jobs` and `One job runs at a time • Default output height: {settings.target_height}p` labels.
 - [x] Approve the dark-theme visual direction and Codex-created app-owned icon set.
-- [ ] Define typography, spacing, density, and final icon inventory details.
+- [x] Define typography, spacing, density, and final icon inventory details in the approved visual specification above.
 - [x] Define wireframes for empty, editing, validating, queued, running, failed, cancelled, and completed states. See [Phase 1 GUI Audit and Interaction Specification](1-enhance-gui-audit.md).
 - [x] Establish measurable accessibility and window-resizing criteria. See [Phase 1 GUI Audit and Interaction Specification](1-enhance-gui-audit.md).
 

@@ -101,6 +101,18 @@ Additional findings:
 - The queue view uses `Status`, `Job Name`, and `Remove` columns. Remove is
   available for cancelled and failed rows without confirmation.
 
+## Approved visual specification
+
+- Native macOS system sans font; 17 pt semibold section headings, 13 pt body
+  text, 12 pt secondary text, and 12 pt fixed-width message tails.
+- 8 px spacing grid: 4 px icon gaps, 8 px control gaps, 16 px group padding,
+  24 px view margins, and 32 px major-region separation.
+- Comfortable density: 32 px controls and rows, 32 × 32 px icon hit areas, and
+  at least 8 px between adjacent hit targets. No compact mode.
+- Codex-created monochrome vector icons cover the two navigation buttons, five
+  source-preview controls, and terminal-job Remove action. Source-list actions
+  and Preferences remain text-labeled.
+
 ## Approved state wireframes
 
 The following wireframes describe observable states, not widget class choices.
@@ -181,4 +193,4 @@ This audit completes the Phase 1 “Audit and interaction specification” work:
 - Empty, editing, validating, queued, running, failed, cancelled, and completed
   wireframes are defined.
 - Accessibility and minimum-window criteria are measurable and testable.
-
+- Typography, spacing, density, and the final icon inventory are approved.
