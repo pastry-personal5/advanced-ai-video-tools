@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from ai_video_tools.core.models import ToolInfo, Toolchain, ToolOverrides
+from ai_video_tools.system.processes import log_subprocess_launch
 
 CommandRunner = Callable[[Sequence[str], float], subprocess.CompletedProcess[str]]
 
@@ -55,8 +56,10 @@ class ToolDiscovery:
         return candidate.resolve()
 
     def _inspect(self, name: str, path: Path, argument: str, nonzero_success_marker: str | None = None) -> ToolInfo:
+        arguments = (str(path), argument)
         try:
-            result = self._runner((str(path), argument), 10.0)
+            log_subprocess_launch(arguments)
+            result = self._runner(arguments, 10.0)
         except (OSError, subprocess.TimeoutExpired) as error:
             raise ToolDiscoveryError(f"could not launch {name}: {error}") from error
         combined = "\n".join(part for part in (result.stdout, result.stderr) if part)
@@ -118,6 +121,7 @@ class ToolDiscovery:
                 "png",
             )
             try:
+                log_subprocess_launch(arguments)
                 result = self._runner(arguments, 60.0)
             except (OSError, subprocess.TimeoutExpired) as error:
                 raise ToolDiscoveryError(f"Real-ESRGAN Vulkan smoke test could not run: {error}") from error

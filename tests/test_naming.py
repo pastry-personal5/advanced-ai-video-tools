@@ -12,6 +12,7 @@ from ai_video_tools.storage.naming import (
     OutputCollisionError,
     OutputPathRegistry,
     automatic_output_basename,
+    automatic_output_basename_matches,
 )
 
 
@@ -35,6 +36,18 @@ def test_automatic_names_use_fresh_uuid_payloads() -> None:
     created = datetime(2026, 8, 21, tzinfo=timezone.utc)
 
     assert automatic_output_basename(created) != automatic_output_basename(created)
+
+
+def test_frozen_name_validation_binds_timestamp_and_safe_compact_form() -> None:
+    """A queued basename cannot change its local or absolute creation identity."""
+
+    created = datetime(2026, 8, 21, 14, 30, 52, 123456, tzinfo=timezone(timedelta(hours=9)))
+    basename = automatic_output_basename(created)
+
+    assert automatic_output_basename_matches(basename, created)
+    assert automatic_output_basename_matches(basename.replace(".mp4", "-01.mp4"), created)
+    assert not automatic_output_basename_matches(basename, created + timedelta(seconds=1))
+    assert not automatic_output_basename_matches(f"../{basename}", created)
 
 
 def test_automatic_name_requires_timezone() -> None:

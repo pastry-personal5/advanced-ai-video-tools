@@ -34,7 +34,7 @@ class _InvalidSettings(ValueError):
 
 @dataclass(frozen=True)
 class ApplicationSettings:
-    """Persistent user preferences shared by the future GUI and other frontends."""
+    """Persistent user preferences shared by the GUI and other frontends."""
 
     tools: ToolOverrides = field(default_factory=ToolOverrides)
     recent_input_directory: Path | None = None

@@ -19,4 +19,4 @@ test:
 check: format-check lint test
 
 run:
-	uv run ai-video-tools --help
+	uv run ai-video-tools gui

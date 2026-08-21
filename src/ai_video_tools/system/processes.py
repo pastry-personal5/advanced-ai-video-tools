@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import signal
 import subprocess
 import tempfile
@@ -102,6 +103,18 @@ def redacted_command(command: Sequence[str]) -> tuple[str, ...]:
     return tuple(redacted)
 
 
+def command_line_for_log(command: Sequence[str]) -> str:
+    """Render an exact, shell-quoted diagnostic copy of an argument vector."""
+
+    return shlex.join(str(argument) for argument in command)
+
+
+def log_subprocess_launch(command: Sequence[str]) -> None:
+    """Record one exact subprocess invocation at INFO before it is launched."""
+
+    logger.info("RUN {}", command_line_for_log(command))
+
+
 def _read_tail(handle: BinaryIO) -> str:
     handle.flush()
     handle.seek(0, os.SEEK_END)
@@ -144,7 +157,8 @@ class SubprocessRunner:
             logger.info("Process cancelled before launch executable={}", Path(arguments[0]).name)
             raise ProcessCancelled("process cancelled before launch", arguments)
         started_at = time.monotonic()
-        logger.debug("Launching process executable={} arguments={} timeout_seconds={}", Path(arguments[0]).name, redacted_command(arguments), timeout_seconds)
+        log_subprocess_launch(arguments)
+        logger.debug("Launching process executable={} timeout_seconds={}", Path(arguments[0]).name, timeout_seconds)
         with tempfile.TemporaryFile(mode="w+b") as stdout_file, tempfile.TemporaryFile(mode="w+b") as stderr_file:
             try:
                 process_context = subprocess.Popen(arguments, stdin=subprocess.DEVNULL, stdout=stdout_file, stderr=stderr_file, shell=False, start_new_session=True, close_fds=True)

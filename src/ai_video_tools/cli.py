@@ -47,6 +47,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("gui", help="launch the PySide6 desktop application")
     preflight = commands.add_parser("preflight", help="validate a job without processing media")
     _add_job_arguments(preflight)
     process = commands.add_parser("process", help="validate and process one complete video job")
@@ -251,6 +252,14 @@ def _run_processing(parsed: argparse.Namespace) -> int:
     return 0
 
 
+def _run_gui() -> int:
+    """Lazily import and launch the optional desktop presentation layer."""
+
+    from ai_video_tools.gui.application import run_gui  # pylint: disable=import-outside-toplevel
+
+    return run_gui()
+
+
 def main(arguments: list[str] | None = None) -> int:
     """Run the selected CLI adapter and return a process exit code."""
 
@@ -260,7 +269,9 @@ def main(arguments: list[str] | None = None) -> int:
 
     QCoreApplication.setOrganizationName("AI Video Tools")
     QCoreApplication.setApplicationName("AI Video Tools")
-    configure_logging(stderr=not parsed.as_json)
+    configure_logging(stderr=not getattr(parsed, "as_json", False))
+    if parsed.command == "gui":
+        return _run_gui()
     if parsed.command == "preflight":
         return _run_preflight(parsed)
     return _run_processing(parsed)

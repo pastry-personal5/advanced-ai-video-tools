@@ -12,7 +12,7 @@ Read:
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the processing pipeline and system boundaries
 - [AGENTS.md](AGENTS.md) for repository-wide implementation rules
 
-Check the repository before choosing a framework, dependency, entry point, or command. The typed core, preflight and processing CLI commands, compatibility analysis, safe media command builders, owned-workspace manager, cancellable process runner, composable preparation/extraction/upscaling/finalization services, strict Real-ESRGAN adapter, output verification, atomic publisher, and full-job orchestration exist. Job queuing and the GUI remain design contracts until their modules are implemented and tested.
+Check the repository before choosing a framework, dependency, entry point, or command. The typed core, preflight and processing CLI commands, compatibility analysis, safe media command builders, owned-workspace manager, cancellable process runner, composable preparation/extraction/upscaling/finalization services, strict Real-ESRGAN adapter, output verification, atomic publisher, full-job orchestration, single-worker FIFO queue, PySide6 queue shell, reviewed GUI job-submission workflow, and asynchronously validated external-tool settings editor exist.
 
 ## Development environment
 
@@ -71,6 +71,12 @@ Produce limited-range output using the frozen first-clip color profile, converti
 Use the first audio stream from each clip. Insert silence where a clip lacks audio, pad short audio, trim long audio to the video timeline, and require acknowledgement before dropping unsupported secondary streams.
 
 Run one job at a time in FIFO order. Generate and reserve an `ai-video-YYYYMMDD-HHMMSS-<compact-UUIDv7>.mp4` filename from the timezone-aware creation instant of each job; generated paths never overwrite older output. Explicit paths overwrite by default through verified atomic replacement, preserve the old file on failure, and honor no-overwrite mode. Require estimated peak disk space plus 20%, delete successful or cancelled workspaces, retain failed workspaces, and do not implement resume in v1.
+
+Keep queue scheduling frontend-independent. Freeze job creation identity and claim its destination at submission; expose immutable snapshots and typed outcomes. Pending cancellation must never invoke the pipeline, active cancellation must finish cleanup before the successor starts, and shutdown must cancel and join unfinished work. Isolate observer and per-job runner failures so one record cannot terminate the sole worker.
+
+Run GUI diagnostic preflight outside the Qt thread, release its preview reservation, and repeat authoritative preflight in the queued pipeline. Bind dropped-stream acknowledgement to deterministic keys for the exact reviewed per-clip inventory; reject changed inventories for another explicit review. Never persist those keys or the acknowledgement flag.
+
+Run GUI tool discovery and Vulkan validation outside the Qt thread. Blank executable overrides mean `PATH`, and a blank model-directory override means automatic discovery beside Real-ESRGAN. Persist an edited override set only after complete validation succeeds, propagate it to later job drafts, and never mutate the frozen requests of queued jobs.
 
 Use Real-ESRGAN automatic GPU and tiling defaults with TTA disabled. Retry only recognized Vulkan memory errors using the documented bounded tile sequence. Keep settings and rotating local logs in Qt standard macOS locations, and do not add telemetry or application-initiated network access. Settings are typed, schema-versioned, private, and atomically replaced; do not persist credentials, model binaries, or per-job dropped-stream acknowledgement.
 

@@ -8,6 +8,7 @@ from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal, ROUND_CEILING
 from fractions import Fraction
+from hashlib import sha256
 from pathlib import Path
 
 from ai_video_tools.core.models import (
@@ -26,7 +27,7 @@ from ai_video_tools.core.models import (
     Toolchain,
     VideoStream,
 )
-from ai_video_tools.storage.naming import OutputCollisionError, OutputPathRegistry
+from ai_video_tools.storage.naming import OutputCollisionError, OutputPathRegistry, automatic_output_basename_matches
 from ai_video_tools.storage.paths import job_cache_directory
 from ai_video_tools.system.platform import PlatformInfo, platform_error
 from ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
@@ -74,8 +75,29 @@ def _issue(
     code: IssueCode,
     message: str,
     path: Path | None = None,
+    acknowledgement_key: str | None = None,
 ) -> PreflightIssue:
-    return PreflightIssue(severity=severity, code=code, message=message, path=path)
+    return PreflightIssue(severity=severity, code=code, message=message, path=path, acknowledgement_key=acknowledgement_key)
+
+
+def _dropped_stream_inventory(probe: MediaProbe) -> tuple[str, ...]:
+    """Describe every unsupported secondary item deterministically."""
+
+    videos = sorted(probe.video_streams, key=lambda item: item.index)
+    audios = sorted(probe.audio_streams, key=lambda item: item.index)
+    items = [f"extra video stream {stream.index} ({stream.codec_name})" for stream in videos[1:]]
+    items.extend(f"extra audio stream {stream.index} ({stream.codec_name})" for stream in audios[1:])
+    items.extend(f"{stream.kind}:{stream.index} ({stream.codec_name})" for stream in sorted(probe.other_streams, key=lambda item: (item.kind, item.index)))
+    if probe.chapter_count:
+        items.append(f"{probe.chapter_count} chapter(s)")
+    return tuple(items)
+
+
+def _stream_acknowledgement_key(probe: MediaProbe, inventory: tuple[str, ...]) -> str:
+    """Bind acknowledgement to one path and exact dropped-item inventory."""
+
+    payload = "\0".join((str(probe.path.resolve(strict=False)), *inventory)).encode("utf-8")
+    return sha256(payload).hexdigest()
 
 
 def _comparison_color_profile(probes: list[MediaProbe]) -> ColorProfile | None:
@@ -142,7 +164,7 @@ class PreflightService:
         # Splitting its small orchestration branches would obscure phase ownership.
         # pylint: disable=too-many-branches,too-many-statements
 
-        created_at = self._clock()
+        created_at = request.created_at or self._clock()
         issues: list[PreflightIssue] = []
         probes: list[MediaProbe] = []
         reserved_output: Path | None = None
@@ -159,6 +181,8 @@ class PreflightService:
                 )
             )
         self._validate_request(request, issues)
+        if created_at.tzinfo is None or created_at.utcoffset() is None:
+            issues.append(_issue(IssueSeverity.ERROR, IssueCode.INVALID_OUTPUT, "Job creation time must be timezone-aware."))
         output_path = self._reserve_output(request, created_at, issues)
         if output_path is not None:
             reserved_output = output_path
@@ -286,6 +310,8 @@ class PreflightService:
 
     @staticmethod
     def _validate_request(request: JobRequest, issues: list[PreflightIssue]) -> None:
+        # Keeping independent request safety gates together makes omissions visible.
+        # pylint: disable=too-many-branches
         if not request.inputs:
             issues.append(
                 _issue(
@@ -312,6 +338,13 @@ class PreflightService:
                     "Target height must be a positive even integer.",
                 )
             )
+        if request.created_at is not None and (request.created_at.tzinfo is None or request.created_at.utcoffset() is None):
+            issues.append(_issue(IssueSeverity.ERROR, IssueCode.INVALID_OUTPUT, "Frozen job creation time must be timezone-aware."))
+        if request.generated_output_basename is not None:
+            if request.explicit_output_path is not None:
+                issues.append(_issue(IssueSeverity.ERROR, IssueCode.INVALID_OUTPUT, "A job cannot have both an explicit output and a generated output basename."))
+            elif request.created_at is None or not automatic_output_basename_matches(request.generated_output_basename, request.created_at):
+                issues.append(_issue(IssueSeverity.ERROR, IssueCode.INVALID_OUTPUT, "Frozen generated output basename does not match the job creation identity."))
         if request.model_name != "realesrgan-x4plus":
             issues.append(
                 _issue(
@@ -362,6 +395,8 @@ class PreflightService:
         try:
             if request.explicit_output_path is not None:
                 return self._registry.reserve_explicit(request.explicit_output_path, request.overwrite_mode)
+            if request.generated_output_basename is not None:
+                return self._registry.reserve_frozen_generated(request.output_directory, request.generated_output_basename)
             return self._registry.reserve_generated(request.output_directory, created_at)
         except OutputCollisionError as error:
             issues.append(
@@ -446,25 +481,25 @@ class PreflightService:
                             probe.path,
                         )
                     )
-            dropped = []
-            if len(probe.video_streams) > 1:
-                dropped.append(f"{len(probe.video_streams) - 1} extra video stream(s)")
-            if len(probe.audio_streams) > 1:
-                dropped.append(f"{len(probe.audio_streams) - 1} extra audio stream(s)")
-            if probe.other_streams:
-                summary = ", ".join(f"{stream.kind}:{stream.index}" for stream in probe.other_streams)
-                dropped.append(f"unsupported streams [{summary}]")
-            if probe.chapter_count:
-                dropped.append(f"{probe.chapter_count} chapter(s)")
+            dropped = _dropped_stream_inventory(probe)
             if dropped:
-                severity = IssueSeverity.WARNING if request.acknowledge_dropped_streams else IssueSeverity.ERROR
-                action = "They will be dropped by acknowledgement." if request.acknowledge_dropped_streams else "Acknowledge dropped streams to continue."
+                acknowledgement_key = _stream_acknowledgement_key(probe, dropped)
+                bound_keys = frozenset(request.acknowledged_stream_keys)
+                acknowledged = request.acknowledge_dropped_streams and (not bound_keys or acknowledgement_key in bound_keys)
+                severity = IssueSeverity.WARNING if acknowledged else IssueSeverity.ERROR
+                if acknowledged:
+                    action = "They will be dropped by acknowledgement."
+                elif request.acknowledge_dropped_streams and bound_keys:
+                    action = "The dropped-stream inventory changed after acknowledgement; review it again."
+                else:
+                    action = "Acknowledge dropped streams to continue."
                 issues.append(
                     _issue(
                         severity,
                         IssueCode.STREAM_ACKNOWLEDGEMENT,
-                        f"Input contains {', '.join(dropped)}. {action}",
+                        f"Input contains unsupported secondary items [{', '.join(dropped)}]. {action}",
                         probe.path,
+                        acknowledgement_key,
                     )
                 )
             if probe.duration is None or probe.duration <= 0:

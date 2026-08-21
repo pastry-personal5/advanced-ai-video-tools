@@ -109,3 +109,23 @@ def test_path_fallback_discovers_standard_executable_names(tmp_path: Path, monke
 
     assert tools.ffmpeg.path == ffmpeg.resolve()
     assert tools.model_directory == models.resolve()
+
+
+def test_discovery_logs_every_version_help_and_vulkan_launch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prerequisite checks cannot bypass exact subprocess launch logging."""
+
+    executable = _executable(tmp_path / "custom-tool")
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "realesrgan-x4plus.param").touch()
+    (models / "realesrgan-x4plus.bin").touch()
+    logged: list[tuple[str, ...]] = []
+    monkeypatch.setattr("ai_video_tools.system.tools.log_subprocess_launch", lambda command: logged.append(tuple(command)))
+
+    ToolDiscovery(_successful_runner).discover(ToolOverrides(executable, executable, executable, models))
+
+    assert len(logged) == 4
+    assert "-i" in logged[0] and "-o" in logged[0]
+    assert logged[1] == (str(executable.resolve()), "-version")
+    assert logged[2] == (str(executable.resolve()), "-version")
+    assert logged[3] == (str(executable.resolve()), "-h")

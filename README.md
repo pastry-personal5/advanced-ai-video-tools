@@ -1,6 +1,6 @@
 # AI Video Tools
 
-AI Video Tools is a Python project for macOS on Apple Silicon that concatenates real-world video footage with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing service owns the complete pipeline; a PySide6 desktop GUI will provide a convenient front end to that same core behavior.
+AI Video Tools is a Python project for macOS on Apple Silicon that concatenates real-world video footage with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing service owns the complete pipeline; the PySide6 desktop shell observes and controls that same backend queue.
 
 > **Status:** executable foundation. Typed job and media models, external-tool
 > discovery, collision-safe output naming, FFprobe parsing, and the shared
@@ -18,7 +18,11 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 > reservation release, and terminal workspace policy. The `process` CLI command
 > exposes that complete pipeline with text or JSON terminal results and cooperative
 > Ctrl-C cancellation. Typed persistent settings and bounded local diagnostics are
-> available for frontends. Job queuing and the PySide6 GUI remain future stages.
+> available for frontends. A typed single-worker FIFO now serializes queued jobs;
+> a native PySide6 shell now renders queue state, progress, output paths, errors,
+> reordering, and cancellation. The GUI now creates jobs through ordered clip
+> selection, asynchronous preflight review, explicit stream-drop acknowledgement,
+> safe queue submission, and validated external-tool preference editing.
 
 ## Implemented foundation
 
@@ -44,19 +48,18 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 - Preflight gates for platform, paths, explicit matching SDR BT.709 or SMPTE 170M profiles, rotation, streams, timestamp-aware CFR/VFR timing,
   audio layout, dimensions, AI scale, concat strategy, and disk margin
 - Human-readable and JSON CLI results through `ai-video-tools preflight` and `ai-video-tools process`, with measured text progress on stderr
-- One-time Loguru bootstrap with human-readable stderr output, a thread-safe rotating `10 MB` local file retained for five rotations, stable job/stage context, privacy-conscious command redaction, and CLI-visible log paths
+- One-time Loguru bootstrap with human-readable stderr output, a thread-safe rotating `10 MB` local file retained for five rotations, stable job/stage context, exact shell-quoted INFO records for every FFmpeg, FFprobe, and Real-ESRGAN launch, and CLI-visible log paths
 - Typed schema-versioned JSON settings for tool overrides, recent input/output directories, target height, and overwrite preference, with private file permissions, atomic replacement, corruption quarantine, and protection against silently destroying newer schemas
+- A frontend-independent single-worker FIFO with frozen creation identities and destination claims, typed snapshots and terminal outcomes, pending-job reorder/removal, active cooperative cancellation, progress forwarding, failure isolation, and shutdown that cancels and joins all unfinished work
+- A PySide6 application bootstrap, cross-thread queue-snapshot signal bridge, typed `QAbstractListModel`, and native job window with measured progress, status/error details, pending reorder controls, cancellation, settings summary, diagnostics location, and joined backend shutdown
+- An ordered GUI job editor for clips, output directory, target height, fixed real-image model and compact UUIDv7 naming; QThread-backed diagnostic preflight; complete warning/error review; per-job dropped-stream acknowledgement; authoritative FIFO submission; and persistence of recent directories and target height without persisting safety acknowledgement
+- A native external-tools editor with file and directory pickers, per-executable reset-to-`PATH`, automatic model-directory discovery, off-thread executable/model/Vulkan validation, and atomic persistence only after every check succeeds
 - Fast tests that require no GPU, network, model download, or checked-in media;
   the tiny FFmpeg integration fixture is generated locally and skips when the
   user-installed FFmpeg tools are unavailable
 - A full-job integration test that runs real preflight, normalization, concat,
   extraction, final encoding, verification, atomic publication, and cleanup
   with tiny generated media and a lightweight directory-mode fake upscaler
-
-## Planned features
-
-- Run one active job with an in-memory FIFO queue
-- Add the PySide6 GUI with progress, cancellation, warnings, and actionable errors
 
 Version 1 is designed for photographic and live-action imagery. Anime, animation, illustration, and synthetic line-art enhancement are outside the product target.
 
@@ -153,16 +156,19 @@ The `realesrgan-x4plus` parameter and binary model files are required. The appli
 
 ## Getting started
 
-Install the Python environment and inspect the implemented CLI:
+Install the Python environment, launch the desktop shell, or inspect the CLI:
 
 ```bash
 uv sync --dev
 uv run ai-video-tools --help
+uv run ai-video-tools gui
 uv run ai-video-tools preflight --help
 uv run ai-video-tools process --help
 ```
 
-`uv sync` creates and manages the project virtual environment automatically. Activating it manually is optional. The executable locations for FFmpeg, FFprobe, and Real-ESRGAN should be configurable when they are not available on `PATH`.
+`uv sync` creates and manages the project virtual environment automatically. Activating it manually is optional. In the GUI, select **External Tools…** to configure FFmpeg, FFprobe, Real-ESRGAN, or its model directory when automatic discovery is unsuitable. **Use PATH** clears an executable override, and **Automatic** derives the model directory from the resolved Real-ESRGAN installation. **Validate & Save** runs launch, model-pair, and Vulkan inference checks outside the GUI thread; failed values are not persisted.
+
+In the desktop application, add clips in top-to-bottom concat order, choose an output directory, set the target height, and select **Preflight & Queue**. Diagnostic preflight runs outside the GUI thread and shows every warning or blocking issue before submission. Unsupported secondary streams require the dedicated acknowledgement checkbox; that acknowledgement is bound to the exact reviewed per-clip dropped-item inventory, applies only to that job, and is never saved as a preference. Accepted jobs enter the single-worker FIFO and perform authoritative preflight again immediately before processing. If the inventory changed while waiting, authoritative preflight rejects the job for another review.
 
 Run preflight against one or more real clips:
 
@@ -197,7 +203,7 @@ summary to stdout. `--json` suppresses progress and emits one machine-readable
 terminal result. Exit status is 0 for success, 1 for a processing failure, 2 for
 preflight rejection, and 130 for clean Ctrl-C cancellation. Failed jobs report
 their retained workspace; successful and cancelled jobs clean owned temporary
-state. The future GUI will submit the same `JobRequest` to `PipelineService`.
+state. The GUI creates and previews the same typed `JobRequest`, then dispatches the accepted request through the FIFO to `PipelineService`.
 
 ## Development commands
 
@@ -209,7 +215,7 @@ make format     # Format Python source with Black
 make lint       # Run Pylint and pycodestyle
 make test       # Run the automated test suite
 make check      # Run formatting checks, linters, and tests
-make run        # Show the current CLI entry point (GUI not implemented yet)
+make run        # Launch the PySide6 desktop shell
 ```
 
 Use the `Makefile` as the canonical developer interface. Run an underlying tool directly through `uv run` only when diagnosing or configuring it, for example `uv run pylint src tests`.
@@ -220,6 +226,7 @@ Use the `Makefile` as the canonical developer interface. Run an underlying tool 
 ai-videol-tools-v2/
 ├── src/ai_video_tools/
 │   ├── core/           # Immutable domain and preflight result models
+│   ├── gui/            # PySide6 bootstrap, queue model, and native window
 │   ├── services/       # Shared preflight and composable processing-stage services
 │   ├── storage/        # Qt-standard paths, reservations, workspaces, and publication
 │   ├── system/         # Host policy and prerequisite discovery
@@ -239,8 +246,7 @@ ai-videol-tools-v2/
 └── pyproject.toml
 ```
 
-The job queue and GUI will extend these boundaries rather than duplicating the
-implemented full-job pipeline.
+The queue-backed GUI extends these boundaries rather than duplicating the implemented full-job pipeline.
 
 ## Engineering principles
 

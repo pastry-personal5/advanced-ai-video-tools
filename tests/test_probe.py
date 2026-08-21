@@ -1,10 +1,14 @@
 """Tests for defensive conversion of FFprobe JSON."""
 
+import json
+import subprocess
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from ai_video_tools.core.models import Rational
-from ai_video_tools.video.probe import parse_probe_document
+from ai_video_tools.video.probe import FFprobeClient, build_ffprobe_command, parse_probe_document
 
 
 def test_probe_parser_preserves_exact_rates_and_stream_inventory() -> None:
@@ -125,3 +129,21 @@ def test_probe_parser_reads_matroska_duration_tags() -> None:
     assert parsed.primary_audio is not None
     assert parsed.primary_video.duration == Decimal("1.200000000")
     assert parsed.primary_audio.duration == Decimal("1.200000000")
+
+
+def test_ffprobe_client_logs_the_complete_argument_vector_before_launch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every media probe passes its exact launch arguments to INFO logging."""
+
+    executable = tmp_path / "custom ffprobe"
+    media = tmp_path / "clip with spaces.mov"
+    logged: list[tuple[str, ...]] = []
+
+    def completed(arguments: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(arguments, 0, json.dumps({"streams": []}), "")  # type: ignore[arg-type]
+
+    monkeypatch.setattr("ai_video_tools.video.probe.log_subprocess_launch", lambda command: logged.append(tuple(command)))
+    monkeypatch.setattr("ai_video_tools.video.probe.subprocess.run", completed)
+
+    FFprobeClient(executable).probe(media)
+
+    assert logged == [build_ffprobe_command(executable, media)]

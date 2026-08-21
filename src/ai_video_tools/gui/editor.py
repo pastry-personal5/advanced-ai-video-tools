@@ -1,0 +1,234 @@
+"""Native ordered-input editor for one immutable processing request."""
+
+# PySide6 exposes Qt types dynamically, which Pylint cannot introspect.
+# pylint: disable=no-name-in-module
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from datetime import datetime
+from pathlib import Path
+
+from PySide6.QtCore import Signal, Slot
+from PySide6.QtWidgets import QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QSpinBox, QVBoxLayout, QWidget
+
+from ai_video_tools.core.models import JobRequest
+from ai_video_tools.storage.naming import automatic_output_basename
+from ai_video_tools.system.settings import ApplicationSettings
+
+
+def _local_now() -> datetime:
+    return datetime.now().astimezone()
+
+
+class JobEditor(QWidget):
+    """Collect supported v1 job intent without performing media inspection."""
+
+    request_ready = Signal(object)
+
+    def __init__(self, settings: ApplicationSettings, *, clock: Callable[[], datetime] = _local_now, parent: QWidget | None = None) -> None:
+        # Declarative widget construction is intentionally kept together.
+        # pylint: disable=too-many-statements
+        super().__init__(parent)
+        self._settings = settings
+        self._clock = clock
+
+        self.inputs = QListWidget()
+        self.inputs.setObjectName("inputClips")
+        self.inputs.setAccessibleName("Ordered input clips")
+        self.inputs.setMinimumHeight(100)
+
+        self.add_button = QPushButton("Add Clips…")
+        self.add_button.setObjectName("addClipsButton")
+        self.remove_button = QPushButton("Remove")
+        self.remove_button.setObjectName("removeClipButton")
+        self.input_up_button = QPushButton("Move Up")
+        self.input_up_button.setObjectName("inputUpButton")
+        self.input_down_button = QPushButton("Move Down")
+        self.input_down_button.setObjectName("inputDownButton")
+
+        input_controls = QHBoxLayout()
+        input_controls.addWidget(self.add_button)
+        input_controls.addWidget(self.remove_button)
+        input_controls.addWidget(self.input_up_button)
+        input_controls.addWidget(self.input_down_button)
+        input_controls.addStretch(1)
+
+        self.output_directory = QLineEdit(str(settings.recent_output_directory or ""))
+        self.output_directory.setObjectName("outputDirectory")
+        self.output_directory.setPlaceholderText("Choose an output directory")
+        self.output_button = QPushButton("Choose…")
+        self.output_button.setObjectName("chooseOutputButton")
+        output_row = QHBoxLayout()
+        output_row.addWidget(self.output_directory, 1)
+        output_row.addWidget(self.output_button)
+
+        self.target_height = QSpinBox()
+        self.target_height.setObjectName("targetHeight")
+        self.target_height.setRange(2, 16384)
+        self.target_height.setSingleStep(2)
+        self.target_height.setSuffix(" px")
+        self.target_height.setValue(settings.target_height)
+
+        model_label = QLabel("realesrgan-x4plus — photographic and live-action images")
+        model_label.setObjectName("modelLabel")
+        naming_label = QLabel("Output name: ai-video-YYYYMMDD-HHMMSS-<compact UUIDv7>.mp4")
+        naming_label.setObjectName("namingLabel")
+
+        options = QFormLayout()
+        options.addRow("Output directory", output_row)
+        options.addRow("Target height", self.target_height)
+        options.addRow("AI model", model_label)
+        options.addRow("Automatic naming", naming_label)
+
+        self.submit_button = QPushButton("Preflight & Queue")
+        self.submit_button.setObjectName("submitJobButton")
+        self.submit_button.setDefault(True)
+        self.editor_status = QLabel("Add clips in the order they should be concatenated.")
+        self.editor_status.setObjectName("editorStatus")
+        self.editor_status.setWordWrap(True)
+
+        group = QGroupBox("Create processing job")
+        group_layout = QVBoxLayout()
+        group_layout.addWidget(QLabel("Input clips — concat order is top to bottom"))
+        group_layout.addWidget(self.inputs)
+        group_layout.addLayout(input_controls)
+        group_layout.addLayout(options)
+        submit_row = QHBoxLayout()
+        submit_row.addWidget(self.editor_status, 1)
+        submit_row.addWidget(self.submit_button)
+        group_layout.addLayout(submit_row)
+        group.setLayout(group_layout)
+        outer = QVBoxLayout()
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(group)
+        self.setLayout(outer)
+
+        self.add_button.clicked.connect(self._choose_inputs)
+        self.remove_button.clicked.connect(self.remove_selected)
+        self.input_up_button.clicked.connect(lambda: self.move_selected(-1))
+        self.input_down_button.clicked.connect(lambda: self.move_selected(1))
+        self.output_button.clicked.connect(self._choose_output_directory)
+        self.submit_button.clicked.connect(self._request_submission)
+        self.inputs.currentRowChanged.connect(self._update_input_controls)
+        self._update_input_controls()
+
+    def input_paths(self) -> tuple[Path, ...]:
+        """Return clip paths in their visible concat order."""
+
+        return tuple(Path(self.inputs.item(row).text()) for row in range(self.inputs.count()))
+
+    def add_inputs(self, paths: Sequence[Path]) -> None:
+        """Append selected paths without silently sorting or deduplicating them."""
+
+        for path in paths:
+            self.inputs.addItem(str(path))
+        if self.inputs.currentRow() < 0 and self.inputs.count():
+            self.inputs.setCurrentRow(0)
+        self._update_input_controls()
+
+    @Slot()
+    def remove_selected(self) -> None:
+        """Remove only the selected input row."""
+
+        row = self.inputs.currentRow()
+        if row >= 0:
+            self.inputs.takeItem(row)
+            self.inputs.setCurrentRow(min(row, self.inputs.count() - 1))
+        self._update_input_controls()
+
+    def move_selected(self, offset: int) -> bool:
+        """Move the selected clip while preserving every other relative order."""
+
+        row = self.inputs.currentRow()
+        destination = row + offset
+        if row < 0 or destination < 0 or destination >= self.inputs.count():
+            return False
+        item = self.inputs.takeItem(row)
+        self.inputs.insertItem(destination, item)
+        self.inputs.setCurrentRow(destination)
+        return True
+
+    def build_request(self) -> JobRequest:
+        """Freeze one generated-output request for asynchronous preview."""
+
+        inputs = self.input_paths()
+        if not inputs:
+            raise ValueError("Add at least one input clip.")
+        raw_output = self.output_directory.text().strip()
+        if not raw_output:
+            raise ValueError("Choose an output directory.")
+        if self.target_height.value() % 2:
+            raise ValueError("Target height must be an even number of pixels.")
+        created_at = self._clock()
+        if created_at.tzinfo is None or created_at.utcoffset() is None:
+            raise ValueError("The system clock must provide a timezone-aware creation time.")
+        return JobRequest(
+            inputs=inputs,
+            output_directory=Path(raw_output),
+            target_height=self.target_height.value(),
+            acknowledge_dropped_streams=False,
+            overwrite_mode=self._settings.overwrite_mode,
+            tools=self._settings.tools,
+            created_at=created_at,
+            generated_output_basename=automatic_output_basename(created_at),
+        )
+
+    @Slot(bool)
+    def set_busy(self, busy: bool) -> None:
+        """Prevent overlapping previews while keeping current intent visible."""
+
+        for widget in (self.inputs, self.add_button, self.remove_button, self.input_up_button, self.input_down_button, self.output_directory, self.output_button, self.target_height, self.submit_button):
+            widget.setEnabled(not busy)
+        if not busy:
+            self._update_input_controls()
+
+    @Slot(str)
+    def set_status(self, message: str) -> None:
+        """Present concise submission status beside the action button."""
+
+        self.editor_status.setText(message)
+
+    @Slot(object)
+    def apply_settings(self, value: object) -> None:
+        """Adopt newly persisted non-safety preferences for later drafts."""
+
+        if isinstance(value, ApplicationSettings):
+            self._settings = value
+
+    @Slot(str)
+    def job_queued(self, _job_id: str) -> None:
+        """Clear consumed clip intent while retaining useful output preferences."""
+
+        self.inputs.clear()
+        self._update_input_controls()
+
+    @Slot()
+    def _choose_inputs(self) -> None:
+        start = str(self._settings.recent_input_directory or "")
+        selected, _filter = QFileDialog.getOpenFileNames(self, "Choose input clips in concat order", start, "Video files (*.mov *.mp4 *.mkv *.m4v);;All files (*)")
+        self.add_inputs(tuple(Path(path) for path in selected))
+
+    @Slot()
+    def _choose_output_directory(self) -> None:
+        start = self.output_directory.text().strip() or str(self._settings.recent_output_directory or "")
+        selected = QFileDialog.getExistingDirectory(self, "Choose output directory", start)
+        if selected:
+            self.output_directory.setText(selected)
+
+    @Slot()
+    def _request_submission(self) -> None:
+        try:
+            request = self.build_request()
+        except ValueError as error:
+            self.set_status(str(error))
+            return
+        self.request_ready.emit(request)
+
+    @Slot()
+    def _update_input_controls(self) -> None:
+        row = self.inputs.currentRow()
+        count = self.inputs.count()
+        self.remove_button.setEnabled(row >= 0)
+        self.input_up_button.setEnabled(row > 0)
+        self.input_down_button.setEnabled(0 <= row < count - 1)

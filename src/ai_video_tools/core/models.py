@@ -250,6 +250,9 @@ class JobRequest:
     acknowledge_dropped_streams: bool = False
     overwrite_mode: OverwriteMode = OverwriteMode.REPLACE
     tools: ToolOverrides = field(default_factory=ToolOverrides)
+    created_at: datetime | None = None
+    generated_output_basename: str | None = None
+    acknowledged_stream_keys: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -260,6 +263,7 @@ class PreflightIssue:
     code: IssueCode
     message: str
     path: Path | None = None
+    acknowledgement_key: str | None = None
 
 
 @dataclass(frozen=True)

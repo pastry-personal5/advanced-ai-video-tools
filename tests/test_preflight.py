@@ -26,6 +26,7 @@ from ai_video_tools.core.models import (
     VideoStream,
 )
 from ai_video_tools.services.preflight import PreflightService, aspect_width
+from ai_video_tools.storage.naming import automatic_output_basename
 from ai_video_tools.system.platform import PlatformInfo
 from ai_video_tools.system.tools import ToolDiscovery
 from ai_video_tools.video.probe import MediaProber
@@ -146,6 +147,39 @@ def test_ready_plan_freezes_name_dimensions_rate_and_scale(tmp_path: Path) -> No
     assert report.plan.concat_strategy is ConcatStrategy.STREAM_COPY
     assert report.plan.required_free_bytes >= report.plan.estimated_peak_bytes
     service.registry.release(report.plan.output_path)
+
+
+def test_preflight_preserves_queue_frozen_creation_identity(tmp_path: Path) -> None:
+    """A delayed queued job keeps its submission timestamp and UUIDv7 basename."""
+
+    source = _input(tmp_path)
+    service = _service(tmp_path, {source: _probe(source)})
+    created = datetime(2026, 7, 4, 9, 8, 7, 654321, tzinfo=timezone.utc)
+    basename = automatic_output_basename(created)
+
+    report = service.run(JobRequest((source,), tmp_path, created_at=created, generated_output_basename=basename))
+
+    assert report.ready
+    assert report.plan is not None
+    assert report.plan.created_at == created
+    assert report.plan.output_path.name == basename
+    service.registry.release(report.plan.output_path)
+
+
+def test_frozen_generated_destination_that_appears_before_start_is_rejected(tmp_path: Path) -> None:
+    """An external collision cannot make a delayed generated job overwrite a file."""
+
+    source = _input(tmp_path)
+    service = _service(tmp_path, {source: _probe(source)})
+    created = datetime(2026, 7, 4, 9, 8, 7, 654321, tzinfo=timezone.utc)
+    basename = automatic_output_basename(created)
+    (tmp_path / basename).touch()
+
+    report = service.run(JobRequest((source,), tmp_path, created_at=created, generated_output_basename=basename))
+
+    assert not report.ready
+    assert report.plan is None
+    assert any(issue.code is IssueCode.INVALID_OUTPUT and "no longer available" in issue.message for issue in report.issues)
 
 
 def test_preflight_reports_measured_validation_and_probe_progress(tmp_path: Path) -> None:
@@ -309,15 +343,28 @@ def test_secondary_streams_require_acknowledgement(tmp_path: Path) -> None:
 
     rejected = service.run(JobRequest((source,), tmp_path))
     accepted = service.run(JobRequest((source,), tmp_path, acknowledge_dropped_streams=True))
+    rejected_issue = next(item for item in rejected.issues if item.code is IssueCode.STREAM_ACKNOWLEDGEMENT)
+    assert rejected_issue.acknowledgement_key is not None
+    bound = service.run(JobRequest((source,), tmp_path, acknowledge_dropped_streams=True, acknowledged_stream_keys=(rejected_issue.acknowledgement_key,)))
 
     assert not rejected.ready
     assert accepted.ready
+    assert bound.ready
     issue = next(item for item in accepted.issues if item.code is IssueCode.STREAM_ACKNOWLEDGEMENT)
     assert "extra audio" in issue.message
     assert "subtitle:3" in issue.message
     assert accepted.plan is not None
     assert accepted.plan.output_audio_layout == "stereo"
     service.registry.release(accepted.plan.output_path)
+    assert bound.plan is not None
+    service.registry.release(bound.plan.output_path)
+
+    changed_media = _probe(source, audio_streams=(audio, audio), other_streams=(OtherStream(3, "subtitle", "mov_text"),), chapter_count=2)
+    changed = _service(tmp_path, {source: changed_media}).run(JobRequest((source,), tmp_path, acknowledge_dropped_streams=True, acknowledged_stream_keys=(rejected_issue.acknowledgement_key,)))
+    assert not changed.ready
+    changed_issue = next(item for item in changed.issues if item.code is IssueCode.STREAM_ACKNOWLEDGEMENT)
+    assert changed_issue.severity is IssueSeverity.ERROR
+    assert "inventory changed" in changed_issue.message
 
 
 def test_vfr_uses_exact_average_rate_and_forces_normalization(tmp_path: Path) -> None:

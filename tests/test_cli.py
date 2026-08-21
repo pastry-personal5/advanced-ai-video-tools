@@ -237,3 +237,11 @@ def test_process_cancellation_returns_shell_status_130(tmp_path: Path, monkeypat
     assert result == 130
     assert not captured.out
     assert "Processing cancelled during extract" in captured.err
+
+
+def test_gui_command_dispatches_desktop_entry_point(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CLI exposes the native shell without requiring media arguments."""
+
+    monkeypatch.setattr(cli, "_run_gui", lambda: 17)
+
+    assert cli.main(["gui"]) == 17

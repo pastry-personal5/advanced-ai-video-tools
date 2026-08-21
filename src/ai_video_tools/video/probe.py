@@ -16,6 +16,7 @@ from ai_video_tools.core.models import (
     Rational,
     VideoStream,
 )
+from ai_video_tools.system.processes import log_subprocess_launch
 
 
 class ProbeError(RuntimeError):
@@ -218,6 +219,7 @@ class FFprobeClient:
 
         arguments: Sequence[str] = build_ffprobe_command(self._executable, path)
         try:
+            log_subprocess_launch(arguments)
             result = subprocess.run(
                 arguments,
                 check=False,

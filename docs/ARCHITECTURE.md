@@ -22,8 +22,16 @@ workspace through the job, enforces lifecycle transitions, forwards measured
 progress, releases the reserved destination on every terminal path, cleans
 cancellation, and retains failed workspaces. The CLI converts those typed
 outcomes into stable success, failure, rejection, and cancellation exit statuses;
-it never constructs backend commands. Job queuing and GUI work remain
-unimplemented. The
+it never constructs backend commands. A frontend-independent single-worker FIFO
+freezes queued job identities and destinations, serializes pipeline execution,
+forwards typed state and progress snapshots, and owns cancellation and shutdown.
+The initial PySide6 shell is implemented: it bootstraps settings and services,
+marshals queue events through an explicitly queued Qt signal, exposes typed list
+roles, and renders job state, progress, errors, output, reordering, and cancellation.
+The GUI job-creation path is implemented with ordered input intent, output and
+height options, off-thread diagnostic preflight, complete issue review, explicit
+per-job stream-drop acknowledgement, queue submission, and non-safety preference
+persistence. Its external-tools editor supports native browsing and reset-to-discovery controls, validates executable launches, model assets, and Vulkan inference off the presentation thread, and atomically persists only a successful override set. The
 implemented boundaries are:
 
 - `core.models`: immutable job intent, exact rationals, typed stream inventory,
@@ -33,6 +41,14 @@ implemented boundaries are:
 - `storage.paths`: Qt-standard application data and cache locations
 - `storage.workspaces`: randomly identified ownership-marked job directories and guarded cleanup confined to the configured job root
 - `storage.publication`: same-filesystem partial allocation, verified atomic replacement, atomic no-clobber publication, and guarded partial deletion
+- `services.queue`: one active pipeline, FIFO pending work, immutable snapshots, typed outcomes, reorder/removal, cooperative cancellation, destination claims, failure isolation, and joined shutdown
+- `gui.application`: QApplication bootstrap plus explicit ownership and shutdown of settings, pipeline, queue, model, and window
+- `gui.jobs`: monotonic queue-snapshot bridge and flat Qt job model; all model mutation runs on the Qt thread
+- `gui.editor`: ordered clip intent, output directory, target height, fixed real-image model, and frozen generated-output identity
+- `gui.preflight`: one owned QThread for diagnostic tool discovery and media probing, progress forwarding, reservation release, and joined shutdown
+- `gui.submission`: issue review, non-bypassable safety gates, exact-inventory per-job acknowledgement, FIFO handoff, and non-safety preference persistence
+- `gui.tool_settings`: native override editing, PATH/automatic resets, one owned validation thread, success-gated atomic persistence, and actionable discovery failures
+- `gui.window`: native queue list, selected-job progress/status/output presentation, reorder controls, cancellation, and diagnostics location
 - `system.platform`: macOS 26.5.2 and Apple Silicon support gate
 - `system.processes`: shell-free execution, bounded diagnostic tails, explicit timeouts, cooperative cancellation, and process-group termination
 - `system.tools`: explicit-path-first discovery, executable inspection, x4plus
@@ -166,6 +182,10 @@ Additional audio streams, subtitles, chapters, and attachments are unsupported i
 
 Run one processing job at a time. Additional jobs remain in an in-memory FIFO queue and may be reordered or removed before they start. Do not run concurrent FFmpeg or Real-ESRGAN pipelines. A cancelled active job reaches `cancelled` before the next queued job starts.
 
+`JobQueue` is the frontend-independent serialization boundary. Submission freezes a timezone-aware creation instant and compact UUIDv7 basename, claims the resolved intended destination across queued and active records, and returns a stable job identifier that is also bound into pipeline logs. Immutable snapshots expose state, zero-based pending position, the frozen request, and latest measured progress. Terminal outcomes retain either the completed pipeline result or a typed cancellation/failure. Callback exceptions and unexpected runner exceptions are isolated so they cannot terminate the worker or strand later jobs.
+
+Queued cancellation removes the request without invoking preflight. Active cancellation signals the pipeline's shared token and waits for its terminal cleanup before starting the successor. Shutdown rejects new submissions, cancels all pending records, signals the active job, and joins the sole worker. Destination claims are released only at a terminal outcome.
+
 Version 1 does not resume partial jobs. Restart failed, cancelled, or interrupted jobs from the beginning.
 
 ### Output replacement
@@ -219,28 +239,34 @@ Resolve persistent configuration with `QStandardPaths.StandardLocation.AppDataLo
 
 The settings document is typed, JSON-encoded, and explicitly schema-versioned. Version 1 persists FFmpeg, FFprobe, Real-ESRGAN, and model-directory overrides; recent input and output directories; target height; and overwrite preference. It uses mode `0600`, a same-directory temporary file, file synchronization, and atomic replacement so readers never observe a partial write. Malformed documents are quarantined and safe defaults are restored. Unsupported newer schema versions remain untouched and produce an explicit error rather than being mistaken for corruption. Unknown fields within the current schema are ignored for minor forward compatibility.
 
+An empty executable override means discovery through `PATH`; an empty model-directory override means the `models` directory beside the resolved Real-ESRGAN executable. The GUI never saves edited overrides optimistically. It runs all discovery checks—including the bounded Real-ESRGAN Vulkan smoke test—on an owned worker thread and atomically replaces settings only after success. The newly persisted overrides apply to later draft requests. Requests already submitted to the FIFO retain their frozen `ToolOverrides` and cannot be retargeted by a settings change.
+
 Dropped-stream acknowledgement is bound to one job's probed stream inventory. It is never persisted or reused, because doing so would silently waive the explicit warning for different inputs.
 
-Loguru is the application logging API. Configure it once at application startup; backend, CLI, and future GUI modules import the shared Loguru `logger` and must not install their own sinks. Keep user-facing CLI stdout/stderr rendering separate from diagnostic logging.
+Loguru is the application logging API. Configure it once at application startup; backend, CLI, and GUI modules import the shared Loguru `logger` and must not install their own sinks. Keep user-facing CLI stdout/stderr rendering separate from diagnostic logging.
 
 Write a human-readable stderr sink and a local file sink under the application-data directory. Configure the file sink with `rotation="10 MB"`, `retention=5`, and `enqueue=True` for bounded, thread-safe delivery. Production exception logging disables diagnostic local-value exposure, redacts sensitive paths and environment data where practical, and binds stable context such as job ID and pipeline stage. Expose the log location in CLI and GUI diagnostics.
+
+Immediately before every FFmpeg, FFprobe, and Real-ESRGAN subprocess launch, write an INFO message in the form `RUN <shell-quoted argument vector>`. This is a diagnostic rendering only; execution continues to use the original argument array with `shell=False`. The record deliberately includes every exact argument, including local input, output, model, and workspace paths, so the local log must be treated as potentially sensitive.
 
 Version 1 performs no telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
 
 ## System boundaries
 
 ```text
-CLI ─────┐
-         ├──> Job model ──> Pipeline service ──> Progress/events
-GUI ─────┘                       │
-                                ├──> FFprobe adapter
-                                ├──> FFmpeg adapter
-                                ├──> Real-ESRGAN adapter
-                                └──> Workspace/output manager
+CLI ────────────────> Job model ────────────┐
+                                            ├──> Pipeline service ──> Progress/events
+GUI ──> Job model ──> FIFO job queue ───────┘          │
+                                                       ├──> FFprobe adapter
+                                                       ├──> FFmpeg adapter
+                                                       ├──> Real-ESRGAN adapter
+                                                       └──> Workspace/output manager
 ```
 
 - **CLI:** parses arguments, creates a typed job request, and renders progress and errors. It contains no media-processing logic.
 - **GUI:** creates the same typed job request and consumes the same progress events. It contains no backend command construction.
+- **Diagnostic GUI preflight:** probes off the presentation thread and releases its preview reservation. Accepted jobs still repeat authoritative preflight in the pipeline so media, tools, disk space, and destination availability cannot go stale between review and execution. Stream-drop acknowledgement carries deterministic keys for the exact reviewed path and dropped stream/chapter inventory; any changed inventory becomes a fresh blocking acknowledgement issue.
+- **FIFO job queue:** freezes submission identity, claims destinations, serializes one active pipeline, forwards snapshots, and owns pending/active cancellation plus worker shutdown.
 - **Job model:** holds validated inputs, output directory, frozen creation time and generated basename, reserved destination, output policy, concat and normalization settings, color interpretation and range, rational frame rate, target height, resolved dimensions, model, resolved AI runtime, encoding, selected audio, dropped-stream acknowledgement, workspace, retention, and overwrite mode, which defaults to replace for explicit paths.
 - **Pipeline service:** owns stage transitions, orchestration, cancellation, error translation, and cleanup.
 - **Process adapters:** build argument arrays, launch external tools without a shell, parse progress, capture diagnostic output, and translate exit failures.

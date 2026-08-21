@@ -1,13 +1,15 @@
 """Tests for bounded, cancellable process-group execution."""
 
+import shlex
 import sys
 import threading
 import time
 from pathlib import Path
 
 import pytest
+from loguru import logger
 
-from ai_video_tools.system.processes import CancellationToken, DIAGNOSTIC_LIMIT_BYTES, ProcessCancelled, ProcessExecutionError, ProcessTimeoutError, SubprocessRunner, redacted_command
+from ai_video_tools.system.processes import CancellationToken, DIAGNOSTIC_LIMIT_BYTES, ProcessCancelled, ProcessExecutionError, ProcessTimeoutError, SubprocessRunner, command_line_for_log, redacted_command
 
 
 def test_command_redaction_hides_absolute_paths_and_home_fragments() -> None:
@@ -17,6 +19,24 @@ def test_command_redaction_hides_absolute_paths_and_home_fragments() -> None:
     command = ("ffmpeg", "-i", f"{home}/private/source.mov", "filter=value", "/private/tmp/output.mp4")
 
     assert redacted_command(command) == ("ffmpeg", "-i", "<absolute-path>", "filter=value", "<absolute-path>")
+
+
+def test_subprocess_launch_is_logged_at_info_as_exact_shell_quoted_command(tmp_path: Path) -> None:
+    """The local diagnostic record retains every argument without changing execution."""
+
+    executable = tmp_path / "ffmpeg"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+    command = (str(executable), "-i", str(tmp_path / "clip with spaces.mov"), "-metadata", "comment=it's exact")
+    records: list[object] = []
+    sink = logger.add(lambda message: records.append(message.record), level="INFO")
+    try:
+        SubprocessRunner().run(command, CancellationToken(), 5)
+    finally:
+        logger.remove(sink)
+
+    assert command_line_for_log(command) == shlex.join(command)
+    assert any(record["level"].name == "INFO" and record["message"] == f"RUN {shlex.join(command)}" for record in records)  # type: ignore[index]
 
 
 def test_process_runner_captures_success_output() -> None:

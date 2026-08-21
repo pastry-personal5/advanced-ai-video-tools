@@ -269,11 +269,11 @@ class PipelineService:
         finally:
             self._preflight.registry.release(reservation)
 
-    def run(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, state_changed: StateCallback | None = None) -> PipelineResult:
+    def run(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, state_changed: StateCallback | None = None, job_id: str | None = None) -> PipelineResult:
         """Execute one complete job with stable privacy-conscious log context."""
 
-        job_id = uuid4().hex
-        with logger.contextualize(job_id=job_id, stage=JobState.QUEUED.value):
+        resolved_job_id = job_id or uuid4().hex
+        with logger.contextualize(job_id=resolved_job_id, stage=JobState.QUEUED.value):
             logger.info("Job submitted input_count={} target_height={} model={}", len(request.inputs), request.target_height, request.model_name)
             try:
                 result = self._run_job(request, cancellation, progress, state_changed)
