@@ -3,7 +3,7 @@
 ## Status
 
 - Phase: 1
-- State: Active planning
+- State: In progress
 - Started: 2026-08-22
 - Released baseline: v1.0.0
 - Target: v2
@@ -181,7 +181,7 @@ message actions.
 ### 3. Job editor enhancement
 
 - [ ] Implement the approved layout and field hierarchy.
-- [ ] Remove the two v1 heading labels without changing job state, settings behavior, or External Tools configuration behavior.
+- [x] Remove the two v1 heading labels without changing job state, settings behavior, or External Tools configuration behavior.
 - [ ] Add the integrated two-tab message widget at the bottom of the main window and connect it to global and selected-job event streams.
 - [ ] Add the far-left two-icon navigation rail and switch between Job Creation and Queue Monitoring views without losing either view's state.
 - [ ] Add the far-right source-preview pane and verify its default 3:4 geometry, available-height calculation, and responsive behavior.
@@ -306,9 +306,14 @@ message actions.
 
 ## Implementation evidence
 
-No Phase 1 implementation has started.
+### Header simplification slice — completed
 
-Record completed slices here with links to the relevant modules/tests and the exact checks run. Do not mark the phase complete based only on scaffold or visual mockups.
+- Removed the `Video processing jobs` and `One job runs at a time • Default output height: {settings.target_height}p` labels from `src/ai_video_tools/gui/window.py`.
+- Preserved the External Tools action and existing settings synchronization behavior.
+- Updated `tests/test_gui.py` to assert both removed labels are absent.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py` — 4 passed.
+
+Record subsequent completed slices here with links to the relevant modules/tests and the exact checks run. Do not mark the phase complete based only on scaffold or visual mockups.
 
 ## Risks
 
