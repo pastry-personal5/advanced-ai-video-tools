@@ -11,14 +11,17 @@ from fractions import Fraction
 from pathlib import Path
 
 from ai_video_tools.core.models import (
+    ColorProfile,
     ConcatStrategy,
     IssueCode,
     IssueSeverity,
     JobPlan,
     JobRequest,
     MediaProbe,
+    PipelineStage,
     PreflightIssue,
     PreflightReport,
+    ProgressEvent,
     Rational,
     Toolchain,
     VideoStream,
@@ -29,13 +32,14 @@ from ai_video_tools.system.platform import PlatformInfo, platform_error
 from ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
 from ai_video_tools.upscaling.realesrgan import select_ai_scale
 from ai_video_tools.video.compatibility import analyze_clip_compatibility, effective_frame_rate
-from ai_video_tools.video.policy import has_ambiguous_color_tags, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
+from ai_video_tools.video.policy import color_profile, color_profiles_compatible, has_ambiguous_color_tags, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
 from ai_video_tools.video.probe import FFprobeClient, MediaProber, ProbeError
 
 Clock = Callable[[], datetime]
 PlatformProvider = Callable[[], PlatformInfo]
 ProberFactory = Callable[[Toolchain], MediaProber]
 FreeSpaceProvider = Callable[[Path], int]
+ProgressCallback = Callable[[ProgressEvent], None]
 
 
 def _local_now() -> datetime:
@@ -74,6 +78,30 @@ def _issue(
     return PreflightIssue(severity=severity, code=code, message=message, path=path)
 
 
+def _comparison_color_profile(probes: list[MediaProbe]) -> ColorProfile | None:
+    """Combine declared optional values solely to detect cross-clip conflicts."""
+
+    valid_profiles: list[ColorProfile] = []
+    for probe in probes:
+        if probe.primary_video is not None:
+            try:
+                valid_profiles.append(color_profile(probe.primary_video))
+            except ValueError:
+                pass
+    first_video = probes[0].primary_video
+    try:
+        first_profile = color_profile(first_video) if first_video is not None else None
+    except ValueError:
+        return None
+    if first_profile is None:
+        return None
+    return ColorProfile(
+        first_profile.matrix,
+        next((profile.transfer for profile in valid_profiles if profile.transfer is not None), None),
+        next((profile.primaries for profile in valid_profiles if profile.primaries is not None), None),
+    )
+
+
 class PreflightService:
     """Validate host, tools, destinations, and probed media before processing."""
 
@@ -102,7 +130,12 @@ class PreflightService:
 
         return self._registry
 
-    def run(self, request: JobRequest) -> PreflightReport:
+    @staticmethod
+    def _emit(callback: ProgressCallback | None, stage: PipelineStage, completed: int, total: int, message: str) -> None:
+        if callback is not None:
+            callback(ProgressEvent(stage, completed, total, message))
+
+    def run(self, request: JobRequest, progress: ProgressCallback | None = None) -> PreflightReport:
         """Return a frozen plan only when every safety gate passes."""
 
         # This method deliberately reads as the ordered preflight workflow.
@@ -113,6 +146,8 @@ class PreflightService:
         issues: list[PreflightIssue] = []
         probes: list[MediaProbe] = []
         reserved_output: Path | None = None
+
+        self._emit(progress, PipelineStage.VALIDATE, 0, 1, "Validating the job request and external tools")
 
         host_error = platform_error(self._platform_provider())
         if host_error:
@@ -141,10 +176,14 @@ class PreflightService:
                 code = IssueCode.MISSING_TOOL
             issues.append(_issue(IssueSeverity.ERROR, code, str(error)))
 
+        self._emit(progress, PipelineStage.VALIDATE, 1, 1, "Completed job request and external-tool validation")
+
         inputs_valid = not any(issue.code is IssueCode.INVALID_INPUT for issue in issues)
         if toolchain is not None and inputs_valid:
             prober = self._prober_factory(toolchain)
-            for path in request.inputs:
+            probe_total = len(request.inputs)
+            self._emit(progress, PipelineStage.PROBE, 0, probe_total, f"Probing {probe_total} input clip{'s' if probe_total != 1 else ''}")
+            for index, path in enumerate(request.inputs, start=1):
                 try:
                     probes.append(prober.probe(path))
                 except ProbeError as error:
@@ -156,11 +195,15 @@ class PreflightService:
                             path,
                         )
                     )
+                self._emit(progress, PipelineStage.PROBE, index, probe_total, f"Probed input clip {index} of {probe_total}")
+        else:
+            self._emit(progress, PipelineStage.PROBE, 0, 0, "Media probing skipped because validation did not resolve runnable inputs and tools")
 
         output_rate: Rational | None = None
         output_width: int | None = None
         ai_scale: int | None = None
         output_audio_layout: str | None = None
+        output_color_profile: ColorProfile | None = None
         normalization_reasons: tuple[str, ...] = ()
         peak_bytes = 0
         required_bytes = 0
@@ -169,6 +212,10 @@ class PreflightService:
             output_audio_layout = self._resolve_audio_layout(probes, issues)
             first_video = probes[0].primary_video
             if first_video is not None and output_rate is not None and request.target_height > 0:
+                try:
+                    output_color_profile = color_profile(first_video)
+                except ValueError:
+                    output_color_profile = None
                 output_width = aspect_width(first_video, request.target_height)
                 ai_scale = select_ai_scale(first_video.height, request.target_height)
                 if ai_scale == 4 and first_video.height * ai_scale < request.target_height:
@@ -213,7 +260,7 @@ class PreflightService:
 
         has_errors = any(issue.severity is IssueSeverity.ERROR for issue in issues)
         plan: JobPlan | None = None
-        if not has_errors and output_path is not None and output_rate is not None and output_width is not None:
+        if not has_errors and output_path is not None and output_rate is not None and output_width is not None and output_color_profile is not None:
             plan = JobPlan(
                 created_at=created_at,
                 output_path=output_path,
@@ -228,7 +275,7 @@ class PreflightService:
                 normalization_reasons=normalization_reasons,
                 estimated_peak_bytes=peak_bytes,
                 required_free_bytes=required_bytes,
-                assume_bt709=request.assume_bt709,
+                output_color_profile=output_color_profile,
                 acknowledge_dropped_streams=request.acknowledge_dropped_streams,
                 model_name=request.model_name,
                 overwrite_mode=request.overwrite_mode,
@@ -336,6 +383,8 @@ class PreflightService:
         # Keeping all per-input rejection gates together makes the media policy
         # auditable against the architecture document.
         # pylint: disable=too-many-branches
+        first_video = probes[0].primary_video
+        comparison_profile = _comparison_color_profile(probes)
         for probe in probes:
             video = probe.primary_video
             if video is None:
@@ -363,7 +412,7 @@ class PreflightService:
                     _issue(
                         IssueSeverity.ERROR,
                         IssueCode.UNSUPPORTED_HDR,
-                        "HDR or wide-gamut video is unsupported; version 1 accepts SDR BT.709 only.",
+                        "HDR or wide-gamut video is unsupported; version 1 accepts only explicit SDR BT.709 or SMPTE 170M profiles.",
                         probe.path,
                     )
                 )
@@ -372,22 +421,31 @@ class PreflightService:
                 issues.append(
                     _issue(
                         IssueSeverity.ERROR,
-                        IssueCode.UNSUPPORTED_HDR,
-                        "Input color tags are not supported by the SDR BT.709 version 1 pipeline.",
+                        IssueCode.UNSUPPORTED_COLOR,
+                        "Input color tags are not supported by the version 1 SDR input policy.",
                         probe.path,
                     )
                 )
             elif has_ambiguous_color_tags(video):
-                severity = IssueSeverity.WARNING if request.assume_bt709 else IssueSeverity.ERROR
-                action = "Input will be interpreted as SDR BT.709 by acknowledgement." if request.assume_bt709 else "Acknowledge --assume-bt709 to continue."
                 issues.append(
                     _issue(
-                        severity,
+                        IssueSeverity.ERROR,
                         IssueCode.AMBIGUOUS_COLOR,
-                        f"Input has missing or ambiguous color tags. {action}",
+                        "Input color matrix and range must be explicit. Missing transfer characteristics and primaries are accepted without assuming values.",
                         probe.path,
                     )
                 )
+            if comparison_profile is not None and not detected_hdr and not unsupported_tags and not has_ambiguous_color_tags(video):
+                current_profile = color_profile(video)
+                if not color_profiles_compatible(current_profile, comparison_profile):
+                    issues.append(
+                        _issue(
+                            IssueSeverity.ERROR,
+                            IssueCode.UNSUPPORTED_COLOR,
+                            "Input color profile explicitly conflicts with another clip. Mixed matrices or conflicting declared transfer/primary tags are rejected; version 1 performs no cross-profile conversion.",
+                            probe.path,
+                        )
+                    )
             dropped = []
             if len(probe.video_streams) > 1:
                 dropped.append(f"{len(probe.video_streams) - 1} extra video stream(s)")
@@ -418,7 +476,6 @@ class PreflightService:
                         probe.path,
                     )
                 )
-        first_video = probes[0].primary_video
         if first_video is None:
             return None
         rate, _ = effective_frame_rate(first_video)

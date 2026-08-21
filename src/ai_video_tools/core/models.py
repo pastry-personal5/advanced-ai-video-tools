@@ -52,6 +52,13 @@ class ConcatStrategy(str, Enum):
     NORMALIZE = "normalize"
 
 
+class ColorMatrix(str, Enum):
+    """Explicit SDR matrices supported without cross-matrix conversion."""
+
+    BT709 = "bt709"
+    SMPTE170M = "smpte170m"
+
+
 class IssueSeverity(str, Enum):
     """Severity of a preflight finding."""
 
@@ -70,6 +77,7 @@ class IssueCode(str, Enum):
     INVALID_OUTPUT = "invalid_output"
     INVALID_MEDIA = "invalid_media"
     UNSUPPORTED_HDR = "unsupported_hdr"
+    UNSUPPORTED_COLOR = "unsupported_color"
     AMBIGUOUS_COLOR = "ambiguous_color"
     UNSUPPORTED_ROTATION = "unsupported_rotation"
     STREAM_ACKNOWLEDGEMENT = "stream_acknowledgement"
@@ -120,6 +128,15 @@ class Rational:
 
     def __str__(self) -> str:
         return f"{self.numerator}/{self.denominator}"
+
+
+@dataclass(frozen=True)
+class ColorProfile:
+    """Matrix plus optional transfer and primary signaling from the first clip."""
+
+    matrix: ColorMatrix
+    transfer: str | None
+    primaries: str | None
 
 
 @dataclass(frozen=True)
@@ -230,7 +247,6 @@ class JobRequest:
     explicit_output_path: Path | None = None
     target_height: int = 2160
     model_name: str = "realesrgan-x4plus"
-    assume_bt709: bool = False
     acknowledge_dropped_streams: bool = False
     overwrite_mode: OverwriteMode = OverwriteMode.REPLACE
     tools: ToolOverrides = field(default_factory=ToolOverrides)
@@ -263,7 +279,7 @@ class JobPlan:
     normalization_reasons: tuple[str, ...]
     estimated_peak_bytes: int
     required_free_bytes: int
-    assume_bt709: bool = False
+    output_color_profile: ColorProfile
     acknowledge_dropped_streams: bool = False
     model_name: str = "realesrgan-x4plus"
     overwrite_mode: OverwriteMode = OverwriteMode.REPLACE

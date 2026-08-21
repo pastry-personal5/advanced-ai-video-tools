@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, Rational, VideoStream
+from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, Rational, VideoStream
 from ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerifier, PreparationCancelled, PreparationFailed
 from ai_video_tools.storage.workspaces import WorkspaceManager
 from ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult
@@ -24,7 +24,7 @@ def _probe(path: Path, *, width: int = 64) -> MediaProbe:
 
 def _job() -> JobPlan:
     probes = (_probe(Path("one.mp4")), _probe(Path("two.mp4"), width=96))
-    return JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, probes, Rational(10, 1), 3840, 2160, 4, ConcatStrategy.NORMALIZE, None, ("dimensions differ",), 100, 120)
+    return JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, probes, Rational(10, 1), 3840, 2160, 4, ConcatStrategy.NORMALIZE, None, ("dimensions differ",), 100, 120, ColorProfile(ColorMatrix.BT709, "bt709", "bt709"))
 
 
 def _merged(path: Path, *, width: int = 64) -> MediaProbe:
@@ -166,3 +166,26 @@ def test_verification_failure_retains_workspace(tmp_path: Path) -> None:
     assert captured.value.stage is PipelineStage.VERIFY
     assert captured.value.workspace_path.is_dir()
     assert "dimensions differ" in str(captured.value)
+
+
+def test_merged_verifier_accepts_rate_rounding_below_one_timestamp_tick(tmp_path: Path) -> None:
+    """Matroska rate fractions may differ while representing the same CFR cadence."""
+
+    path = tmp_path / "merged.mkv"
+    path.write_bytes(b"media")
+    video = VideoStream(0, "ffv1", 64, 36, "yuv420p", Rational(1, 1), Rational(18227, 1139), Rational(18227, 1139), Rational(1, 1000), Decimal("2"), "bt709", "bt709", "bt709", "tv", 0, False)
+    merged = MediaProbe(path, Decimal("2"), (video,), (), ())
+
+    class QuantizedProber:
+        """Return the retained-job rate representation."""
+
+        def probe(self, _path: Path) -> MediaProbe:
+            """Return one deterministic quantized probe."""
+
+            return merged
+
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, (_probe(Path("one.mp4")), _probe(Path("two.mp4"))), Rational(16, 1), 3840, 2160, 4, ConcatStrategy.NORMALIZE, None, (), 100, 120, ColorProfile(ColorMatrix.BT709, "bt709", "bt709"))
+
+    result = MergedOutputVerifier(QuantizedProber()).verify(path, job, ConcatStrategy.NORMALIZE)
+
+    assert result is merged

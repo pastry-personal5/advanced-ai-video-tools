@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import AudioStream, ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, Rational, VideoStream
+from ai_video_tools.core.models import AudioStream, ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, Rational, VideoStream
 from ai_video_tools.services.frame_extraction import FrameExtractionCancelled, FrameExtractionExecutor, FrameExtractionFailed
 from ai_video_tools.services.media_preparation import PreparationResult
 from ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceManager
@@ -28,7 +28,7 @@ def _prepared(workspace: OwnedWorkspace, *, has_audio: bool = True) -> tuple[Pre
     merged_path = workspace.path / "merged.mkv"
     merged_path.write_bytes(b"media")
     probe = MediaProbe(merged_path, Decimal("2"), (_video(),), (_audio(),) if has_audio else (), ())
-    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, (probe,), Rational(10, 1), 3840, 2160, 4, ConcatStrategy.NORMALIZE, "mono" if has_audio else None, (), 100, 120)
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, (probe,), Rational(10, 1), 3840, 2160, 4, ConcatStrategy.NORMALIZE, "mono" if has_audio else None, (), 100, 120, ColorProfile(ColorMatrix.BT709, "bt709", "bt709"))
     return PreparationResult(probe, 0, (), workspace.identifier), job
 
 

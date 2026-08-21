@@ -1,6 +1,6 @@
 # AI Video Tools
 
-AI Video Tools is a Python project for macOS on Apple Silicon that concatenates real-world video footage with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing service will own the complete pipeline; a PySide6 desktop GUI will provide a convenient front end to that same core behavior.
+AI Video Tools is a Python project for macOS on Apple Silicon that concatenates real-world video footage with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing service owns the complete pipeline; a PySide6 desktop GUI will provide a convenient front end to that same core behavior.
 
 > **Status:** executable foundation. Typed job and media models, external-tool
 > discovery, collision-safe output naming, FFprobe parsing, and the shared
@@ -13,8 +13,11 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 > Real-ESRGAN execution, skip policy, bounded memory retries, and exact output-frame
 > verification are implemented. Quality-first final MP4 encoding, final probe
 > verification, atomic replacement/no-clobber publication, and terminal workspace
-> cleanup are implemented and exercised with real FFmpeg. Full-job orchestration,
-> job queuing, a processing CLI command, and the PySide6 GUI remain future stages.
+> cleanup are implemented and exercised with real FFmpeg. Full-job orchestration
+> now composes those stages with shared cancellation, progress, state transitions,
+> reservation release, and terminal workspace policy. The `process` CLI command
+> exposes that complete pipeline with text or JSON terminal results and cooperative
+> Ctrl-C cancellation. Job queuing and the PySide6 GUI remain future stages.
 
 ## Implemented foundation
 
@@ -27,27 +30,28 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 - Safe FFprobe JSON parsing with typed stream and metadata inventory
 - Typed stream-copy compatibility findings with normalize-all-or-none planning
 - Safely escaped concat manifests using ordered absolute paths
-- Shell-free FFmpeg normalization commands with `-noautorotate`, explicit
-  BT.709 conversion, exact rational CFR, first-audio mapping, silence insertion,
-  audio padding/trimming, FFV1, and PCM
+- Shell-free FFmpeg normalization commands with `-noautorotate`, explicit preservation of the first clip's SDR color profile, exact rational CFR, first-audio mapping, silence insertion, audio padding/trimming, FFV1, and PCM
 - One concat-demuxer stream-copy command after optional normalization
 - Ownership-marked per-job workspaces with guarded cleanup and failed-workspace retention
 - Shell-free subprocess execution with bounded diagnostics, timeouts, cancellation, and process-group termination
 - A media-preparation service that normalizes clips sequentially, writes the manifest, concatenates exactly once, reports measured stage progress, and verifies the merged intermediate—including FFV1/PCM on the normalization path—with either standalone cleanup or caller-owned retention
-- Cancellable exact-rational frame extraction with explicit limited BT.709 YUV-to-RGB conversion, deterministic nine-digit PNG names, structural RGB PNG validation, contiguous numbering, plausible frame-count checks, and retention of merged audio for later muxing
+- Cancellable exact-rational frame extraction with explicit limited-range YUV-to-RGB conversion using the frozen BT.709 or SMPTE 170M matrix, deterministic nine-digit PNG names, structural RGB PNG validation, contiguous numbering, plausible frame-count checks, and retention of merged audio for later muxing
 - Strict `realesrgan-x4plus` directory execution with the frozen 2×/3×/4× scale, automatic GPU and threads, automatic tiling first, bounded allocation-failure retries at `512 → 256 → 128 → 64 → 32`, cancellation, attempt diagnostics, skip behavior, and exact output-frame verification
-- Explicit final MP4 encoding from RGB frames with exact rational CFR, limited-range BT.709 conversion and tags, H.264 CRF 18 slow `yuv420p`, first-audio copy only when exact and MP4-safe, otherwise aligned 48 kHz AAC-LC at 256 kbit/s
+- Explicit final MP4 encoding from RGB frames with exact rational CFR, limited-range conversion and frozen first-clip color tags, H.264 CRF 3 slow `yuv420p`, first-audio copy only when exact and MP4-safe, otherwise aligned 48 kHz AAC-LC at 256 kbit/s
 - Probe-gated publication using same-filesystem partials, atomic replacement for explicit overwrite, atomic no-clobber for generated/no-overwrite paths, old-output preservation on failure or cancellation, success/cancellation cleanup, and failed-workspace retention
-- Preflight gates for platform, paths, SDR BT.709, rotation, streams, timing,
+- A synchronous full-job pipeline service with explicit lifecycle transitions, measured validation/probe progress, one shared cancellation token and workspace, typed terminal results, reservation release, clean cancellation, and failed-workspace retention
+- Preflight gates for platform, paths, explicit matching SDR BT.709 or SMPTE 170M profiles, rotation, streams, timestamp-aware CFR/VFR timing,
   audio layout, dimensions, AI scale, concat strategy, and disk margin
-- Human-readable and JSON CLI reports through `ai-video-tools preflight`
+- Human-readable and JSON CLI results through `ai-video-tools preflight` and `ai-video-tools process`, with measured text progress on stderr
 - Fast tests that require no GPU, network, model download, or checked-in media;
   the tiny FFmpeg integration fixture is generated locally and skips when the
   user-installed FFmpeg tools are unavailable
+- A full-job integration test that runs real preflight, normalization, concat,
+  extraction, final encoding, verification, atomic publication, and cleanup
+  with tiny generated media and a lightweight directory-mode fake upscaler
 
 ## Planned features
 
-- Compose the implemented stages into one stateful processing service and CLI command
 - Run one active job with an in-memory FIFO queue
 - Add the PySide6 GUI with progress, cancellation, warnings, and actionable errors
 - Add persistent settings and rotating local diagnostics
@@ -83,14 +87,14 @@ The default profile favors preservation during processing and high-quality, broa
 - **Normalization video:** lossless FFV1 level 3 in `yuv444p10le`
 - **Normalization audio:** lossless `pcm_s24le` at 48 kHz, using the selected primary channel layout
 - **Normalization canvas and frame rate:** first clip's resolution and frame rate unless explicitly overridden; preserve aspect ratio and pad rather than crop or stretch
-- **Color:** SDR BT.709 only; reject detected HDR and wide-gamut input
+- **Color:** require and freeze the first clip's supported SDR matrix, preserve it through output, and accept BT.709 or SMPTE 170M without cross-matrix conversion; require explicit range, ignore missing transfer/primary tags without inventing values, and reject explicit conflicts, detected HDR, unsupported wide gamut, and unsupported tags
 - **Color range:** limited/TV; convert accepted full-range input explicitly
 - **Rotation:** unsupported in v1; reject nonzero rotation metadata and disable FFmpeg auto-rotation
 - **Extracted/upscaled frames:** lossless PNG with deterministic zero-padded names
 - **Upscaling model:** `realesrgan-x4plus` for real-world imagery
 - **Final dimensions:** 2160 pixels high; calculate an even width from coded dimensions and sample aspect ratio
 - **Final container:** MP4 with fast-start metadata
-- **Final video:** H.264 through `libx264`, CRF 18, slow preset, and `yuv420p`
+- **Final video:** H.264 through `libx264`, CRF 3, slow preset, and `yuv420p`
 - **Final audio:** first audio stream, copied when compatible and unchanged; otherwise AAC-LC at 256 kbit/s and 48 kHz
 - **Additional streams:** require acknowledgement, then drop extra audio, subtitles, chapters, and attachments
 
@@ -104,7 +108,7 @@ When the merged video is shorter than 2160 pixels, use the smallest Real-ESRGAN 
 
 ### Color and audio policy
 
-Version 1 accepts SDR BT.709 video only. Preflight must reject HDR transfer functions, BT.2020 or other unsupported wide-gamut signaling, and clearly explain why the job cannot continue. Missing or ambiguous color metadata requires acknowledgement before the input is interpreted and tagged as BT.709; the application must never tone-map or change color interpretation silently.
+Version 1 requires and freezes the first clip's explicit supported SDR matrix as the job output matrix. A BT.709 matrix remains BT.709; a SMPTE 170M matrix remains SMPTE 170M through normalization, YUV-to-RGB extraction, RGB-to-YUV encoding, and final stream signaling. Matrix and range are mandatory. Missing transfer characteristics or color primaries are accepted rather than defaulting to BT.709. Optional tags declared by the first clip are preserved in output; fields absent from the first clip remain unspecified. When optional tags are present on both clips, explicit conflicts are rejected; missing optional tags do not conflict. Preflight also rejects mixed matrices, HDR transfer functions, BT.2020, unsupported wide-gamut signaling, and unsupported tags. The application neither converts SMPTE 170M to BT.709 nor silently assumes or retags absent color metadata.
 
 For each clip, select its first audio stream. If a clip has no audio but another clip does, insert silence matching that clip's video duration and the job's normalized audio layout. If no input contains audio, produce no audio track. Pad audio that ends early with silence and trim audio that runs long so the audio timeline exactly matches the video timeline.
 
@@ -112,7 +116,7 @@ Extra audio streams, subtitles, chapters, and attachments are unsupported in v1.
 
 ### Operational defaults
 
-- Preserve the first clip's exact rational frame rate, such as `30000/1001`; normalize VFR or mixed-rate inputs to it without float rounding.
+- Preserve the first clip's nominal exact rational CFR, such as `16/1` or `30000/1001`, without float rounding. Treat `r_frame_rate` and `avg_frame_rate` as the same CFR when their frame periods differ by less than one tick of the stream time base; otherwise treat the first clip as VFR and use its rational average rate. Verify merged and final rates with the same timestamp-derived tolerance rather than literal fraction equality.
 - Run one active processing job and keep later jobs in an in-memory FIFO queue.
 - Overwrite an existing destination by default, but only by atomically replacing it after the new partial output passes verification. A failed or cancelled job leaves the existing file intact. Users may opt out with CLI or GUI no-overwrite mode.
 - Generate the default filename when the job is created using local time: `ai-video-YYYYMMDD-HHMMSS-ffffffZZZZ.mp4`, where `ZZZZ` is the numeric UTC offset such as `+0900` or `-0700`. Place it in the selected output directory and reserve a unique path so automatic naming never overwrites an earlier generated output.
@@ -122,8 +126,8 @@ Extra audio streams, subtitles, chapters, and attachments are unsupported in v1.
 - Do not resume partial jobs in v1.
 - Let Real-ESRGAN choose the GPU and worker threads, start with automatic tiling, and keep TTA disabled.
 - Retry recognized Vulkan memory failures only with bounded tile sizes of 512, 256, 128, 64, then 32.
-- Store settings and rotating local logs under `~/Library/Application Support/AI Video Tools/`.
-- Rotate logs at 10 MiB with five backups. Perform no telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
+- Store settings and Loguru-managed local logs under `~/Library/Application Support/AI Video Tools/`.
+- Configure Loguru once at startup with stderr and queued file sinks, rotate at 10 MiB, retain five backups, and avoid production exception-value exposure. Perform no telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
 
 ## Requirements
 
@@ -135,6 +139,7 @@ Expected runtime requirements include:
 - Python 3.10 or later
 - [uv](https://docs.astral.sh/uv/) for Python and dependency management
 - [PySide6](https://doc.qt.io/qtforpython-6/) for the desktop GUI
+- [Loguru](https://github.com/Delgan/loguru) for application diagnostics
 - [FFmpeg](https://ffmpeg.org/) and FFprobe available on `PATH`
 - [`realesrgan-ncnn-vulkan`](https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan) and its model files
 - A Vulkan-capable GPU and working Vulkan driver
@@ -151,6 +156,7 @@ Install the Python environment and inspect the implemented CLI:
 uv sync --dev
 uv run ai-video-tools --help
 uv run ai-video-tools preflight --help
+uv run ai-video-tools process --help
 ```
 
 `uv sync` creates and manages the project virtual environment automatically. Activating it manually is optional. The executable locations for FFmpeg, FFprobe, and Real-ESRGAN should be configurable when they are not available on `PATH`.
@@ -169,14 +175,26 @@ uv run ai-video-tools preflight \
 
 Preflight does not modify media. It reserves the proposed output only for the
 duration of the diagnostic command and exits with status 0 when the plan is
-ready or 2 when a blocking issue remains. Missing color tags require
-`--assume-bt709`; unsupported secondary streams require
-`--acknowledge-dropped-streams`. For example, a job created in Korea on August
+ready or 2 when a blocking issue remains. Missing matrix/range metadata and explicit color conflicts are rejected, while missing transfer/primary tags are ignored without defaults. Unsupported secondary streams require `--acknowledge-dropped-streams`. For example, a job created in Korea on August
 21, 2026 could propose `ai-video-20260821-143052-123456+0900.mp4`.
 
-The future `process` command and GUI will consume the same `JobRequest`,
-`PreflightReport`, and `JobPlan` types. They are intentionally not exposed as
-working commands yet.
+Run the complete pipeline with the same job arguments:
+
+```bash
+uv run ai-video-tools process \
+  --input clip-01.mp4 \
+  --input clip-02.mp4 \
+  --output-dir ./output \
+  --realesrgan /path/to/realesrgan-ncnn-vulkan \
+  --model-dir /path/to/models
+```
+
+Text mode writes measured stage progress to stderr and the completed output
+summary to stdout. `--json` suppresses progress and emits one machine-readable
+terminal result. Exit status is 0 for success, 1 for a processing failure, 2 for
+preflight rejection, and 130 for clean Ctrl-C cancellation. Failed jobs report
+their retained workspace; successful and cancelled jobs clean owned temporary
+state. The future GUI will submit the same `JobRequest` to `PipelineService`.
 
 ## Development commands
 
@@ -204,7 +222,7 @@ ai-videol-tools-v2/
 │   ├── system/         # Host policy and prerequisite discovery
 │   ├── upscaling/      # Real-ESRGAN policy and safe argument construction
 │   ├── video/          # Probing, compatibility, manifests, and FFmpeg builders
-│   ├── cli.py          # Thin preflight command-line adapter
+│   ├── cli.py          # Thin preflight and processing command-line adapters
 │   └── __main__.py     # Module entry point
 ├── tests/              # Automated tests and lightweight fixtures
 ├── docs/
@@ -218,8 +236,8 @@ ai-videol-tools-v2/
 └── pyproject.toml
 ```
 
-The full-job pipeline service, job queue, processing CLI command, and GUI will
-extend these boundaries rather than duplicating the implemented processing stages.
+The job queue and GUI will extend these boundaries rather than duplicating the
+implemented full-job pipeline.
 
 ## Engineering principles
 

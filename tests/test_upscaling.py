@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import ConcatStrategy, JobPlan, PipelineStage, ProgressEvent, Rational, ToolInfo, Toolchain
+from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, PipelineStage, ProgressEvent, Rational, ToolInfo, Toolchain
 from ai_video_tools.services.frame_extraction import FrameExtractionResult
 from ai_video_tools.services.upscaling import UpscalingCancelled, UpscalingExecutor, UpscalingFailed
 from ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceManager
@@ -32,7 +32,7 @@ def _fixture(tmp_path: Path, *, scale: int | None = 2, output_height: int = 72) 
     audio.write_bytes(b"media")
     extraction_process = ProcessResult(("ffmpeg",), 0, "", "")
     extracted = FrameExtractionResult(frames, frames / FRAME_FILENAME_TEMPLATE, 3, 3, 64, 36, audio, extraction_process, workspace.identifier)
-    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "output.mp4", True, (), Rational(10, 1), 128, output_height, scale, ConcatStrategy.NORMALIZE, "mono", (), 100, 120)
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "output.mp4", True, (), Rational(10, 1), 128, output_height, scale, ConcatStrategy.NORMALIZE, "mono", (), 100, 120, ColorProfile(ColorMatrix.BT709, "bt709", "bt709"))
     models = tmp_path / "models"
     models.mkdir()
     (models / f"{REAL_IMAGE_MODEL}.param").touch()

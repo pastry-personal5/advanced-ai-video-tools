@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import ConcatStrategy, JobPlan, Rational, ToolInfo, Toolchain
+from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, Rational, ToolInfo, Toolchain
 from ai_video_tools.upscaling.realesrgan import AUTOMATIC_TILE_SIZE, MEMORY_RETRY_TILE_SIZES, REAL_IMAGE_MODEL, build_realesrgan_command, build_upscale_plan, is_vulkan_memory_failure, select_ai_scale
 
 
@@ -19,7 +19,7 @@ def _toolchain(tmp_path: Path) -> Toolchain:
 
 
 def _job(*, scale: int | None = 2, height: int = 72, model_name: str = REAL_IMAGE_MODEL) -> JobPlan:
-    return JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, (), Rational(10, 1), 128, height, scale, ConcatStrategy.NORMALIZE, None, (), 100, 120, model_name=model_name)
+    return JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, (), Rational(10, 1), 128, height, scale, ConcatStrategy.NORMALIZE, None, (), 100, 120, ColorProfile(ColorMatrix.BT709, "bt709", "bt709"), model_name=model_name)
 
 
 def test_real_image_command_uses_directory_mode_and_explicit_safe_defaults(tmp_path: Path) -> None:

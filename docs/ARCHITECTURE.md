@@ -4,15 +4,26 @@ This document is the authoritative technical overview for AI Video Tools. It des
 
 ## Implementation status
 
-The current CLI slice ends after preflight. The backend also has an application
-service that executes the media-preparation slice: it creates an owned
+The CLI exposes diagnostic preflight and one complete synchronous `process` job.
+The backend has an application service that executes the media-preparation slice: it creates an owned
 workspace, normalizes clips sequentially when required, writes the concat
 manifest, concatenates exactly once, verifies the merged result (including the
 FFV1/PCM contract on the normalization path), and either cleans a standalone
 workspace or retains a caller-owned one. A composable extraction service turns
 that merged timeline into a verified exact-CFR RGB PNG sequence while retaining
-the merged audio source. These services are not exposed as a complete user job
-yet. Upscaling, final encoding and publication, job queuing, and GUI work remain unimplemented. The
+the merged audio source. A cancellable Real-ESRGAN service then skips AI when the
+source is already tall enough or runs one directory upscale stage with bounded
+Vulkan-memory retries and exact output-frame verification. A terminal service
+then encodes the verified frames and selected audio, probes a same-filesystem
+partial, publishes it atomically, and applies the terminal workspace policy. A
+synchronous full-job service composes all of those stages behind one
+frontend-independent entry point. It passes one cancellation token and owned
+workspace through the job, enforces lifecycle transitions, forwards measured
+progress, releases the reserved destination on every terminal path, cleans
+cancellation, and retains failed workspaces. The CLI converts those typed
+outcomes into stable success, failure, rejection, and cancellation exit statuses;
+it never constructs backend commands. Job queuing and GUI work remain
+unimplemented. The
 implemented boundaries are:
 
 - `core.models`: immutable job intent, exact rationals, typed stream inventory,
@@ -21,6 +32,7 @@ implemented boundaries are:
   reservation with filesystem collision checks
 - `storage.paths`: Qt-standard application data and cache locations
 - `storage.workspaces`: randomly identified ownership-marked job directories and guarded cleanup confined to the configured job root
+- `storage.publication`: same-filesystem partial allocation, verified atomic replacement, atomic no-clobber publication, and guarded partial deletion
 - `system.platform`: macOS 26.5.2 and Apple Silicon support gate
 - `system.processes`: shell-free execution, bounded diagnostic tails, explicit timeouts, cooperative cancellation, and process-group termination
 - `system.tools`: explicit-path-first discovery, executable inspection, x4plus
@@ -30,17 +42,27 @@ implemented boundaries are:
 - `video.compatibility`: typed stream-copy findings and normalize-all-or-none strategy selection
 - `video.manifest`: ordered absolute concat paths with FFmpeg token escaping
 - `video.commands`: lossless normalization, concat and RGB PNG extraction arguments, exact frame-count calculation, and typed preparation/extraction plans
-- `video.policy`: shared SDR BT.709 predicates used by preflight and command builders
+- `video.frames`: shared deterministic names and structural RGB PNG inventory verification
+- `video.finalization`: exact frame-timeline calculation, conservative audio-copy selection, and explicit quality-first final FFmpeg arguments
+- `video.policy`: shared explicit SDR BT.709/SMPTE 170M profile policy used by preflight and command builders
+- `upscaling.realesrgan`: real-image model and scale policy, shell-free directory commands, and conservative Vulkan-memory failure classification
 - `services.preflight`: shared path, media-policy, sizing, concat-strategy, audio,
   and disk-margin validation
 - `services.media_preparation`: sequential normalize-all-or-none execution, one concat, measured stage progress, merged-result verification, and workspace retention policy
 - `services.frame_extraction`: cancellable exact-CFR extraction, measured progress, RGB PNG inventory verification, and retained merged-audio handoff
-- `cli`: human-readable and JSON preflight reports
+- `services.upscaling`: skip-or-run orchestration, measured progress, bounded attempt diagnostics, safe retry-directory resets, cancellation, and exact scaled-frame verification
+- `services.finalization`: final-frame re-verification, encoding, output probing, atomic publication, old-output preservation, and terminal workspace cleanup/retention
+- `services.pipeline`: full-job composition, legal lifecycle transitions, shared cancellation and workspace ownership, typed terminal outcomes, and destination-reservation release
+- `cli`: typed request parsing, human-readable or JSON preflight/process results, measured text progress, exit-status mapping, and cooperative SIGINT cancellation
 
 The Vulkan smoke test uses an owned temporary directory, explicitly selects
 `realesrgan-x4plus`, and uses a 32-pixel diagnostic tile. It does not change the
 processing default of automatic tiling. Unit tests replace external processes,
-so the normal test suite remains independent of GPU hardware and model files.
+so the normal test suite remains independent of GPU hardware and model files. A
+tiny full-job integration test uses real FFmpeg and FFprobe with a contract-faithful
+directory-mode fake upscaler, proving stage order, one AI invocation, final media
+verification, atomic publication, reservation release, and terminal cleanup
+without a GPU or model download.
 
 ## Design goals
 
@@ -79,17 +101,17 @@ Defaults must be explicit in the typed job model and overridable by the CLI and 
 | Normalization container | Matroska |
 | Normalization video | Lossless FFV1 level 3, `yuv444p10le` |
 | Normalization audio | Lossless `pcm_s24le`, 48 kHz, selected primary channel layout |
-| Color | SDR BT.709 only |
+| Color | Require, freeze, and preserve the first clip's SDR BT.709 or SMPTE 170M matrix; require range; omit missing transfer/primary tags without defaults; reject explicit conflicts |
 | Color range | Limited/TV; explicitly convert accepted full-range input |
 | Common canvas | First clip's resolution; preserve aspect ratio and pad |
 | Rotation | Unsupported; reject nonzero metadata and disable auto-rotation |
-| Constant frame rate | First clip's exact rational rate |
+| Constant frame rate | First clip's nominal exact rational rate; sub-time-base-tick fraction differences are timestamp quantization |
 | Frame sequence | Lossless PNG with deterministic zero-padded names |
 | Real-ESRGAN model | `realesrgan-x4plus` |
 | Final display height | 2160 pixels |
 | Final display width | Derived from coded dimensions and sample aspect ratio, then rounded to an even integer |
 | Final container | MP4 with fast-start metadata |
-| Final video | `libx264`, CRF 18, slow preset, `yuv420p` |
+| Final video | `libx264`, CRF 3, slow preset, `yuv420p` |
 | Final audio | First audio stream; copy only when unchanged and MP4-compatible, otherwise AAC-LC, 256 kbit/s, 48 kHz |
 
 Mixed resolution, aspect ratio, frame rate, variable frame rate, or channel layout triggers a visible normalization warning. Never crop, stretch, discard a stream, or change timing silently. Report extra audio streams, subtitles, chapters, and attachments before processing and drop them only after explicit acknowledgement.
@@ -116,13 +138,14 @@ For input at or above the target height, skip Real-ESRGAN by default and resize 
 
 ### Color policy
 
-Version 1 supports SDR BT.709 only. Probe color primaries, transfer characteristics, matrix coefficients, range, pixel format, and mastering metadata before processing.
+Version 1 accepts supported SDR BT.709 and SMPTE 170M matrices. Probe color primaries, transfer characteristics, matrix coefficients, range, pixel format, and mastering metadata before processing. Require and freeze the first clip's matrix. Preserve its optional transfer characteristics and primaries when declared, but keep either field unspecified when absent.
 
 - Reject detected PQ, HLG, BT.2020, HDR mastering metadata, and other explicit HDR or unsupported wide-gamut signaling with an actionable message.
-- Accept explicitly tagged SDR BT.709.
-- When color tags are absent, unknown, or internally inconsistent, require user acknowledgement before interpreting the input as BT.709.
-- Convert BT.709 YUV to the RGB PNG frame representation explicitly, then convert processed RGB frames back to BT.709 for encoding.
-- Tag the final stream explicitly with BT.709 primaries, transfer characteristics, and matrix coefficients. Do not tone-map, gamut-map, or retag silently.
+- Accept explicitly tagged supported SDR BT.709 and SMPTE 170M matrices directly.
+- Require every later clip to declare the same matrix. When both compared clips explicitly declare transfer characteristics or primaries, reject conflicting values. A missing optional value is ignored rather than treated as a conflict; version 1 performs no cross-profile or SMPTE 170M-to-BT.709 conversion.
+- Reject absent or unknown matrix/range metadata. Accept missing transfer characteristics and primaries without an override and without substituting BT.709; omit fields absent from the first clip when signaling normalized and final output.
+- Convert YUV to the RGB PNG frame representation explicitly with the frozen matrix, then convert processed RGB frames back with that same matrix for encoding.
+- Tag the final stream explicitly with the frozen first-clip primaries, transfer characteristics, and matrix coefficients. Do not tone-map, gamut-map, convert matrices, or retag silently.
 
 ### Audio and secondary-stream policy
 
@@ -194,7 +217,9 @@ Before starting, calculate a conservative peak-disk estimate covering normalized
 
 Resolve persistent configuration with `QStandardPaths.StandardLocation.AppDataLocation`, corresponding to `~/Library/Application Support/AI Video Tools/` on macOS. Store executable paths, recent locations, and user preferences there; do not store credentials or model binaries.
 
-Write local logs under the application-data directory. Rotate at 10 MiB with five backup files, redact sensitive path or environment data where practical, and expose the log location in the GUI and CLI diagnostics.
+Loguru is the application logging API. Configure it once at application startup; backend, CLI, and future GUI modules import the shared Loguru `logger` and must not install their own sinks. Keep user-facing CLI stdout/stderr rendering separate from diagnostic logging.
+
+Write a human-readable stderr sink and a local file sink under the application-data directory. Configure the file sink with `rotation="10 MB"`, `retention=5`, and `enqueue=True` for bounded, thread-safe delivery. Production exception logging disables diagnostic local-value exposure, redacts sensitive paths and environment data where practical, and binds stable context such as job ID and pipeline stage. Expose the log location in CLI and GUI diagnostics.
 
 Version 1 performs no telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
 
@@ -226,7 +251,7 @@ GUI ─────┘                       │
 - Require the `realesrgan-x4plus` parameter and binary files and resolve them during preflight. Never inherit the executable's default model implicitly.
 - Do not install, download, update, or modify external tools as part of preflight.
 - Validate readable inputs, zero or absent rotation metadata, writable output directory, frozen and reserved destination, overwrite mode, model files, target height, resolved dimensions, AI scale, Vulkan device, owned workspace, conservative disk estimate, and 20% free-space margin.
-- Reject detected HDR or unsupported wide gamut. Require acknowledgement for missing or ambiguous color tags and for every unsupported secondary stream that will be dropped.
+- Reject detected HDR, unsupported wide gamut, mixed matrices, explicit transfer/primary conflicts, and missing matrix/range tags. Ignore absent transfer/primary tags without defaults. Require acknowledgement for every unsupported secondary stream that will be dropped.
 - Calculate a conservative peak temporary-space estimate; frame sequences can be substantially larger than their source videos.
 - Freeze the effective job configuration before starting so logs and retries are reproducible.
 
@@ -248,13 +273,13 @@ Do not select concat or normalization behavior from filename extensions.
 
 Compare the probed streams against the concat compatibility policy. If every clip is compatible, retain every source for direct concat stream copy. If any clip is incompatible, normalize every clip into the same intermediate profile before concat; mixing untouched source codecs with FFV1 normalized clips would not be stream-copy compatible.
 
-Full-range color, VFR timing, missing required audio, or audio-duration mismatch forces normalization even when codec and stream layouts would otherwise be concat-compatible. Nonzero rotation metadata fails preflight instead of entering normalization.
+Full-range color, VFR timing, missing required audio, or audio-duration mismatch forces normalization even when codec and stream layouts would otherwise be concat-compatible. A matching limited-range SMPTE 170M job does not require normalization solely because of its matrix. Nonzero rotation metadata fails preflight instead of entering normalization.
 
 The default normalization profile is Matroska with FFV1 level 3 `yuv444p10le` video and `pcm_s24le` audio at 48 kHz. Use the first clip's coded resolution, sample aspect ratio, and exact frame rate plus the first available primary audio channel layout unless the job overrides them. Use quality-first Lanczos scaling, preserve display aspect ratio by padding, and never stretch or crop silently. Normalized clips use deterministic six-digit names such as `clip-000001.mkv`.
 
-Resolve the first clip's exact rational frame rate without converting through floating point. Preserve its CFR rate directly; for a VFR first clip, use FFprobe's valid rational average frame rate. Normalize every clip to that rational rate and report the conversion. For example, preserve `30000/1001` rather than rounding it to `29.97` or `30`.
+Resolve the first clip's nominal exact rational frame rate without converting through floating point. Compare the periods represented by `r_frame_rate` and `avg_frame_rate`; if they differ by less than one tick of the stream time base, treat the difference as timestamp quantization and retain the nominal CFR, such as `16/1`. A difference of one full tick or more remains VFR; use FFprobe's valid rational average rate, normalize every clip to that rate, and report the conversion. Preserve `30000/1001` rather than rounding it to `29.97` or `30`.
 
-Pass `-noautorotate` for every FFmpeg input and do not add rotation filters. Convert accepted full-range BT.709 input explicitly to limited/TV range; do not relabel range metadata without converting sample values.
+Pass `-noautorotate` for every FFmpeg input and do not add rotation filters. Convert accepted full-range input explicitly to limited/TV range while preserving the frozen matrix; do not relabel range or matrix metadata without converting sample values.
 
 When the job contains audio, normalize the first audio stream from each clip. Insert silence for clips without audio, pad short streams, and trim long streams to each clip's authoritative video duration before concat.
 
@@ -271,7 +296,7 @@ Create a UTF-8 concat manifest in the job workspace using ordered, absolute, saf
 
 - Decode the merged video into one lossless PNG sequence.
 - Pass `-noautorotate` during frame extraction and verify that no rotation transform reaches the output.
-- Perform explicit BT.709 YUV-to-RGB conversion for the PNG sequence; do not rely on unspecified automatic color interpretation.
+- Perform explicit YUV-to-RGB conversion using the frozen BT.709 or SMPTE 170M matrix for the PNG sequence; do not rely on unspecified automatic color interpretation.
 - Use a single zero-padded naming convention that preserves lexical and numeric order.
 - Choose and record an explicit constant output frame rate. Variable-frame-rate conversion must be visible to the user.
 - Retain the verified merged media as the primary-audio source for later muxing, preserving its exact relationship to the video timeline without a needless additional audio copy.
@@ -287,10 +312,14 @@ Use directory processing rather than one subprocess per frame. Retry only recogn
 
 Before encoding, verify that output frame numbers match the input set exactly. Missing, duplicate, unreadable, or unexpected frames fail the stage.
 
+The implemented adapter passes `-m`, `-n realesrgan-x4plus`, the frozen `-s` scale, `-t`, and `-f png` explicitly. It omits `-g`, `-j`, and `-x` so the executable uses automatic GPU selection, its default worker configuration, and disabled TTA. The first attempt uses `-t 0`; only recognized allocation or out-of-memory diagnostics unlock the finite fixed-tile retry sequence. Each retry recreates only the verified job-owned `upscaled` directory and records bounded attempt diagnostics.
+
 ### 7. Encode and mux
 
-- Resize the processed sequence to the resolved even width and exact target height while preserving the source aspect ratio. Never crop or stretch. Encode at the recorded output frame rate. The default is MP4 using `libx264`, CRF 18, the slow preset, `yuv420p`, and fast-start metadata.
-- Convert RGB frames explicitly to BT.709 YUV and set BT.709 primaries, transfer, and matrix metadata on the final stream.
+This stage is implemented as a shell-free command plan and cancellable service boundary.
+
+- Resize the processed sequence to the resolved even width and exact target height while preserving the source aspect ratio. Never crop or stretch. Encode at the recorded output frame rate. The default is MP4 using `libx264`, CRF 3, the slow preset, `yuv420p`, and fast-start metadata.
+- Convert RGB frames explicitly to YUV using the frozen first-clip matrix and set the frozen primaries, transfer, and matrix metadata on the final stream.
 - Copy the selected primary audio only when it is unchanged and compatible with MP4; otherwise encode AAC-LC at 256 kbit/s and 48 kHz.
 - Pad final audio with silence or trim it so its duration matches the authoritative final video timeline. Omit audio when every input is silent.
 - Map only supported streams explicitly; never rely on FFmpeg's implicit stream selection.
@@ -298,7 +327,9 @@ Before encoding, verify that output frame numbers match the input set exactly. M
 
 ### 8. Verify, publish, and clean up
 
-Probe the partial output and verify readable streams, nonzero duration, expected dimensions, expected frame rate, no rotation transform, explicit BT.709 signaling, expected audio presence, and audio/video duration agreement. Only then atomically replace the requested destination. Preserve any existing destination until this publication step succeeds.
+This stage is implemented for explicit overwrite, explicit no-overwrite, and generated destinations. The no-clobber publication operation is atomic rather than only a pre-publication existence check.
+
+Probe the partial output and verify readable streams, nonzero duration, expected dimensions, expected frame timing, no rotation transform, explicit signaling matching the frozen first-clip color profile, expected audio presence, and audio/video duration agreement. Frame-rate verification compares frame periods and accepts only differences smaller than one tick of the probed stream time base, because container timestamp quantization can produce a different but equivalent FFprobe fraction. Only then atomically replace the requested destination. Preserve any existing destination until this publication step succeeds.
 
 On success or cancellation, terminate owned child processes and delete only the owned job workspace. On failure, retain the workspace and report its path clearly. Version 1 does not resume it.
 
@@ -330,7 +361,7 @@ Progress events include the job ID, stage, measured completed work, measured tot
 ## Testing boundaries
 
 - Unit-test job validation, compatibility decisions, command construction, state transitions, progress parsing, path escaping, and cleanup ownership with process fakes.
-- Unit-test timezone-aware automatic names, microsecond formatting, UTC offsets, queued-path reservations, numeric collision suffixes, exact rational frame-rate handling, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion decisions, default atomic replacement for explicit paths, preservation of the old file on failure, no-overwrite races, disk-margin rejection, FIFO scheduling, workspace retention, log rotation, and the bounded tile retry sequence.
+- Unit-test timezone-aware automatic names, microsecond formatting, UTC offsets, queued-path reservations, numeric collision suffixes, exact rational frame-rate handling, quantized-CFR recognition, time-base-derived verification tolerance, genuine VFR classification, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion decisions, default atomic replacement for explicit paths, preservation of the old file on failure, no-overwrite races, disk-margin rejection, FIFO scheduling, workspace retention, log rotation, and the bounded tile retry sequence.
 - Integration-test FFprobe, concat, extraction, and encoding with tiny generated media fixtures.
 - Contract-test the Real-ESRGAN adapter with a fake executable that copies or transforms small image fixtures predictably.
 - Test orchestration without a GUI, GPU, network, or real model weights.

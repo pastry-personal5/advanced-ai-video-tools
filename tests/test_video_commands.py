@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import AudioStream, ConcatStrategy, JobPlan, MediaProbe, Rational, VideoStream
+from ai_video_tools.core.models import AudioStream, ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, Rational, VideoStream
 from ai_video_tools.video.commands import FRAME_FILENAME_TEMPLATE, NormalizationSpec, build_concat_command, build_frame_extraction_command, build_frame_extraction_plan, build_media_preparation_plan, build_normalization_command, expected_frame_count
 from ai_video_tools.video.manifest import concat_manifest_text
 from ai_video_tools.video.probe import build_ffprobe_command
@@ -26,15 +26,19 @@ def _probe(path: Path, *, video: VideoStream | None = None, audios: tuple[AudioS
     return MediaProbe(path, Decimal("1.25"), (video or _video(),), audios, ())
 
 
-def _job(probes: tuple[MediaProbe, ...], strategy: ConcatStrategy, audio_layout: str | None, *, assume_bt709: bool = False, acknowledge_dropped_streams: bool = False) -> JobPlan:
-    return JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, probes, Rational(30000, 1001), 3840, 2160, 2, strategy, audio_layout, (), 100, 120, assume_bt709, acknowledge_dropped_streams)
+BT709_PROFILE = ColorProfile(ColorMatrix.BT709, "bt709", "bt709")
+SMPTE170M_PROFILE = ColorProfile(ColorMatrix.SMPTE170M, "bt709", "bt709")
+
+
+def _job(probes: tuple[MediaProbe, ...], strategy: ConcatStrategy, audio_layout: str | None, *, color_profile: ColorProfile = BT709_PROFILE, acknowledge_dropped_streams: bool = False) -> JobPlan:
+    return JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, probes, Rational(30000, 1001), 3840, 2160, 2, strategy, audio_layout, (), 100, 120, color_profile, acknowledge_dropped_streams)
 
 
 def test_normalization_command_enforces_video_color_timing_and_first_audio() -> None:
     """The command uses explicit streams and lossless quality-first defaults."""
 
     probe = _probe(Path("clip.mp4"), audios=(_audio(7), _audio(4)))
-    spec = NormalizationSpec(640, 360, Rational(1, 1), Rational(30000, 1001), "stereo")
+    spec = NormalizationSpec(640, 360, Rational(1, 1), Rational(30000, 1001), BT709_PROFILE, "stereo")
     command = build_normalization_command(Path("ffmpeg"), probe, Path("normalized.mkv"), spec)
     filter_graph = command[command.index("-filter_complex") + 1]
 
@@ -52,7 +56,7 @@ def test_normalization_command_enforces_video_color_timing_and_first_audio() -> 
 def test_normalization_inserts_bounded_silence_when_audio_is_missing() -> None:
     """An audio-bearing job supplies silence for a silent clip."""
 
-    command = build_normalization_command(Path("ffmpeg"), _probe(Path("silent.mp4")), Path("normalized.mkv"), NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), "stereo"))
+    command = build_normalization_command(Path("ffmpeg"), _probe(Path("silent.mp4")), Path("normalized.mkv"), NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), BT709_PROFILE, "stereo"))
 
     assert "lavfi" in command
     assert any(argument.startswith("anullsrc=channel_layout=stereo") for argument in command)
@@ -62,7 +66,7 @@ def test_normalization_inserts_bounded_silence_when_audio_is_missing() -> None:
 def test_video_only_normalization_explicitly_disables_audio() -> None:
     """All-silent jobs do not gain an accidental audio stream."""
 
-    command = build_normalization_command(Path("ffmpeg"), _probe(Path("silent.mp4")), Path("normalized.mkv"), NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), None))
+    command = build_normalization_command(Path("ffmpeg"), _probe(Path("silent.mp4")), Path("normalized.mkv"), NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), BT709_PROFILE, None))
 
     assert "-an" in command
     assert not any("anullsrc" in argument for argument in command)
@@ -72,24 +76,62 @@ def test_normalization_rejects_rotation_and_filter_syntax_in_layout() -> None:
     """Defense-in-depth prevents unsupported rotation and filter injection."""
 
     with pytest.raises(ValueError, match="audio channel layout"):
-        NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), "stereo;movie=x")
+        NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), BT709_PROFILE, "stereo;movie=x")
     with pytest.raises(ValueError, match="rotated"):
-        build_normalization_command(Path("ffmpeg"), _probe(Path("rotated.mp4"), video=_video(rotation=90)), Path("normalized.mkv"), NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), None))
+        build_normalization_command(Path("ffmpeg"), _probe(Path("rotated.mp4"), video=_video(rotation=90)), Path("normalized.mkv"), NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), BT709_PROFILE, None))
 
 
 def test_normalization_rejects_hdr_ambiguous_color_and_source_overwrite() -> None:
     """Low-level builders retain the preflight color and source safety gates."""
 
-    spec = NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), None)
+    spec = NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), BT709_PROFILE, None)
     with pytest.raises(ValueError, match="HDR"):
         build_normalization_command(Path("ffmpeg"), _probe(Path("hdr.mp4"), video=_video(color_transfer="smpte2084")), Path("normalized.mkv"), spec)
-    ambiguous = _probe(Path("ambiguous.mp4"), video=_video(color_primaries=None))
-    with pytest.raises(ValueError, match="acknowledgement"):
+    ambiguous = _probe(Path("ambiguous.mp4"), video=_video(color_range=None))
+    with pytest.raises(ValueError, match="must be explicit"):
         build_normalization_command(Path("ffmpeg"), ambiguous, Path("normalized.mkv"), spec)
-    assert build_normalization_command(Path("ffmpeg"), ambiguous, Path("normalized.mkv"), spec, assume_bt709=True)
     source = _probe(Path("same.mkv"))
     with pytest.raises(ValueError, match="overwrite"):
         build_normalization_command(Path("ffmpeg"), source, Path("same.mkv"), spec)
+
+
+def test_normalization_omits_missing_optional_color_tags() -> None:
+    """Absent transfer and primaries stay absent instead of becoming BT.709."""
+
+    profile = ColorProfile(ColorMatrix.BT709, None, None)
+    probe = _probe(Path("untagged-optionals.mov"), video=_video(color_transfer=None, color_primaries=None, color_range="tv"))
+
+    command = build_normalization_command(Path("ffmpeg"), probe, Path("normalized.mkv"), NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), profile, None))
+    filter_graph = command[command.index("-filter_complex") + 1]
+
+    assert "setparams=range=limited:colorspace=bt709" in filter_graph
+    assert "-color_trc" not in command
+    assert "-color_primaries" not in command
+
+
+def test_preparation_rejects_explicit_optional_tag_conflicts_hidden_by_missing_first_tag(tmp_path: Path) -> None:
+    """The execution boundary independently rejects contradictory declared tags."""
+
+    probes = (
+        _probe(Path("first.mov"), video=_video(color_transfer=None)),
+        _probe(Path("second.mov")),
+        _probe(Path("third.mov"), video=_video(color_transfer="smpte170m")),
+    )
+    job = _job(probes, ConcatStrategy.NORMALIZE, None, color_profile=ColorProfile(ColorMatrix.BT709, None, "bt709"))
+
+    with pytest.raises(ValueError, match="conflicting explicit transfer"):
+        build_media_preparation_plan(job, Path("ffmpeg"), tmp_path)
+
+
+def test_normalization_preserves_smpte170m_matrix() -> None:
+    """SMPTE 170M remains the input, processing, and output matrix."""
+
+    probe = _probe(Path("smpte170m.mov"), video=_video(color_space="smpte170m", color_range="tv"))
+    command = build_normalization_command(Path("ffmpeg"), probe, Path("normalized.mkv"), NormalizationSpec(640, 360, Rational(1, 1), Rational(30000, 1001), SMPTE170M_PROFILE, None))
+    filter_graph = command[command.index("-filter_complex") + 1]
+
+    assert "in_color_matrix=smpte170m:out_color_matrix=smpte170m" in filter_graph
+    assert command[command.index("-colorspace") + 1] == "smpte170m"
 
 
 def test_concat_and_ffprobe_builders_are_shell_free_and_explicit() -> None:

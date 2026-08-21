@@ -12,7 +12,7 @@ Read:
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the processing pipeline and system boundaries
 - [AGENTS.md](AGENTS.md) for repository-wide implementation rules
 
-Check the repository before choosing a framework, dependency, entry point, or command. The typed core, preflight CLI, compatibility analysis, safe media command builders, owned-workspace manager, cancellable process runner, composable preparation/extraction/upscaling/finalization services, strict Real-ESRGAN adapter, output verification, and atomic publisher exist. Full-job orchestration, a processing CLI command, job queuing, and the GUI remain design contracts until their modules are implemented and tested.
+Check the repository before choosing a framework, dependency, entry point, or command. The typed core, preflight and processing CLI commands, compatibility analysis, safe media command builders, owned-workspace manager, cancellable process runner, composable preparation/extraction/upscaling/finalization services, strict Real-ESRGAN adapter, output verification, atomic publisher, and full-job orchestration exist. Job queuing and the GUI remain design contracts until their modules are implemented and tested.
 
 ## Development environment
 
@@ -21,6 +21,7 @@ The project uses:
 - macOS 26.5.2 or later on Apple Silicon as the v1 target; Apple M5 Max with 128 GB unified memory is the reference machine
 - Python 3.10 or newer
 - PySide6 as the GUI framework
+- Loguru as the application logging API
 - `uv` for environments, dependencies, and command execution
 - Black for formatting
 - Pylint and pycodestyle for linting
@@ -63,15 +64,17 @@ The default final height is 2160 pixels. Preserve the aspect ratio derived from 
 
 Use `realesrgan-x4plus` explicitly for AI processing. Tests must verify that the adapter does not inherit the executable's anime-oriented default and that anime-specific model names are rejected.
 
-Version 1 accepts SDR BT.709 only. Reject detected HDR and unsupported wide gamut. Require acknowledgement for ambiguous color metadata instead of silently interpreting or tone-mapping it.
+Version 1 accepts supported SDR BT.709 and SMPTE 170M matrices. Require and freeze the first clip's matrix and require explicit range. Missing transfer characteristics or color primaries are accepted rather than defaulting to BT.709. Preserve optional tags declared by the first clip and omit fields absent from it. Reject explicit optional-tag conflicts, detected HDR, unsupported wide gamut, unsupported tags, and missing matrix/range metadata instead of silently interpreting, converting, or tone-mapping it.
 
-Produce limited-range BT.709, converting accepted full-range input explicitly. Reject nonzero rotation metadata, pass `-noautorotate` to FFmpeg, and never crop or stretch. Preserve the first clip's exact rational frame rate without float rounding.
+Produce limited-range output using the frozen first-clip color profile, converting accepted full-range input explicitly without changing its matrix. Reject nonzero rotation metadata, pass `-noautorotate` to FFmpeg, and never crop or stretch. Preserve the first clip's nominal exact rational frame rate without float rounding. Recognize rate differences below one stream time-base tick as timestamp quantization and use that same strict tolerance during verification.
 
 Use the first audio stream from each clip. Insert silence where a clip lacks audio, pad short audio, trim long audio to the video timeline, and require acknowledgement before dropping unsupported secondary streams.
 
 Run one job at a time in FIFO order. Generate and reserve a timezone-aware `ai-video-` filename when each job is created; generated paths never overwrite older output. Explicit paths overwrite by default through verified atomic replacement, preserve the old file on failure, and honor no-overwrite mode. Require estimated peak disk space plus 20%, delete successful or cancelled workspaces, retain failed workspaces, and do not implement resume in v1.
 
 Use Real-ESRGAN automatic GPU and tiling defaults with TTA disabled. Retry only recognized Vulkan memory errors using the documented bounded tile sequence. Keep settings and rotating local logs in Qt standard macOS locations, and do not add telemetry or application-initiated network access.
+
+Application modules use Loguru and never configure sinks independently. The eventual application bootstrap owns stderr and rotating-file sink configuration; direct CLI output remains separate from diagnostic logging.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the complete contract.
 

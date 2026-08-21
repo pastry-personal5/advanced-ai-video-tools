@@ -9,6 +9,7 @@ description = "Quality-first FFmpeg and Real-ESRGAN video preparation tools"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+  "loguru>=0.7,<1",
   "PySide6>=6.10,<7",
 ]
 

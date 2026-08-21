@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
+from fractions import Fraction
 from pathlib import Path
 
 from ai_video_tools.core.models import AudioStream, ConcatStrategy, MediaProbe, Rational, VideoStream
@@ -58,22 +59,34 @@ class CompatibilityReport:
 
 
 def effective_frame_rate(video: VideoStream) -> tuple[Rational | None, bool]:
-    """Return the exact output rate candidate and whether timing is VFR."""
+    """Return the nominal CFR unless rate disagreement exceeds one timestamp tick."""
 
     real = video.real_frame_rate
     average = video.average_frame_rate
     if real is not None and average is not None:
-        return (average, True) if real != average else (real, False)
+        return (real, False) if frame_rates_equivalent(real, average, video.time_base) else (average, True)
     if average is not None:
         return average, True
     return real, False
+
+
+def frame_rates_equivalent(actual: Rational, expected: Rational, time_base: Rational | None) -> bool:
+    """Accept rate fractions whose frame periods differ by less than one stream tick."""
+
+    if actual == expected:
+        return True
+    if time_base is None or not time_base.positive or not actual.positive or not expected.positive:
+        return False
+    actual_period = Fraction(actual.denominator, actual.numerator)
+    expected_period = Fraction(expected.denominator, expected.numerator)
+    return abs(actual_period - expected_period) < time_base.as_fraction()
 
 
 def _finding(path: Path, reason: CompatibilityReason, detail: str) -> CompatibilityFinding:
     return CompatibilityFinding(path, reason, f"{path.name}: {detail}")
 
 
-def _compare_video(path: Path, video: VideoStream, baseline: VideoStream, output_rate: Rational) -> list[CompatibilityFinding]:
+def _compare_video(path: Path, video: VideoStream, baseline: VideoStream, output_rate: Rational, optional_reference: tuple[str | None, str | None]) -> list[CompatibilityFinding]:
     findings: list[CompatibilityFinding] = []
     comparisons = (
         (video.codec_name in {"", "unknown"} or video.codec_name != baseline.codec_name, CompatibilityReason.VIDEO_CODEC, "video codec is missing or differs"),
@@ -86,12 +99,17 @@ def _compare_video(path: Path, video: VideoStream, baseline: VideoStream, output
     rate, variable = effective_frame_rate(video)
     if variable:
         findings.append(_finding(path, CompatibilityReason.VARIABLE_FRAME_RATE, "variable frame timing must become CFR"))
-    if rate is None or rate != output_rate:
+    if rate is None or not frame_rates_equivalent(rate, output_rate, video.time_base):
         findings.append(_finding(path, CompatibilityReason.FRAME_RATE, "frame rate is missing or differs from the job rate"))
     if video.start_time is not None and video.start_time != 0:
         findings.append(_finding(path, CompatibilityReason.TIMESTAMP_ORIGIN, "video timestamps must start at zero"))
-    if None in (video.color_space, video.color_transfer, video.color_primaries, video.color_range):
-        findings.append(_finding(path, CompatibilityReason.COLOR_TAGS, "BT.709 tags must be normalized"))
+    if video.color_space is None or video.color_range is None:
+        findings.append(_finding(path, CompatibilityReason.COLOR_TAGS, "required color tags are missing"))
+    reference_transfer, reference_primaries = optional_reference
+    transfer_conflicts = video.color_transfer is not None and reference_transfer is not None and video.color_transfer != reference_transfer
+    primaries_conflict = video.color_primaries is not None and reference_primaries is not None and video.color_primaries != reference_primaries
+    if video.color_space != baseline.color_space or transfer_conflicts or primaries_conflict:
+        findings.append(_finding(path, CompatibilityReason.COLOR_TAGS, "color profile differs from the first clip"))
     if video.color_range in {"pc", "jpeg"}:
         findings.append(_finding(path, CompatibilityReason.COLOR_RANGE, "full range must convert to limited range"))
     return findings
@@ -135,12 +153,15 @@ def analyze_clip_compatibility(probes: tuple[MediaProbe, ...] | list[MediaProbe]
         raise ValueError("the first probe has no video stream")
     any_audio = any(probe.primary_audio is not None for probe in probes)
     baseline_audio = next((probe.primary_audio for probe in probes if probe.primary_audio is not None), None)
+    reference_transfer = next((video.color_transfer for probe in probes if (video := probe.primary_video) is not None and video.color_transfer is not None), None)
+    reference_primaries = next((video.color_primaries for probe in probes if (video := probe.primary_video) is not None and video.color_primaries is not None), None)
+    optional_reference = (reference_transfer, reference_primaries)
     findings: list[CompatibilityFinding] = []
     for probe in probes:
         video = probe.primary_video
         if video is None:
             raise ValueError(f"probe has no video stream: {probe.path}")
-        findings.extend(_compare_video(probe.path, video, baseline_video, output_rate))
+        findings.extend(_compare_video(probe.path, video, baseline_video, output_rate, optional_reference))
         findings.extend(_compare_audio(probe.path, probe, baseline_audio, output_audio_layout, any_audio))
     unique = tuple(dict.fromkeys(findings))
     strategy = ConcatStrategy.NORMALIZE if unique else ConcatStrategy.STREAM_COPY

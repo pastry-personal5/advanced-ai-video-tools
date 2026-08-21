@@ -14,7 +14,7 @@ from ai_video_tools.storage.naming import OutputCollisionError
 from ai_video_tools.storage.publication import AtomicOutputPublisher, PartialOutput, PublicationError
 from ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceError, WorkspaceManager
 from ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessError, ProcessResult, ProcessRunner
-from ai_video_tools.video.compatibility import effective_frame_rate
+from ai_video_tools.video.compatibility import effective_frame_rate, frame_rates_equivalent
 from ai_video_tools.video.finalization import FinalAudioMode, FinalEncodingPlan, build_final_encoding_plan
 from ai_video_tools.video.frames import FrameInventoryError, FrameInventoryVerifier
 from ai_video_tools.video.probe import MediaProber, ProbeError
@@ -39,6 +39,11 @@ class FinalizationFailed(RuntimeError):
 
 class FinalizationCancelled(RuntimeError):
     """Final encoding was cancelled and owned temporary state was cleaned."""
+
+    def __init__(self, message: str, workspace_path: Path, stage: PipelineStage) -> None:
+        super().__init__(message)
+        self.workspace_path = workspace_path
+        self.stage = stage
 
 
 @dataclass(frozen=True)
@@ -71,12 +76,13 @@ class FinalOutputVerifier:
         if (video.width, video.height) != (job.output_width, job.output_height):
             failures.append("final video dimensions differ from the frozen output size")
         rate, variable = effective_frame_rate(video)
-        if variable or rate != job.output_frame_rate:
-            failures.append("final video frame rate is not the expected exact CFR")
+        if variable or rate is None or not frame_rates_equivalent(rate, job.output_frame_rate, video.time_base):
+            failures.append("final video frame timing differs from the expected CFR beyond its timestamp precision")
         if video.rotation:
             failures.append("final video contains unsupported rotation metadata")
-        if (video.color_space, video.color_transfer, video.color_primaries) != ("bt709", "bt709", "bt709") or video.color_range not in {"tv", "limited"}:
-            failures.append("final video is not explicitly limited-range SDR BT.709")
+        expected_color = (job.output_color_profile.matrix.value, job.output_color_profile.transfer, job.output_color_profile.primaries)
+        if (video.color_space, video.color_transfer, video.color_primaries) != expected_color or video.color_range not in {"tv", "limited"}:
+            failures.append("final video differs from the frozen limited-range SDR color profile")
         frame_duration = Decimal(job.output_frame_rate.denominator) / Decimal(job.output_frame_rate.numerator)
         if video.duration is None or abs(video.duration - expected_duration) > max(Decimal("0.05"), frame_duration):
             failures.append("final video duration differs from the authoritative frame timeline")
@@ -193,7 +199,7 @@ class FinalizationExecutor:
                 self._cleanup_workspace(workspace, progress)
             except (PublicationError, WorkspaceError) as cleanup_error:
                 raise FinalizationFailed("Finalization was cancelled, but owned temporary state could not be cleaned.", workspace.path, PipelineStage.CLEANUP) from cleanup_error
-            raise FinalizationCancelled("Finalization cancelled; child processes terminated, partial output removed, and workspace cleaned.") from error
+            raise FinalizationCancelled("Finalization cancelled; child processes terminated, partial output removed, and workspace cleaned.", workspace.path, stage) from error
         except (FinalOutputVerificationError, FrameInventoryError, OutputCollisionError, ProcessError, ProbeError, PublicationError, WorkspaceError, OSError, ValueError) as error:
             try:
                 self._discard_partial(partial)

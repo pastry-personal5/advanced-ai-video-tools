@@ -8,6 +8,8 @@ import pytest
 
 from ai_video_tools.core.models import (
     AudioStream,
+    ColorMatrix,
+    ColorProfile,
     ConcatStrategy,
     IssueCode,
     IssueSeverity,
@@ -15,6 +17,8 @@ from ai_video_tools.core.models import (
     MediaProbe,
     OtherStream,
     OverwriteMode,
+    PipelineStage,
+    ProgressEvent,
     Rational,
     ToolInfo,
     Toolchain,
@@ -137,8 +141,30 @@ def test_ready_plan_freezes_name_dimensions_rate_and_scale(tmp_path: Path) -> No
     assert report.plan.ai_scale == 2
     assert report.plan.model_name == "realesrgan-x4plus"
     assert report.plan.overwrite_mode is OverwriteMode.REPLACE
+    assert report.plan.output_color_profile == ColorProfile(ColorMatrix.BT709, "bt709", "bt709")
     assert report.plan.concat_strategy is ConcatStrategy.STREAM_COPY
     assert report.plan.required_free_bytes >= report.plan.estimated_peak_bytes
+    service.registry.release(report.plan.output_path)
+
+
+def test_preflight_reports_measured_validation_and_probe_progress(tmp_path: Path) -> None:
+    """Frontends can render validation and per-input probe progress."""
+
+    first = _input(tmp_path, "first.mp4")
+    second = _input(tmp_path, "second.mp4")
+    service = _service(tmp_path, {first: _probe(first), second: _probe(second)})
+    events: list[ProgressEvent] = []
+
+    report = service.run(JobRequest((first, second), tmp_path), progress=events.append)
+
+    assert report.ready and report.plan is not None
+    assert [(event.stage, event.completed, event.total) for event in events] == [
+        (PipelineStage.VALIDATE, 0, 1),
+        (PipelineStage.VALIDATE, 1, 1),
+        (PipelineStage.PROBE, 0, 2),
+        (PipelineStage.PROBE, 1, 2),
+        (PipelineStage.PROBE, 2, 2),
+    ]
     service.registry.release(report.plan.output_path)
 
 
@@ -176,22 +202,95 @@ def test_hdr_and_rotation_are_hard_failures(tmp_path: Path, video: VideoStream, 
     assert code in {issue.code for issue in report.issues}
 
 
-def test_ambiguous_color_requires_explicit_acknowledgement(tmp_path: Path) -> None:
-    """Missing tags block by default and become a warning only by consent."""
+def test_missing_transfer_and_primaries_are_accepted_without_defaults(tmp_path: Path) -> None:
+    """Optional signaling can remain absent without becoming BT.709."""
 
     source = _input(tmp_path)
-    ambiguous = _probe(source, video_streams=(_video(color_primaries=None),))
-    service = _service(tmp_path, {source: ambiguous})
+    media = _probe(source, video_streams=(_video(color_transfer=None, color_primaries=None),))
+    service = _service(tmp_path, {source: media})
 
-    rejected = service.run(JobRequest((source,), tmp_path))
-    accepted = service.run(JobRequest((source,), tmp_path, assume_bt709=True))
+    report = service.run(JobRequest((source,), tmp_path))
 
+    assert report.ready and report.plan is not None
+    assert report.plan.output_color_profile == ColorProfile(ColorMatrix.BT709, None, None)
+    service.registry.release(report.plan.output_path)
+
+
+@pytest.mark.parametrize("missing_field", ["color_space", "color_range"])
+def test_missing_matrix_or_range_is_rejected(tmp_path: Path, missing_field: str) -> None:
+    """Matrix and range remain mandatory because sample conversion needs them."""
+
+    source = _input(tmp_path)
+    media = _probe(source, video_streams=(_video(**{missing_field: None}),))
+    report = _service(tmp_path, {source: media}).run(JobRequest((source,), tmp_path))
+
+    assert not report.ready
+    color_issue = next(issue for issue in report.issues if issue.code is IssueCode.AMBIGUOUS_COLOR)
+    assert color_issue.severity is IssueSeverity.ERROR
+    assert "matrix and range must be explicit" in color_issue.message
+
+
+def test_first_clip_smpte170m_matrix_is_preserved_as_output_profile(tmp_path: Path) -> None:
+    """An explicit SMPTE 170M first clip freezes SMPTE 170M output."""
+
+    source = _input(tmp_path)
+    smpte170m = _probe(source, video_streams=(_video(color_space="smpte170m"),))
+    service = _service(tmp_path, {source: smpte170m})
+
+    report = service.run(JobRequest((source,), tmp_path))
+
+    assert report.ready and report.plan is not None
+    assert report.plan.output_color_profile == ColorProfile(ColorMatrix.SMPTE170M, "bt709", "bt709")
+    assert report.plan.concat_strategy is ConcatStrategy.STREAM_COPY
+    service.registry.release(report.plan.output_path)
+
+
+def test_color_profile_different_from_first_clip_is_rejected(tmp_path: Path) -> None:
+    """Mixed BT.709 and SMPTE 170M jobs never enter conversion."""
+
+    first = _input(tmp_path, "first.mov")
+    second = _input(tmp_path, "second.mov")
+    probes = {first: _probe(first, video_streams=(_video(color_space="smpte170m"),)), second: _probe(second)}
+
+    report = _service(tmp_path, probes).run(JobRequest((first, second), tmp_path))
+
+    assert not report.ready
+    issue = next(issue for issue in report.issues if issue.code is IssueCode.UNSUPPORTED_COLOR)
+    assert "explicitly conflicts with another clip" in issue.message
+
+
+def test_explicit_transfer_conflict_is_rejected_but_missing_value_is_ignored(tmp_path: Path) -> None:
+    """Only two contradictory declared optional tags create a conflict."""
+
+    first = _input(tmp_path, "first.mov")
+    missing = _input(tmp_path, "missing.mov")
+    conflicting = _input(tmp_path, "conflicting.mov")
+    conflicting_again = _input(tmp_path, "conflicting-again.mov")
+    accepted_probes = {first: _probe(first), missing: _probe(missing, video_streams=(_video(color_transfer=None),))}
+    accepted_service = _service(tmp_path, accepted_probes)
+
+    accepted = accepted_service.run(JobRequest((first, missing), tmp_path))
+    rejected_probes = {
+        first: _probe(first, video_streams=(_video(color_transfer=None),)),
+        conflicting: _probe(conflicting),
+        conflicting_again: _probe(conflicting_again, video_streams=(_video(color_transfer="smpte170m"),)),
+    }
+    rejected = _service(tmp_path, rejected_probes).run(JobRequest((first, conflicting, conflicting_again), tmp_path))
+
+    assert accepted.ready and accepted.plan is not None
     assert not rejected.ready
-    assert accepted.ready
-    color_issue = next(issue for issue in accepted.issues if issue.code is IssueCode.AMBIGUOUS_COLOR)
-    assert color_issue.severity is IssueSeverity.WARNING
-    assert accepted.plan is not None
-    service.registry.release(accepted.plan.output_path)
+    assert any(issue.code is IssueCode.UNSUPPORTED_COLOR and "explicitly conflicts" in issue.message for issue in rejected.issues)
+    accepted_service.registry.release(accepted.plan.output_path)
+
+
+def test_other_explicit_sdr_matrices_remain_unsupported(tmp_path: Path) -> None:
+    """The design expansion is limited to SMPTE 170M rather than arbitrary matrices."""
+
+    source = _input(tmp_path)
+    report = _service(tmp_path, {source: _probe(source, video_streams=(_video(color_space="fcc"),))}).run(JobRequest((source,), tmp_path))
+
+    assert not report.ready
+    assert any(issue.code is IssueCode.UNSUPPORTED_COLOR for issue in report.issues)
 
 
 def test_secondary_streams_require_acknowledgement(tmp_path: Path) -> None:
@@ -237,6 +336,22 @@ def test_vfr_uses_exact_average_rate_and_forces_normalization(tmp_path: Path) ->
     assert report.plan.output_frame_rate == Rational(30000, 1001)
     assert any("frame timing" in reason for reason in report.plan.normalization_reasons)
     assert report.plan.concat_strategy is ConcatStrategy.NORMALIZE
+    service.registry.release(report.plan.output_path)
+
+
+def test_quantized_sixteen_fps_is_recognized_as_cfr(tmp_path: Path) -> None:
+    """Alternating source ticks preserve the nominal 16/1 rate."""
+
+    source = _input(tmp_path)
+    video = _video(real_frame_rate=Rational(16, 1), average_frame_rate=Rational(48600, 3037), time_base=Rational(1, 600))
+    service = _service(tmp_path, {source: _probe(source, video_streams=(video,))})
+
+    report = service.run(JobRequest((source,), tmp_path))
+
+    assert report.ready and report.plan is not None
+    assert report.plan.output_frame_rate == Rational(16, 1)
+    assert report.plan.concat_strategy is ConcatStrategy.STREAM_COPY
+    assert not any("frame timing" in reason for reason in report.plan.normalization_reasons)
     service.registry.release(report.plan.output_path)
 
 

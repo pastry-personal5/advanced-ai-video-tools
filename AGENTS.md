@@ -78,13 +78,13 @@ validate → probe → concatenate/normalize → extract frames
 ```
 
 - Validate all inputs, output policy, conservative peak-disk estimate plus 20% margin, executable paths, Vulkan availability, model choice, target height, resolved dimensions, AI scale, and owned job workspace before processing.
-- Accept SDR BT.709 only. Reject detected HDR or unsupported wide gamut, and require acknowledgement before treating missing or ambiguous color metadata as BT.709.
+- Accept supported SDR BT.709 and SMPTE 170M matrices. Require and freeze the first clip's matrix and require explicit range. Preserve SMPTE 170M as SMPTE 170M without BT.709 conversion. Ignore missing transfer characteristics and color primaries without inventing defaults; preserve optional tags declared by the first clip and omit fields absent from it. Reject explicit conflicts when both compared clips declare a value. Reject detected HDR, unsupported wide gamut, unsupported tags, mixed matrices, and missing matrix/range metadata.
 - Reject nonzero rotation/display-matrix metadata. Version 1 never rotates video and every FFmpeg input must use `-noautorotate`.
 - Select the first audio stream from each clip. Inventory unsupported secondary streams and require acknowledgement before dropping them.
 - Treat FFmpeg, FFprobe, `realesrgan-ncnn-vulkan`, Vulkan support, and model files as user-installed prerequisites. Discover and validate them, but never bundle or automatically download them.
 - Probe every clip before choosing a concat strategy. When all streams are compatible, use FFmpeg's concat demuxer with stream copy so concatenation is lossless and avoids an extra encode. Inputs with differing codecs, time bases, dimensions, frame rates, pixel formats, or audio layouts require explicit normalization to a common intermediate specification before concat.
 - Complete concatenation before frame extraction or Real-ESRGAN invocation. The concat stage must produce one merged working video and one continuous media timeline for all later stages.
-- Extract one lossless, zero-padded frame sequence from the concatenated timeline. Preserve the first clip's exact rational CFR, or use its valid rational average rate for VFR, without converting through float.
+- Extract one lossless, zero-padded frame sequence from the concatenated timeline. Preserve the first clip's nominal exact rational CFR, recognizing rate-fraction differences smaller than one stream timestamp tick as quantization; use its valid rational average rate for genuine VFR without converting through float.
 - Extract or map the concatenated audio independently so it can be muxed into the final encode. Define behavior for missing audio and multiple audio streams rather than relying on FFmpeg defaults.
 - Invoke `realesrgan-ncnn-vulkan` at most once for the merged frame directory. Pass the selected model, resolved AI scale, GPU, tile size, thread settings, and image format explicitly. Skip AI processing by default when the merged input is already at or above the requested height.
 - Encode the processed frames at the recorded frame rate and resolved target dimensions, mux the selected audio, and apply explicit codec, pixel-format, quality, and metadata policies.
@@ -101,9 +101,9 @@ validate → probe → concatenate/normalize → extract frames
 - Add precise type annotations to new and changed public interfaces; avoid `Any` when a useful type is known.
 - Prefer dataclasses, enums, or typed models for job configuration instead of unstructured dictionaries.
 - Catch narrow exception types. Preserve the original cause when translating an exception with `raise ... from ...`.
-- Use `logging` for diagnostics; do not use `print` in library or GUI code.
+- Use Loguru (`from loguru import logger`) for application diagnostics; do not create new standard-library `logging` loggers and do not use `print` in library or GUI code. Configure Loguru sinks once at application startup rather than in feature modules. CLI stdout/stderr rendering remains an explicit presentation concern, not diagnostic logging.
 - Resolve settings and logs with `QStandardPaths.StandardLocation.AppDataLocation` and job workspaces with `QStandardPaths.StandardLocation.CacheLocation`. Do not hard-code a user home directory in application logic.
-- Rotate local logs at 10 MiB with five backups. Do not add telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
+- Configure Loguru with a human-readable stderr sink and a local file sink using `rotation="10 MB"`, `retention=5`, and `enqueue=True`. Disable diagnostic value exposure in production exception output, redact sensitive path or environment data where practical, and bind stable context such as job ID and pipeline stage. Do not add telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
 - Pass subprocess commands as argument lists with `shell=False`.
 - Set explicit timeouts where a subprocess can hang, and capture enough stderr to explain failures.
 - Pin or constrain dependencies through the project metadata; add packages with the appropriate `uv add` command and document why they are needed.
@@ -149,19 +149,19 @@ All Python tools invoked by the `Makefile` should run through `uv run`, and depe
 - Probe every input before starting a job and validate that files are readable.
 - Do not assume clips share codec, dimensions, frame rate, pixel format, time base, or audio layout.
 - Probe color primaries, transfer characteristics, matrix coefficients, range, pixel format, and HDR metadata. Never silently tone-map, gamut-map, or reinterpret color.
-- Reject detected PQ, HLG, BT.2020, HDR mastering metadata, and other unsupported HDR or wide-gamut input. Require acknowledgement for absent, unknown, or conflicting color tags before treating them as BT.709.
-- Reject nonzero rotation/display-matrix metadata; do not normalize it. Pass `-noautorotate` for every FFmpeg input and never add a rotation filter or control. Convert accepted full-range BT.709 samples to limited/TV range explicitly.
+- Reject detected PQ, HLG, BT.2020, HDR mastering metadata, and other unsupported HDR or wide-gamut input. Accept explicitly tagged `bt709` and `smpte170m` SDR matrices. The first clip freezes the job matrix and any optional transfer/primary tags it declares. Reject matrix conflicts and conflicts between two explicitly declared optional tags. Ignore missing transfer/primary tags without defaulting them; reject missing matrix or range.
+- Reject nonzero rotation/display-matrix metadata; do not normalize it. Pass `-noautorotate` for every FFmpeg input and never add a rotation filter or control. Convert accepted full-range samples to limited/TV range explicitly while preserving the frozen matrix.
 - Use stream-copy concatenation only when inputs are compatible; otherwise normalize or transcode explicitly.
-- Force normalization for full-range color, VFR timing, missing required audio, or audio-duration mismatch even when codecs otherwise match. Rotation is a validation error, not a normalization path.
-- Use the documented quality-first defaults unless the job overrides them: Matroska/FFV1/PCM for normalization, SDR BT.709, PNG frames, a 2160-pixel final height with aspect-derived even width, and MP4/libx264 CRF 18 slow/yuv420p with unchanged compatible audio copy or AAC-LC 256 kbit/s for final output.
+- Force normalization for full-range color, VFR timing, missing required audio, or audio-duration mismatch even when codecs otherwise match. A matching limited-range SMPTE 170M job does not require normalization solely because of its matrix. Rotation is a validation error, not a normalization path.
+- Use the documented quality-first defaults unless the job overrides them: Matroska/FFV1/PCM for normalization, the frozen first-clip SDR BT.709 or SMPTE 170M profile, PNG frames, a 2160-pixel final height with aspect-derived even width, and MP4/libx264 CRF 3 slow/yuv420p with unchanged compatible audio copy or AAC-LC 256 kbit/s for final output.
 - Use `realesrgan-x4plus` as the v1 model and pass `-n realesrgan-x4plus` explicitly. Never inherit the Real-ESRGAN executable's default model.
 - Never upscale clips individually as an implementation shortcut. Normalization, when required, happens before concat; AI upscaling happens at most once after concat.
 - Select the first audio stream from each clip. When any input has audio, insert normalized silence for clips without it, pad short audio, and trim long audio so the video timeline remains authoritative. Omit final audio only when every input is silent.
 - Inventory extra audio, subtitles, chapters, and attachments. Show what will be dropped and require explicit acknowledgement; never discard them silently.
-- Convert BT.709 YUV to RGB PNG explicitly before AI processing and convert RGB back to explicitly tagged BT.709 YUV during final encoding.
+- Convert YUV to RGB PNG explicitly with the frozen first-clip matrix before AI processing, then convert RGB back with that same matrix and explicit frozen profile tags during final encoding.
 - Generate concat manifests safely; escape paths according to FFmpeg's manifest format and never interpolate them into a shell command.
 - Preserve deterministic frame ordering with one documented zero-padded naming scheme shared by extraction, upscaling, and encoding.
-- Preserve the first clip's exact rational CFR, such as `30000/1001`. For a VFR first clip, use FFprobe's valid rational average rate. Normalize all clips to that rate and surface timing changes to the user; never round through a decimal float.
+- Preserve the first clip's nominal exact rational CFR, such as `16/1` or `30000/1001`. When real and average frame periods differ by less than one stream time-base tick, classify the difference as timestamp quantization and retain the nominal rate. For genuine VFR, use FFprobe's valid rational average rate. Normalize all clips to the selected rate and surface timing changes to the user; never round through a decimal float. Verify rate representations with the same strict timestamp-derived tolerance instead of literal rational equality.
 - Always preserve aspect ratio through proportional scaling and padding. Cropping and stretching are unsupported in v1.
 - Write output through a temporary or partial file and promote it only after successful completion.
 - Overwrite an existing destination by default through verified atomic replacement. Never truncate it at job start. Support CLI `--no-overwrite` and the equivalent GUI setting, with a collision recheck immediately before publication.
@@ -195,9 +195,9 @@ Add tests at the lowest practical layer:
 
 Tests must not require a GPU, network connection, large model download, or long video by default. Mark heavyweight or hardware-specific tests separately. When fixing a bug, add a regression test when feasible.
 
-Include fixtures for SDR BT.709, explicit HDR rejection, missing color tags, clips without audio, short and long audio, and unsupported secondary streams. Verify acknowledgement gates, silence insertion, trimming, final BT.709 tags, and audio/video duration alignment.
+Include fixtures for SDR BT.709, preserved SMPTE 170M output, mixed-matrix rejection, explicit optional-tag conflict rejection, accepted missing transfer/primary tags, missing matrix/range rejection, explicit HDR rejection, clips without audio, short and long audio, and unsupported secondary streams. Verify acknowledgement gates for secondary streams, silence insertion, trimming, final frozen-or-omitted color tags, and audio/video duration alignment.
 
-Test timezone-aware filename formatting, UTC offsets, path reservation, numeric collision suffixes, exact rational frame rates, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion, FIFO serialization, default atomic replacement for explicit paths, old-file preservation on failure, no-overwrite races, disk-margin rejection, workspace retention and safe cleanup, bounded tile retries, log rotation, and the absence of application-initiated network calls.
+Test timezone-aware filename formatting, UTC offsets, path reservation, numeric collision suffixes, exact rational frame rates, quantized-CFR recognition, time-base-derived verification tolerance, genuine VFR classification, nonzero-rotation rejection, `-noautorotate` command construction, aspect-ratio preservation, full-to-limited range conversion, FIFO serialization, default atomic replacement for explicit paths, old-file preservation on failure, no-overwrite races, disk-margin rejection, workspace retention and safe cleanup, bounded tile retries, log rotation, and the absence of application-initiated network calls.
 
 Use the narrowest effective validation during iteration. Before completion, run `make check` when it exists and is affordable. Use `uv run` for focused diagnostics that have no Make target. Never claim a check passed unless it was actually run; if a check cannot run, report the command, reason, and next-best validation.
 

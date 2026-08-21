@@ -11,7 +11,7 @@ from ai_video_tools.core.models import ConcatStrategy, JobPlan, MediaProbe, Pipe
 from ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceError, WorkspaceManager
 from ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessError, ProcessResult, ProcessRunner
 from ai_video_tools.video.commands import MediaPreparationPlan, build_media_preparation_plan
-from ai_video_tools.video.compatibility import effective_frame_rate
+from ai_video_tools.video.compatibility import effective_frame_rate, frame_rates_equivalent
 from ai_video_tools.video.manifest import write_concat_manifest
 from ai_video_tools.video.probe import MediaProber, ProbeError
 
@@ -94,12 +94,13 @@ class MergedOutputVerifier:
         if (video.width, video.height) != (baseline_video.width, baseline_video.height):
             failures.append("merged video dimensions differ from the normalization canvas")
         rate, variable = effective_frame_rate(video)
-        if variable or rate != job.output_frame_rate:
-            failures.append("merged video frame rate is not the expected exact CFR")
+        if variable or rate is None or not frame_rates_equivalent(rate, job.output_frame_rate, video.time_base):
+            failures.append("merged video frame timing differs from the expected CFR beyond its timestamp precision")
         if video.rotation:
             failures.append("merged video contains unsupported rotation metadata")
-        if (video.color_space, video.color_transfer, video.color_primaries) != ("bt709", "bt709", "bt709") or video.color_range not in {"tv", "limited"}:
-            failures.append("merged video is not explicitly limited-range SDR BT.709")
+        expected_color = (job.output_color_profile.matrix.value, job.output_color_profile.transfer, job.output_color_profile.primaries)
+        if (video.color_space, video.color_transfer, video.color_primaries) != expected_color or video.color_range not in {"tv", "limited"}:
+            failures.append("merged video differs from the frozen limited-range SDR color profile")
         expected_codec = "ffv1" if strategy is ConcatStrategy.NORMALIZE else baseline_video.codec_name
         if video.codec_name != expected_codec:
             failures.append(f"merged video codec is {video.codec_name}, expected {expected_codec}")

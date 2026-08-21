@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import AudioStream, ConcatStrategy, JobPlan, MediaProbe, Rational, VideoStream
-from ai_video_tools.video.finalization import FinalAudioMode, build_final_encoding_plan
+from ai_video_tools.core.models import AudioStream, ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, Rational, VideoStream
+from ai_video_tools.video.finalization import DEFAULT_VIDEO_CRF, FinalAudioMode, build_final_encoding_plan
 
 
 def _video(duration: Decimal = Decimal("1")) -> VideoStream:
@@ -21,7 +21,7 @@ def _audio(codec: str, duration: Decimal = Decimal("1"), *, start_time: Decimal 
 
 
 def _job(tmp_path: Path, strategy: ConcatStrategy, *, audio_layout: str | None) -> JobPlan:
-    return JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "final.mp4", False, (), Rational(10, 1), 64, 36, None, strategy, audio_layout, (), 100, 120)
+    return JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "final.mp4", False, (), Rational(10, 1), 64, 36, None, strategy, audio_layout, (), 100, 120, ColorProfile(ColorMatrix.BT709, "bt709", "bt709"))
 
 
 def _plan(tmp_path: Path, strategy: ConcatStrategy, *, audio: AudioStream | None = None):
@@ -48,13 +48,47 @@ def test_video_only_command_freezes_quality_color_timing_and_stream_policy(tmp_p
     assert "color_primaries=bt709:color_trc=bt709:colorspace=bt709" in video_filter
     assert command[command.index("-c:v") + 1] == "libx264"
     assert command[command.index("-preset") + 1] == "slow"
-    assert command[command.index("-crf") + 1] == "18"
+    assert DEFAULT_VIDEO_CRF == 3
+    assert command[command.index("-crf") + 1] == str(DEFAULT_VIDEO_CRF)
     assert command[command.index("-pix_fmt") + 1] == "yuv420p"
     assert command[command.index("-r") + 1] == "10/1"
     assert command[command.index("-frames:v") + 1] == "10"
     assert "-an" in command
     assert command[command.index("-movflags") + 1] == "+faststart"
     assert command[-2:] == ("-f", "mp4", str(tmp_path / ".partial.mp4"))[-2:]
+
+
+def test_smpte170m_matrix_is_preserved_in_final_encoding(tmp_path: Path) -> None:
+    """Final RGB conversion and stream signaling preserve the frozen matrix."""
+
+    workspace = tmp_path / "job"
+    merged_path = workspace / "merged.mkv"
+    video = VideoStream(0, "ffv1", 64, 36, "yuv444p10le", Rational(1, 1), Rational(10, 1), Rational(10, 1), Rational(1, 1000), Decimal("1"), "smpte170m", "bt709", "bt709", "tv", 0, False)
+    merged = MediaProbe(merged_path, Decimal("1"), (video,), (), ())
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "final.mp4", False, (), Rational(10, 1), 64, 36, None, ConcatStrategy.NORMALIZE, None, (), 100, 120, ColorProfile(ColorMatrix.SMPTE170M, "bt709", "bt709"))
+
+    plan = build_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=workspace / "frames", frame_count=10, frame_width=64, frame_height=36, audio_source_path=None)
+
+    video_filter = plan.command[plan.command.index("-vf") + 1]
+    assert "out_color_matrix=smpte170m" in video_filter
+    assert "colorspace=smpte170m" in video_filter
+    assert plan.command[plan.command.index("-colorspace") + 1] == "smpte170m"
+
+
+def test_missing_transfer_and_primaries_remain_omitted_from_final_encoding(tmp_path: Path) -> None:
+    """The final encoder does not invent optional color metadata."""
+
+    workspace = tmp_path / "job"
+    merged_path = workspace / "merged.mkv"
+    video = VideoStream(0, "ffv1", 64, 36, "yuv444p10le", Rational(1, 1), Rational(10, 1), Rational(10, 1), Rational(1, 1000), Decimal("1"), "smpte170m", None, None, "tv", 0, False)
+    merged = MediaProbe(merged_path, Decimal("1"), (video,), (), ())
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "final.mp4", False, (), Rational(10, 1), 64, 36, None, ConcatStrategy.NORMALIZE, None, (), 100, 120, ColorProfile(ColorMatrix.SMPTE170M, None, None))
+
+    plan = build_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=workspace / "frames", frame_count=10, frame_width=64, frame_height=36, audio_source_path=None)
+
+    assert "setparams=range=limited:colorspace=smpte170m" in plan.command[plan.command.index("-vf") + 1]
+    assert "-color_trc" not in plan.command
+    assert "-color_primaries" not in plan.command
 
 
 def test_normalized_audio_is_encoded_and_aligned_to_frame_timeline(tmp_path: Path) -> None:
@@ -108,6 +142,6 @@ def test_final_builder_rejects_unsafe_destination_dimensions_and_audio_source(tm
         build_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / "elsewhere" / ".partial.mp4", frames_directory=frames, frame_count=10, frame_width=64, frame_height=36, audio_source_path=merged.path)
     with pytest.raises(ValueError, match="retained audio source"):
         build_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=frames, frame_count=10, frame_width=64, frame_height=36, audio_source_path=workspace / "other.mkv")
-    odd_job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "final.mp4", False, (), Rational(10, 1), 63, 36, None, ConcatStrategy.NORMALIZE, "mono", (), 100, 120)
+    odd_job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "final.mp4", False, (), Rational(10, 1), 63, 36, None, ConcatStrategy.NORMALIZE, "mono", (), 100, 120, ColorProfile(ColorMatrix.BT709, "bt709", "bt709"))
     with pytest.raises(ValueError, match="even"):
         build_final_encoding_plan(odd_job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=frames, frame_count=10, frame_width=64, frame_height=36, audio_source_path=merged.path)

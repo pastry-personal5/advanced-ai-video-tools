@@ -8,12 +8,13 @@ from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 
-from ai_video_tools.core.models import ConcatStrategy, JobPlan, MediaProbe
+from ai_video_tools.core.models import ColorProfile, ConcatStrategy, JobPlan, MediaProbe
 from ai_video_tools.video.frames import FRAME_FILENAME_TEMPLATE
 
 _SAFE_CHANNEL_LAYOUT = re.compile(r"^[A-Za-z0-9_.()+-]+$")
 _MP4_COPY_AUDIO_CODECS = frozenset({"aac", "alac", "mp3", "ac3", "eac3"})
 _AUDIO_ALIGNMENT_TOLERANCE = Decimal(1) / Decimal(48000)
+DEFAULT_VIDEO_CRF = 3
 
 
 class FinalAudioMode(str, Enum):
@@ -56,6 +57,24 @@ def _effective_layout(probe: MediaProbe) -> str | None:
     return audio.channel_layout or {1: "mono", 2: "stereo"}.get(audio.channels)
 
 
+def _color_signaling(profile: ColorProfile) -> tuple[str, tuple[str, ...]]:
+    """Build filter and encoder signaling without inventing optional tags."""
+
+    matrix = profile.matrix.value
+    setparams = ["range=limited"]
+    arguments = ["-colorspace", matrix]
+    if profile.primaries is not None:
+        setparams.append(f"color_primaries={profile.primaries}")
+    if profile.transfer is not None:
+        setparams.append(f"color_trc={profile.transfer}")
+        arguments.extend(["-color_trc", profile.transfer])
+    setparams.append(f"colorspace={matrix}")
+    if profile.primaries is not None:
+        arguments.extend(["-color_primaries", profile.primaries])
+    arguments.extend(["-color_range", "tv"])
+    return ":".join(setparams), tuple(arguments)
+
+
 def select_final_audio_mode(job: JobPlan, merged: MediaProbe, duration: Decimal) -> FinalAudioMode:
     """Copy only exactly aligned MP4-compatible direct-concat audio."""
 
@@ -88,7 +107,7 @@ def _final_audio_arguments(job: JobPlan, merged: MediaProbe, audio_mode: FinalAu
 
 
 def build_final_encoding_plan(job: JobPlan, ffmpeg: Path, merged: MediaProbe, workspace: Path, partial_output: Path, *, frames_directory: Path, frame_count: int, frame_width: int, frame_height: int, audio_source_path: Path | None) -> FinalEncodingPlan:
-    """Build explicit RGB-to-BT.709 H.264 encoding and audio mux policy."""
+    """Build explicit RGB-to-frozen-SDR H.264 encoding and audio mux policy."""
 
     workspace_path = workspace.resolve(strict=False)
     if frames_directory.resolve(strict=False).parent != workspace_path:
@@ -111,14 +130,18 @@ def build_final_encoding_plan(job: JobPlan, ffmpeg: Path, merged: MediaProbe, wo
         raise ValueError(f"unsupported final audio channel layout syntax: {job.output_audio_layout!r}")
     duration_text = format(duration, "f")
     frame_pattern = frames_directory / FRAME_FILENAME_TEMPLATE
-    video_filter = f"scale=w={job.output_width}:h={job.output_height}:flags=lanczos+accurate_rnd+full_chroma_int:in_range=pc:out_range=tv:out_color_matrix=bt709,setsar=1,format=pix_fmts=yuv420p,setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709"
+    matrix = job.output_color_profile.matrix.value
+    setparams, color_arguments = _color_signaling(job.output_color_profile)
+    video_filter = f"scale=w={job.output_width}:h={job.output_height}:flags=lanczos+accurate_rnd+full_chroma_int:in_range=pc:out_range=tv:out_color_matrix={matrix},setsar=1,format=pix_fmts=yuv420p,setparams={setparams}"
     arguments = [str(ffmpeg), "-hide_banner", "-nostdin", "-y", "-framerate", str(job.output_frame_rate), "-start_number", "1", "-noautorotate", "-i", str(frame_pattern)]
     if audio_source_path is not None:
         arguments.extend(["-noautorotate", "-i", str(audio_source_path)])
     arguments.extend(["-map", "0:v:0"])
     if audio_source_path is not None:
         arguments.extend(["-map", "1:a:0"])
-    arguments.extend(["-map_metadata", "-1", "-map_chapters", "-1", "-vf", video_filter, "-c:v", "libx264", "-preset", "slow", "-crf", "18", "-pix_fmt", "yuv420p", "-r", str(job.output_frame_rate), "-fps_mode", "cfr", "-frames:v", str(frame_count), "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-color_range", "tv", "-metadata:s:v:0", "rotate=0"])
+    arguments.extend(["-map_metadata", "-1", "-map_chapters", "-1", "-vf", video_filter, "-c:v", "libx264", "-preset", "slow", "-crf", str(DEFAULT_VIDEO_CRF), "-pix_fmt", "yuv420p", "-r", str(job.output_frame_rate), "-fps_mode", "cfr", "-frames:v", str(frame_count)])
+    arguments.extend(color_arguments)
+    arguments.extend(["-metadata:s:v:0", "rotate=0"])
     expected_audio_codec, audio_arguments = _final_audio_arguments(job, merged, audio_mode, duration_text)
     arguments.extend(audio_arguments)
     arguments.extend(["-t", duration_text, "-movflags", "+faststart", "-f", "mp4", str(partial_output)])
