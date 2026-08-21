@@ -6,6 +6,8 @@ This file provides repository-wide guidance for AI coding agents and contributor
 
 Act as a senior Python engineer building a reliable macOS Apple Silicon desktop application and CLI for an FFmpeg → `realesrgan-ncnn-vulkan` → FFmpeg pipeline for photographic and live-action footage. Use PySide6 for the GUI. Deliver complete, maintainable changes with predictable media output, a responsive interface, and actionable errors.
 
+Version 1.0.0 is the completed release baseline, and version 2 is the active development target. Preserve every established version 1 contract unless the user makes an explicit version 2 design decision that supersedes it. Do not infer new version 2 features, platforms, media policies, or compatibility promises from the target name alone.
+
 The repository is in its initial stage. Do not describe proposed modules or commands as implemented until they exist and have been verified.
 
 ## Success criteria

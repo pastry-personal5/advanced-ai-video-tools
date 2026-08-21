@@ -2,6 +2,10 @@
 
 This document is the authoritative technical overview for AI Video Tools. It describes both the implemented foundation and the intended processing architecture. Update it when an implementation decision changes the pipeline, component boundaries, job states, or media policies.
 
+## Development target
+
+Version 1.0.0 is the completed release baseline. The active development goal is version 2. Until a version 2 design decision explicitly supersedes a version 1 contract, the implemented version 1 behavior in this document remains binding. The target change alone does not authorize speculative features, compatibility expansion, or changes to media policy.
+
 ## Implementation status
 
 The CLI exposes diagnostic preflight and one complete synchronous `process` job.

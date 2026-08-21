@@ -2,6 +2,8 @@
 
 AI Video Tools is a Python project for macOS on Apple Silicon that concatenates real-world video footage with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing service owns the complete pipeline; the PySide6 desktop shell observes and controls that same backend queue.
 
+> **Release and development status:** v1.0.0 is the current completed release baseline. The active development target is v2. Existing v1 behavior remains authoritative until a v2 design decision explicitly changes it; no additional v2 features are implied solely by the target change.
+
 > **Status:** executable foundation. Typed job and media models, external-tool
 > discovery, collision-safe output naming, FFprobe parsing, and the shared
 > preflight service are implemented and tested. Typed compatibility analysis,

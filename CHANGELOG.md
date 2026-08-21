@@ -4,6 +4,12 @@ All notable changes to AI Video Tools are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Set version 2 as the active development target while retaining v1.0.0 as the released behavior baseline.
+
 ## [1.0.0] - 2026-08-21
 
 ### Added
