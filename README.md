@@ -282,4 +282,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete workflow and [docs/ARCHI
 
 ## License
 
-No license has been selected yet. Until a license file is added, all rights are reserved by the project owner.
+This project is proprietary. Copyright © 2026 AI Video Tools Project Owner. All rights are reserved, and no permission to use, copy, modify, or distribute the project is granted without the owner's prior written permission. Third-party components remain under their respective licenses. See [LICENSE](LICENSE) for the complete terms.
