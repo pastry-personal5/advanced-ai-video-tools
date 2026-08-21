@@ -59,7 +59,7 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 
 - Phase 1 includes a main-window layout revision as an explicit GUI goal.
 - Keep the source-clip preview in the far-right content column of the application window.
-- The preview pane's default geometry uses a 3:4 width-to-height ratio. Its default height tracks the available application content height after the bottom message area, allowing for the title/header, spacing, and window margins. The default width is therefore three quarters of that preview height.
+- The preview pane's default geometry uses a 3:4 width-to-height ratio. Its default height tracks the available application content height after the bottom message area, allowing for the menu/rail, spacing, and window margins. The default width is therefore three quarters of that preview height.
 - Use an initial and minimum main-window size of 1536 × 1536 pixels. The window must not shrink below that minimum.
 - Make the integrated message widget's height user-resizable. Do not introduce preview scrolling; the minimum window size is the lower bound for the layout.
 - The pane geometry is a layout default, not a video distortion rule. The currently selected source clip remains the only preview source, and the displayed video preserves the native player's display aspect ratio with no crop or stretch. Unused space inside the pane is acceptable when the source aspect ratio differs from the pane's 3:4 default.
@@ -180,10 +180,10 @@ message actions.
 
 ### 2. Presentation architecture
 
-- [ ] Separate durable presentation state from declarative widget construction where this improves testability.
-- [ ] Centralize application identity strings and brand-neutral UI constants in preparation for the later rename.
-- [ ] Define reusable spacing, status, and icon semantics without introducing an unnecessary theme framework.
-- [ ] Preserve Qt ownership, signal/slot thread boundaries, and clean shutdown.
+- [x] Separate durable presentation state from declarative widget construction where this improves testability. See [Phase 1 Presentation Architecture](1-enhance-gui-presentation-architecture.md).
+- [x] Centralize application identity strings and brand-neutral UI constants in preparation for the later rename. See [Phase 1 Presentation Architecture](1-enhance-gui-presentation-architecture.md).
+- [x] Define reusable spacing, status, and icon semantics without introducing an unnecessary theme framework. See [Phase 1 Presentation Architecture](1-enhance-gui-presentation-architecture.md).
+- [x] Preserve Qt ownership, signal/slot thread boundaries, and clean shutdown. See [Phase 1 Presentation Architecture](1-enhance-gui-presentation-architecture.md).
 - [x] Define the main-window content layout with the editor/queue region, the far-right source-preview pane, and the bottom integrated message widget.
 - [x] Define the preview-pane initial geometry as 3:4 width-to-height, derive its width from the post-message-area available height, keep the window at or above 1536 × 1536, make message height user-resizable, and avoid preview scrolling.
 - [x] Define typed global-message and job-message events, session-only ownership, five-line per-tab tails, completion routing, and GUI-thread delivery without changing backend logging or queue semantics.
@@ -259,6 +259,26 @@ message actions.
 - [ ] Complete the manual macOS acceptance checklist.
 - [ ] Update README, architecture, changelog, screenshots, and this phase status.
 
+## Implementation handoff
+
+The specification is ready for the GUI implementation agent. Use one vertical
+slice at a time and keep the checklist and evidence synchronized:
+
+1. Build the presentation shell: centralized identity/metrics, dark-theme
+   tokens, the 1536 × 1536 window, left navigation rail, two view surfaces, and
+   the persistent message-area splitter.
+2. Build the Job Creation surface: filename-only drop/list editing, the
+   Preferences menu path, and the selected-source preview boundary.
+3. Build Queue Monitoring and messages: `Status`/`Job Name`/`Remove` columns,
+   selected-job details, stage/whole-job progress, five-line tails, and terminal
+   actions.
+4. Add the fixed preview controls, native-player lifecycle, and remaining
+   inline validation behavior.
+5. Add focused headless tests for each slice before moving to the next one.
+
+Do not update the architecture document with planned modules until they exist;
+record each completed slice in Implementation evidence with its exact checks.
+
 ## Acceptance criteria
 
 - A first-time user can configure tools, order clips, choose output intent, understand preflight, and queue a job without consulting CLI documentation.
@@ -320,6 +340,10 @@ message actions.
 ### Audit and interaction specification — completed
 
 - Added [Phase 1 GUI Audit and Interaction Specification](1-enhance-gui-audit.md) covering the current hierarchy, focus-order risk, workflows, findings, state transitions, target wireframes, accessibility criteria, and minimum-window behavior.
+
+### Presentation architecture specification — completed
+
+- Added [Phase 1 Presentation Architecture](1-enhance-gui-presentation-architecture.md) covering typed presentation state, ownership, identity/UI semantics, Qt thread boundaries, shutdown, and view binding.
 
 ### Header simplification slice — completed
 

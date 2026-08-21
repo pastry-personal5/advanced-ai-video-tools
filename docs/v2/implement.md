@@ -91,4 +91,4 @@ Tests must remain independent of a GPU, network, large model files, and long vid
 
 ## Current execution pointer
 
-Proceed only from [Phase 1 — Enhance GUI](1-enhance-gui.md) until its status changes or the user explicitly redirects the v2 plan. [Phase 2 — Rename Project](2-rename-project.md) is available for decision-making and planning, but not implementation, while Phase 1 remains active.
+Proceed only from [Phase 1 — Enhance GUI](1-enhance-gui.md) until its status changes or the user explicitly redirects the v2 plan. Phase 1's audit and presentation-architecture specifications are complete; begin with its first unchecked implementation slice and record evidence as each slice lands. [Phase 2 — Rename Project](2-rename-project.md) is available for decision-making and planning, but not implementation, while Phase 1 remains active.

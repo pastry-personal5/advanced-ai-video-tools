@@ -103,3 +103,4 @@ A phase is complete only when:
 | 2026-08-22 | Keep messages session-only with local timestamps, no severity/filter/action controls, automatic `Job Messages` activation, the empty state `No job is selected.`, and exactly five visible lines per tab. Completed jobs append to `Global Messages`; errors remain inline. |
 | 2026-08-22 | Complete the Phase 1 audit and interaction specification, covering the current GUI hierarchy, workflows, usability findings, target state wireframes, focus criteria, and 1536 × 1536 resizing behavior. |
 | 2026-08-22 | Approve the Phase 1 visual specification: native macOS system typography, 8 px spacing grid, comfortable 32 px controls/rows, and Codex-created monochrome vector icons for navigation, preview, and terminal-job removal. |
+| 2026-08-22 | Complete the Phase 1 presentation-architecture specification for typed presentation state, centralized UI semantics, Qt ownership/thread boundaries, shutdown, and view binding. |
