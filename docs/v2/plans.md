@@ -67,7 +67,7 @@ The complete decision checklist and migration plan are maintained in [Phase 2 �
 Unless explicitly superseded, v2 retains these v1 guarantees:
 
 - Concat first and run AI upscaling at most once.
-- Preserve aspect ratio and never rotate, crop, or stretch implicitly.
+- Processing preserves aspect ratio and never rotates, crops, or stretches implicitly; the convenience preview may follow native rotation behavior.
 - Preserve accepted BT.709 or SMPTE 170M matrices and reject unsupported HDR.
 - Preserve exact rational timing using time-base-derived verification tolerance.
 - Maintain the first-audio, silence, pad, trim, and explicit stream-drop acknowledgement policy.
@@ -93,22 +93,11 @@ A phase is complete only when:
 | Date | Decision |
 | --- | --- |
 | 2026-08-22 | Set v2 as the active development target; keep v1.0.0 as the released baseline. |
-| 2026-08-22 | Establish GUI enhancement and project renaming as confirmed v2 goals. |
-| 2026-08-22 | Begin Phase 1: Enhance GUI. |
-| 2026-08-22 | Establish Phase 2: Rename Project; implementation follows Phase 1 unless explicitly redirected. |
-| 2026-08-22 | Limit the Phase 1 video preview to the currently selected source clip. |
-| 2026-08-22 | Make the Phase 1 source preview playback-only, with no editing, filtering, trimming, frame export, or concat-boundary controls. |
-| 2026-08-22 | Use PySide6 `QMediaPlayer` with `QVideoWidget` for Phase 1 preview playback and keep FFmpeg and Real-ESRGAN out of the presentation layer. |
-| 2026-08-22 | Define the widget as a non-color-accurate convenience preview; FFprobe-backed preflight and the processing pipeline remain authoritative for all media interpretation and validation. |
-| 2026-08-22 | Treat unsupported native preview formats as non-blocking, show the approved preview-unavailable message, and generate no proxy videos in Phase 1. |
-| 2026-08-22 | Make preview playback fill the available width while preserving the exact unrotated display aspect ratio, with no crop, stretch, or rotation. |
-| 2026-08-22 | Add the Phase 1 main-window layout goal: keep the source-clip preview in the far-right content column and reserve an integrated message widget at the bottom of the window. |
-| 2026-08-22 | Use a two-tab `QTabWidget` for integrated messages: `Global Messages` for application-wide log-style notices and `Job Messages` for the selected/current job's notices. |
-| 2026-08-22 | Give the right-side preview pane a default width-to-height ratio of 3:4; its default height tracks the available window content height after the bottom message widget, while the displayed video itself preserves its exact source aspect ratio. |
-| 2026-08-22 | Define Phase 1 source-preview playback controls as previous clip, play/pause, go to the beginning, go to the end, and next clip. Selecting or navigating to a source clip starts playback automatically. Loop controls are not included in v2. |
-| 2026-08-22 | Use icon-only source-preview controls: previous clip, go to beginning, play/pause, go to end, and next clip. Previous/next clip use double-triangle skip glyphs, while beginning/end use single-triangle seek glyphs. Previous/next clip selection starts the newly selected clip automatically; controls are disabled at the first/last clip rather than wrapping. Provide accessible names and tooltips for every icon. |
-| 2026-08-22 | Start the preview muted on first launch, remember mute and volume as non-safety preferences, and never autoplay audio; autoplay begins muted and audio requires explicit user action. Changing selection stops the prior source and loads the new local source asynchronously while preserving visible concat order. Pause preview when processing begins, do not resume it automatically, and release the player on window close. Accept only local files already in the editor; reject URLs and remote sources. Show player failures inline without replacing authoritative preflight errors. |
-| 2026-08-22 | Use a far-left vertical two-icon navigation rail: the first icon opens Job Creation controls and hides Queue Monitoring controls; the second opens Queue Monitoring controls and hides Job Creation controls. Keep the bottom integrated message widget visible in both views. |
-| 2026-08-22 | Remove the v1 GUI heading labels `Video processing jobs` and `One job runs at a time • Default output height: {settings.target_height}p` as part of the Phase 1 layout simplification. |
-| 2026-08-22 | Keep the v2 GUI dark-themed and use Codex-created app-owned icons. Accept local file-manager drag-and-drop into the source list, retain custom target height without presets, use native preview playback as-is for rotation, move External Tools to `Edit` → `Preferences` in a separate window, remove the main-window External Tools button, omit retry support, log completed jobs globally, show five-line tails in both message tabs, and display queue `Status` before `Job Name`. |
-| 2026-08-22 | Set the Phase 1 window to an initial/minimum 1536 × 1536 pixels with a user-resizable message area and no preview scrolling. Accept duplicate clips and show filenames only. Put selected-job details and the job-start output name in `Job Messages`; use queue `Status`, `Job Name`, and `Remove` columns with both stage/whole-job progress, no-confirmation removal for cancelled/failed jobs, session-only messages, automatic `Job Messages` activation, `No job is selected.` empty state, local timestamps without timezone, inline errors, no message actions/severity controls, and temporary identity `Advanced AI Video Tools`. |
+| 2026-08-22 | Establish GUI enhancement and project renaming as v2 goals; begin Phase 1 and defer Phase 2 implementation until Phase 1 is complete. |
+| 2026-08-22 | Limit the Phase 1 preview to the selected source clip, make it playback-only, use `QMediaPlayer`/`QVideoWidget`, and keep processing/preflight authoritative. Native preview failure is non-blocking and creates no proxy media. |
+| 2026-08-22 | Use a single window with a far-left two-icon rail, Job Creation and Queue Monitoring views, a far-right source preview, and a persistent two-tab message widget at the bottom. The window starts at and cannot shrink below 1536 × 1536; message height is user-resizable and preview scrolling is not used. |
+| 2026-08-22 | Use icon-only preview controls for previous clip, play/pause, beginning, end, and next clip. Clip navigation autoplays, does not wrap, and has no loop controls. Preview starts muted, remembers mute/volume preferences, loads only local editor files asynchronously, pauses when processing starts, and follows native rotation behavior. |
+| 2026-08-22 | Keep the GUI dark-themed with Codex-created app-owned icons. Accept file-manager drag-and-drop in drop order, allow duplicates, show filenames only, retain custom target height without presets, and use `Advanced AI Video Tools` as the temporary identity. |
+| 2026-08-22 | Move advanced options and External Tools to a separate `Edit` → `Preferences` window; remove the main-window External Tools button. Do not implement retry support. |
+| 2026-08-22 | Use `Status`, `Job Name`, and `Remove` queue columns; show stage and whole-job progress; allow no-confirmation removal of cancelled/failed rows; show selected-job details and the job-start output name in `Job Messages`. |
+| 2026-08-22 | Keep messages session-only with local timestamps, no severity/filter/action controls, automatic `Job Messages` activation, the empty state `No job is selected.`, and exactly five visible lines per tab. Completed jobs append to `Global Messages`; errors remain inline. |

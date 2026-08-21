@@ -107,7 +107,7 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 
 ### Source-list input and preview interpretation
 
-- Allow users to drag local video files from the operating system file manager into the source-clip list. Dropped files are appended in drop order and remain subject to the existing local-file validation and duplicate policy.
+- Allow users to drag local video files from the operating system file manager into the source-clip list. Dropped files are appended in drop order and remain subject to existing local-file validation.
 - Retain the file-picker workflow alongside drag-and-drop. Reject URL and remote-media drops.
 - Use native preview playback as-is in v2. Do not add a preview rotation gate, rotation correction, or custom no-rotation renderer. Authoritative FFprobe preflight and processing validation continue to govern rotation and all media policy.
 - Do not add output-height presets in v2; retain the custom target-height control and its existing validation.
@@ -121,12 +121,9 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 ### Queue and message presentation
 
 - Do not implement retry support in v2. Failed and cancelled jobs retain their existing terminal behavior without a retry action.
-- When a job reaches `COMPLETED`, append a concise completion message to the `Global Messages` stream in the integrated message widget.
-- Each integrated-message tab contains a read-only log-tail widget showing the latest five message lines for that tab, with the newest line at the bottom. The tail is presentation-only and does not expose sensitive exact subprocess command lines by default.
 - Present the job queue with a multi-column Qt model/view widget. The first column is `Status` and contains the textual job status; the second column is `Job Name`. Additional columns may be added only through a later approved decision.
 - Add a third queue column containing a `Remove` action. The action is available for cancelled and failed jobs; the user controls when those terminal rows leave the session history.
 - Show both stage progress and whole-job progress in Queue Monitoring.
-- Do not add retry actions or retry execution in v2.
 
 ## Current baseline
 
@@ -145,79 +142,17 @@ Phase 1 must build on these capabilities instead of duplicating them.
 
 ## Required design decisions
 
-Do not begin visual implementation until the decisions affecting that slice are approved.
+All product decisions affecting the current layout and preview slice are approved.
+Before implementation, only these compact implementation details remain:
 
-### Information architecture
+- Typography, spacing, density, semantic color tokens, and minimum-contrast values for the dark theme.
+- Final icon inventory, sizing, and spacing beyond the already approved controls.
+- Exact splitter proportions and internal spacing within the fixed 1536 × 1536 window.
 
-- The Phase 1 information architecture is approved as a single-window layout with a far-left two-icon navigation rail, mutually exclusive Job Creation and Queue Monitoring views, a far-right source-preview region in the Job Creation view, and a persistent bottom message widget.
-- Whether selected-job details appear inline, in an inspector, or in a separate dialog.
-- Selected-job details are shown in the `Job Messages` tab of the integrated message widget.
-- The minimum window size prevents further shrinking; no narrow-window scrolling behavior is required.
-
-The Phase 1 layout direction above is approved for implementation. Remaining
-layout detail is limited to the exact splitter proportions and spacing within
-the fixed 1536 × 1536 minimum window.
-
-### Visual direction
-
-- The dark-theme visual direction is approved. Remaining decisions are limited to implementation details.
-- Typography, spacing, density, and color-token policy.
-- Generated-icon sizing and the final icon inventory beyond the approved controls.
-- Temporary v1 identity treatment is approved as `Advanced AI Video Tools` until the project rename is decided.
-
-### Job creation experience
-
-- Accept duplicate clips without warning or rejection.
-- Show filenames only; do not add inline metadata or thumbnails.
-- Control presentation details not fixed above. Audio defaults, resource lifecycle, local-source policy, non-blocking player-failure behavior, native preview-as-is behavior, and drag-and-drop acceptance are already fixed.
-- Show the generated output name immediately after job start in the selected job's `Job Messages` tab.
-- Show advanced options in `Edit` → `Preferences`.
-
-### Queue and progress experience
-
-- Queue columns are `Status`, `Job Name`, and `Remove`; status is textual and appears to the left of the job name.
-- Show both stage progress and whole-job progress.
-- Show selected-job details in the `Job Messages` tab.
-- Keep completed, cancelled, and failed jobs visible for the session; provide removal actions for cancelled and failed rows.
-- Removing cancelled or failed jobs requires no confirmation.
-
-### Integrated message behavior
-
-- Keep messages for the running application session only.
-- Show exactly five lines per tab; do not provide expansion, clear, copy, or
-  diagnostics-reveal actions.
-- Do not add severity levels or filtering controls in v2.
-- Selecting a job activates `Job Messages`; show `No job is selected.` when
-  there is no selected job.
-- Use local timestamps without timezone information.
-
-### Errors and warnings
-
-- Present validation and player errors inline for now.
-- Do not expose exact subprocess command lines or add copy/reveal actions in the
-  GUI in v2.
-
-### Accessibility and input
-
-- No additional v2-specific keyboard shortcuts, VoiceOver announcements, or
-  reduced-motion behavior are required; retain ordinary native Qt focus and
-  accessibility behavior.
-- Minimum contrast and non-color-only state indicators.
-
-## Recommended Phase 1 defaults
-
-These are recommendations, not approved design decisions:
-
-- Use a native single-window layout with the approved far-left icon rail, view-specific central content, and the source preview at the far right of Job Creation.
-- Follow the approved dark-theme direction without a custom theme engine.
-- Use native Qt/macOS controls and a small, centralized set of spacing and semantic color tokens.
-- Retain the file picker alongside approved drag-and-drop and preserve exact visible concat order.
-- Show the approved queue table beginning with textual Status and Job Name, a Remove action for cancelled/failed rows, and selected-job details in the `Job Messages` tab.
-- Use a right-side preview pane with an initial 3:4 frame; for example, 740 px of post-message-area height yields a 555 px preview width. Keep this as a geometry baseline until the supported minimum and initial window sizes are approved.
-- Keep preflight acknowledgement modal because it is a safety gate; move ordinary field validation inline.
-- Retain terminal jobs for the current session, with no-confirmation removal for cancelled and failed rows and no retry action.
-- Do not display exact command lines by default; provide access through the clearly marked sensitive diagnostic log.
-- Retain ordinary native Qt focus and accessibility behavior without adding v2-specific shortcuts or announcement features.
+Retain native Qt focus/accessibility behavior, keep preflight acknowledgement as
+the safety gate, and keep ordinary field validation inline. Do not add
+v2-specific shortcuts, VoiceOver announcements, reduced-motion behavior, or
+message actions.
 
 ## Work breakdown
 
@@ -242,7 +177,6 @@ These are recommendations, not approved design decisions:
 - [x] Define the preview-pane initial geometry as 3:4 width-to-height, derive its width from the post-message-area available height, keep the window at or above 1536 × 1536, make message height user-resizable, and avoid preview scrolling.
 - [x] Define typed global-message and job-message events, session-only ownership, five-line per-tab tails, completion routing, and GUI-thread delivery without changing backend logging or queue semantics.
 - [x] Define the two-view navigation state, icon semantics, state preservation, keyboard traversal, and visibility boundaries for creation versus queue controls.
-- [ ] Define the five-line per-tab log-tail model and completion-event routing to `Global Messages`.
 
 ### 3. Job editor enhancement
 
@@ -254,7 +188,7 @@ These are recommendations, not approved design decisions:
 - [ ] Add previous-clip, play/pause, go-to-beginning, go-to-end, and next-clip controls; start playback automatically when the selected source clip changes; disable navigation at list boundaries; provide no loop controls.
 - [ ] Use the approved icon-only glyphs, accessible names, tooltips, enabled/disabled states, and keyboard focus behavior for all source-preview controls.
 - [ ] Add drag-and-drop from the operating-system file manager, append accepted files in drop order, retain the picker, and reject URL/remote drops.
-- [ ] Add approved clip summaries or metadata without probing on the GUI thread.
+- [ ] Render filename-only source rows without metadata or thumbnails.
 - [ ] Add a video preview whose source is exclusively the currently selected source clip.
 - [ ] Implement playback with PySide6 `QMediaPlayer` and `QVideoWidget` behind a small, testable presentation boundary.
 - [ ] Use `Qt.AspectRatioMode.KeepAspectRatio` and a width-driven container whose height follows the exact display aspect ratio without adding application-level rotation handling.
@@ -279,7 +213,7 @@ These are recommendations, not approved design decisions:
 ### 4. Queue and job details
 
 - [ ] Implement concise, accessible job-row presentation.
-- [ ] Present the queue in a multi-column widget with textual `Status` first and `Job Name` second.
+- [ ] Present the queue in a multi-column widget with textual `Status` first, `Job Name` second, and `Remove` actions for cancelled/failed rows.
 - [ ] Add the approved selected-job details surface.
 - [ ] Distinguish measured determinate progress from indeterminate work.
 - [ ] Make legal actions obvious for each job state and guard illegal transitions.
@@ -291,13 +225,11 @@ These are recommendations, not approved design decisions:
 - [ ] Improve external-tool validation status and resolved-tool feedback.
 - [ ] Add `Edit` → `Preferences` as a separate settings window for External Tools and remove the main-window `External Tools…` button.
 - [ ] Append completed-job messages to `Global Messages` and show the latest five lines in each message tab's read-only log-tail widget.
-- [ ] Add approved log-reveal and copy-diagnostics actions with sensitive-path warnings.
 - [ ] Ensure settings changes continue to affect only future drafts, never frozen queued requests.
 
 ### 6. Accessibility and macOS polish
 
-- [ ] Define and test complete keyboard navigation and shortcuts.
-- [ ] Add accessible names, descriptions, and status announcements.
+- [ ] Preserve native Qt focus behavior and verify accessible names for approved icon controls.
 - [ ] Verify the approved dark theme and increased-contrast behavior.
 - [ ] Verify resizing, long paths, localization-length expansion, and high-DPI rendering.
 - [ ] Perform native-dialog, dark-theme, and minimum-window checks on supported macOS hardware; no new VoiceOver feature is required in v2.
@@ -351,10 +283,8 @@ These are recommendations, not approved design decisions:
 - Native preview playback is used as-is for v2, with no preview rotation gate or custom rotation renderer, and no output-height presets are exposed.
 - `Edit` → `Preferences` opens a separate External Tools settings window, and the main-window `External Tools…` button is absent.
 - Retry actions are absent in v2.
-- A completed job appends a message to `Global Messages`; each message tab shows a read-only tail of its latest five log lines.
-- The queue widget has a textual `Status` column to the left of a `Job Name` column.
 - The default preview pane uses a 3:4 width-to-height geometry calculated from the available height after the message widget; resizing preserves the source video's exact aspect ratio without crop or stretch while following native preview rotation behavior.
-- Global and job messages are concise local-timestamped log lines delivered without blocking the GUI thread. Each tab shows exactly its latest five lines, messages are session-only, no severity filtering or message actions are provided, and sensitive exact command lines remain out of the GUI.
+- Global and job messages are concise local-timestamped log lines delivered without blocking the GUI thread. Completed jobs append to `Global Messages`; each tab shows exactly its latest five lines, messages are session-only, no severity filtering or message actions are provided, and sensitive exact command lines remain out of the GUI.
 - Existing v1 CLI and media-pipeline behavior remains unchanged unless separately approved.
 - Automated checks pass and target-macOS manual verification is recorded.
 
@@ -384,9 +314,8 @@ Record completed slices here with links to the relevant modules/tests and the ex
 
 - The later project rename may cause rework if application identity remains scattered through widgets, settings paths, logs, and packaging metadata.
 - Visual changes can accidentally obscure media-safety warnings or make acknowledgement appear optional.
-- Thumbnail or metadata enhancements can block the GUI if they bypass the existing worker boundary.
 - Custom styling can reduce native accessibility, dark-mode correctness, and maintainability.
-- A bottom message area can consume vertical space needed by the editor and preview; the minimum-size, splitter, and narrow-window policy must be explicit before implementation.
+- A bottom message area can consume vertical space needed by the editor and preview; splitter proportions and spacing must be explicit before implementation.
 - Mixing application-wide and job-scoped events can make message ownership ambiguous; typed event sources and a clear selected-job policy are required.
 - Native preview rotation behavior may differ from the authoritative processing interpretation; this is accepted in v2 because preview playback is explicitly convenience-only.
 - Offscreen Qt tests cannot prove VoiceOver behavior or complete native macOS appearance.
