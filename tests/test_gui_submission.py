@@ -142,6 +142,7 @@ def test_editor_preserves_concat_order_and_builds_frozen_supported_request(qt_ap
     editor = JobEditor(settings, clock=lambda: _CREATED)
     paths = (tmp_path / "one.mov", tmp_path / "two.mov", tmp_path / "three.mov")
     editor.add_inputs(paths)
+    assert [editor.inputs.item(row).text() for row in range(editor.inputs.count())] == [path.name for path in paths]
     editor.inputs.setCurrentRow(2)
 
     assert editor.move_selected(-1)
@@ -167,8 +168,10 @@ def test_editor_drop_boundary_accepts_local_files_and_rejects_remote_urls(qt_app
     del qt_app
     first = tmp_path / "first.mov"
     second = tmp_path / "second.mov"
+    text_file = tmp_path / "notes.txt"
     first.touch()
     second.touch()
+    text_file.touch()
     editor = JobEditor(ApplicationSettings())
 
     class DropEvent:
@@ -187,6 +190,8 @@ def test_editor_drop_boundary_accepts_local_files_and_rejects_remote_urls(qt_app
 
     local = DropEvent((QUrl.fromLocalFile(str(first)), QUrl.fromLocalFile(str(second))))
     assert editor._local_drop_paths(local) == (first, second)  # pylint: disable=protected-access
+    non_video = DropEvent((QUrl.fromLocalFile(str(text_file)),))
+    assert not editor._local_drop_paths(non_video)  # pylint: disable=protected-access
     remote = DropEvent((QUrl("https://example.com/video.mov"),))
     assert not editor._local_drop_paths(remote)  # pylint: disable=protected-access
 

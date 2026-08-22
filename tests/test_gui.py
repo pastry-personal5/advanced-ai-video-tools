@@ -212,6 +212,7 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.findChild(QSplitter, "mainContentSplitter") is not None
     assert [window.message_tabs.tabText(index) for index in range(2)] == ["Global Messages", "Job Messages"]
     assert "Application started." in window.global_messages.toPlainText()
+    assert "Add clips in order they should be concatenated." in window.global_messages.toPlainText()
     assert window.message_tabs.currentIndex() == 0
     assert window.view_stack.currentIndex() == 0
     window.queue_monitoring_button.click()

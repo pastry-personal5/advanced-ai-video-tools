@@ -198,8 +198,8 @@ message actions.
 - [x] Add the far-right source-preview pane and verify its default 3:4 geometry, available-height calculation, and responsive behavior.
 - [ ] Add previous-clip, play/pause, go-to-first-frame, go-to-last-frame, and next-clip controls; start playback automatically when the selected source clip changes; disable navigation at list boundaries; provide no loop controls.
 - [ ] Use the approved icon-only glyphs, accessible names, tooltips, enabled/disabled states, and keyboard focus behavior for all source-preview controls.
-- [x] Add drag-and-drop from the operating-system file manager, append accepted files in drop order, retain the picker, and reject URL/remote drops.
-- [ ] Render filename-only source rows without metadata or thumbnails.
+- [x] Add video-file drag-and-drop from the operating-system file manager, append accepted files in drop order, retain the picker, and reject non-video, URL, and remote drops.
+- [x] Render filename-only source rows without metadata or thumbnails.
 - [x] Add a video preview whose source is exclusively the currently selected source clip.
 - [x] Implement playback with PySide6 `QMediaPlayer` and `QVideoWidget` behind a small, testable presentation boundary.
 - [x] Use `Qt.AspectRatioMode.KeepAspectRatio` and a width-driven container whose height follows the exact display aspect ratio without adding application-level rotation handling.
@@ -217,7 +217,6 @@ message actions.
 - [ ] Keep preview state isolated from processing intent and expose no editing, filtering, trimming, frame-export, or concat-boundary controls.
 - [ ] Keep FFmpeg, FFprobe, Real-ESRGAN, command builders, and processing services out of the preview presentation layer.
 - [ ] Implement the separately approved controls, audio, error, and cleanup policies around the fixed playback backend.
-- [ ] Improve output-directory, height, and generated-name feedback.
 - [ ] Keep custom target-height input without adding output-height presets.
 - [ ] Provide inline, accessible field errors while preserving authoritative preflight.
 
@@ -392,9 +391,23 @@ Record subsequent completed slices here with links to the relevant modules/tests
 
 ### Local file drop slice — completed
 
-- Added local file-manager drag-and-drop to `JobEditor`; accepted files append in drop order and automatically select/autoplay the newest source through the existing preview binding.
-- Remote URLs, non-local URLs, and non-file paths are rejected without application-initiated network activity.
+- Added local video-file drag-and-drop to `JobEditor`; supported `.mov`, `.mp4`, `.mkv`, and `.m4v` files append in drop order and automatically select/autoplay the newest source through the existing preview binding.
+- Non-video files, remote URLs, non-local URLs, and non-file paths are rejected without application-initiated network activity.
 - Added headless coverage for local-file acceptance and remote-URL rejection in `tests/test_gui_submission.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 183 passed; Black, Pylint, and pycodestyle passed.
+
+### Filename-only source rows slice — completed
+
+- `JobEditor` now renders only `Path.name` in the source list while retaining ordered full paths in typed editor state for preview binding and frozen request construction.
+- Reordering, removal, queue clearing, and newly added-clip autoplay continue to operate on the retained full paths.
+- Added regression coverage for filename-only rendering and full-path request preservation.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 183 passed; Black, Pylint, and pycodestyle passed.
+
+### Welcome guidance slice — completed
+
+- Removed the persistent `Create processing job` and concat-order instruction labels from the editor.
+- Added a startup welcome instruction to the session-only `Global Messages` tail describing the required add, output-directory, and preflight/queue flow.
+- Added GUI regression coverage for the welcome message.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 183 passed; Black, Pylint, and pycodestyle passed.
 
 ## Risks

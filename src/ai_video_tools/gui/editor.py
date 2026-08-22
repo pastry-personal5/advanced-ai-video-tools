@@ -17,6 +17,8 @@ from ai_video_tools.core.models import JobRequest
 from ai_video_tools.storage.naming import automatic_output_basename
 from ai_video_tools.system.settings import ApplicationSettings
 
+_VIDEO_SUFFIXES = frozenset({".mov", ".mp4", ".mkv", ".m4v"})
+
 
 def _local_now() -> datetime:
     return datetime.now().astimezone()
@@ -34,6 +36,7 @@ class JobEditor(QWidget):
         self.setAcceptDrops(True)
         self._settings = settings
         self._clock = clock
+        self._paths: list[Path] = []
 
         self.inputs = QListWidget()
         self.inputs.setObjectName("inputClips")
@@ -74,25 +77,20 @@ class JobEditor(QWidget):
 
         model_label = QLabel("realesrgan-x4plus — photographic and live-action images")
         model_label.setObjectName("modelLabel")
-        naming_label = QLabel("Output name: ai-video-YYYYMMDD-HHMMSS-<compact UUIDv7>.mp4")
-        naming_label.setObjectName("namingLabel")
-
         options = QFormLayout()
         options.addRow("Output directory", output_row)
         options.addRow("Target height", self.target_height)
         options.addRow("AI model", model_label)
-        options.addRow("Automatic naming", naming_label)
 
         self.submit_button = QPushButton("Preflight & Queue")
         self.submit_button.setObjectName("submitJobButton")
         self.submit_button.setDefault(True)
-        self.editor_status = QLabel("Add clips in the order they should be concatenated.")
+        self.editor_status = QLabel()
         self.editor_status.setObjectName("editorStatus")
         self.editor_status.setWordWrap(True)
 
-        group = QGroupBox("Create processing job")
+        group = QGroupBox()
         group_layout = QVBoxLayout()
-        group_layout.addWidget(QLabel("Input clips — concat order is top to bottom"))
         group_layout.addWidget(self.inputs)
         group_layout.addLayout(input_controls)
         group_layout.addLayout(options)
@@ -118,16 +116,18 @@ class JobEditor(QWidget):
     def input_paths(self) -> tuple[Path, ...]:
         """Return clip paths in their visible concat order."""
 
-        return tuple(Path(self.inputs.item(row).text()) for row in range(self.inputs.count()))
+        return tuple(self._paths)
 
     def add_inputs(self, paths: Sequence[Path]) -> None:
         """Append selected paths without silently sorting or deduplicating them."""
 
-        first_added_row = self.inputs.count()
-        for path in paths:
-            self.inputs.addItem(str(path))
-        if paths:
-            self.inputs.setCurrentRow(first_added_row + len(paths) - 1)
+        new_paths = tuple(paths)
+        first_added_row = len(self._paths)
+        for path in new_paths:
+            self._paths.append(path)
+            self.inputs.addItem(path.name)
+        if new_paths:
+            self.inputs.setCurrentRow(first_added_row + len(new_paths) - 1)
         self._update_input_controls()
 
     @staticmethod
@@ -141,7 +141,7 @@ class JobEditor(QWidget):
         if not urls or any(not url.isLocalFile() for url in urls):
             return ()
         paths = tuple(Path(url.toLocalFile()) for url in urls)
-        return tuple(path for path in paths if path.is_file())
+        return tuple(path for path in paths if path.is_file() and path.suffix.lower() in _VIDEO_SUFFIXES)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # pylint: disable=invalid-name
         """Accept only local-file drags; reject URLs and remote sources."""
@@ -168,6 +168,7 @@ class JobEditor(QWidget):
         row = self.inputs.currentRow()
         if row >= 0:
             self.inputs.takeItem(row)
+            self._paths.pop(row)
             self.inputs.setCurrentRow(min(row, self.inputs.count() - 1))
         self._update_input_controls()
 
@@ -180,6 +181,8 @@ class JobEditor(QWidget):
             return False
         item = self.inputs.takeItem(row)
         self.inputs.insertItem(destination, item)
+        path = self._paths.pop(row)
+        self._paths.insert(destination, path)
         self.inputs.setCurrentRow(destination)
         return True
 
@@ -235,6 +238,7 @@ class JobEditor(QWidget):
         """Clear consumed clip intent while retaining useful output preferences."""
 
         self.inputs.clear()
+        self._paths.clear()
         self._update_input_controls()
 
     @Slot()
