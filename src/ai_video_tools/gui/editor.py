@@ -9,15 +9,16 @@ from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Signal, Slot
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFileDialog, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QVBoxLayout, QWidget
 
 from ai_video_tools.core.models import JobRequest
 from ai_video_tools.storage.naming import automatic_output_basename
 from ai_video_tools.system.settings import ApplicationSettings
 
 _VIDEO_SUFFIXES = frozenset({".mov", ".mp4", ".mkv", ".m4v"})
+SOURCE_CLIP_LIST_WIDTH = 623
 
 
 def _local_now() -> datetime:
@@ -42,6 +43,8 @@ class JobEditor(QWidget):
         self.inputs.setObjectName("inputClips")
         self.inputs.setAccessibleName("Ordered input clips")
         self.inputs.setMinimumHeight(100)
+        self.inputs.setMaximumWidth(SOURCE_CLIP_LIST_WIDTH)
+        self.inputs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.add_button = QPushButton("Add Clips…")
         self.add_button.setObjectName("addClipsButton")
@@ -77,10 +80,38 @@ class JobEditor(QWidget):
 
         model_label = QLabel("realesrgan-x4plus — photographic and live-action images")
         model_label.setObjectName("modelLabel")
-        options = QFormLayout()
-        options.addRow("Output directory", output_row)
-        options.addRow("Target height", self.target_height)
-        options.addRow("AI model", model_label)
+        model_label.setWordWrap(True)
+
+        output_group = QGroupBox("Output Directory")
+        output_group.setObjectName("outputDirectoryGroup")
+        output_group_layout = QVBoxLayout(output_group)
+        output_group_layout.addLayout(output_row)
+        target_group = QGroupBox("Target Height")
+        target_group.setObjectName("targetHeightGroup")
+        target_group_layout = QVBoxLayout(target_group)
+        target_group_layout.addWidget(self.target_height)
+        model_group = QGroupBox("AI Model")
+        model_group.setObjectName("aiModelGroup")
+        model_group_layout = QVBoxLayout(model_group)
+        model_group_layout.addWidget(model_label)
+
+        basic_settings = QGroupBox("Basic Settings")
+        basic_settings.setObjectName("basicSettings")
+        basic_settings.setFixedWidth(240)
+        basic_settings_layout = QVBoxLayout(basic_settings)
+        settings_scroll = QScrollArea()
+        settings_scroll.setObjectName("basicSettingsScroll")
+        settings_scroll.setWidgetResizable(True)
+        settings_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        settings_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        settings_content = QWidget()
+        settings_content_layout = QVBoxLayout(settings_content)
+        settings_content_layout.addWidget(output_group)
+        settings_content_layout.addWidget(target_group)
+        settings_content_layout.addWidget(model_group)
+        settings_content_layout.addStretch(1)
+        settings_scroll.setWidget(settings_content)
+        basic_settings_layout.addWidget(settings_scroll)
 
         self.submit_button = QPushButton("Preflight & Queue")
         self.submit_button.setObjectName("submitJobButton")
@@ -89,20 +120,23 @@ class JobEditor(QWidget):
         self.editor_status.setObjectName("editorStatus")
         self.editor_status.setWordWrap(True)
 
-        group = QGroupBox()
-        group_layout = QVBoxLayout()
+        source_group = QGroupBox()
+        source_group.setObjectName("sourceClipListGroup")
+        group_layout = QVBoxLayout(source_group)
         group_layout.setContentsMargins(2, 9, 9, 9)
         group_layout.addWidget(self.inputs)
         group_layout.addLayout(input_controls)
-        group_layout.addLayout(options)
         submit_row = QHBoxLayout()
         submit_row.addWidget(self.editor_status, 1)
         submit_row.addWidget(self.submit_button)
         group_layout.addLayout(submit_row)
-        group.setLayout(group_layout)
         outer = QVBoxLayout()
         outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(group)
+        columns = QHBoxLayout()
+        columns.setContentsMargins(0, 0, 0, 0)
+        columns.addWidget(basic_settings)
+        columns.addWidget(source_group)
+        outer.addLayout(columns)
         self.setLayout(outer)
 
         self.add_button.clicked.connect(self._choose_inputs)

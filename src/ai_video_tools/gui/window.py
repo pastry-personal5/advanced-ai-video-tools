@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QModelIndex, Qt, Slot
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import QAbstractItemView, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QStackedWidget, QTableView, QToolButton, QVBoxLayout, QWidget
 
 from ai_video_tools.core.models import JobState, PipelineStage
@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
         self._last_upscale_message_percent: dict[str, int] = {}
         self._global_shutdown_recorded = False
         self.setWindowTitle("AI Video Tools")
-        self.setMinimumSize(1536, 982)
+        self.setMinimumSize(1400, 880)
 
         self.editor = JobEditor(settings)
         self.source_preview = SourcePreviewPane()
@@ -49,6 +49,7 @@ class MainWindow(QMainWindow):
         self.job_list = QTableView()
         self.job_list.setObjectName("jobList")
         self.job_list.setModel(model)
+        self.job_list.setFixedHeight(240)
         self.job_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.job_list.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.job_list.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -213,6 +214,11 @@ class MainWindow(QMainWindow):
         button.setCheckable(True)
         button.setAutoRaise(True)
         button.setMinimumSize(64, 64)
+        button.setFixedSize(64, 64)
+        font = QFont(button.font())
+        font.setPointSize(max(1, font.pointSize() * 2))
+        button.setFont(font)
+        button.setStyleSheet("QToolButton { border: none; outline: none; background: transparent; color: #e6e6e6; }" + "QToolButton:checked { color: #ff3b30; background: transparent; }" + "QToolButton:hover, QToolButton:pressed { background: transparent; }")
         return button
 
     @Slot(int)

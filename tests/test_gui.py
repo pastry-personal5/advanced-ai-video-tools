@@ -163,8 +163,9 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     window = MainWindow(model, ApplicationSettings(target_height=2160), tmp_path / "application.log")
     window.show()
     qt_app.processEvents()
-    assert window.minimumWidth() == 1536
-    assert window.minimumHeight() == 982
+    assert window.minimumWidth() == 1400
+    assert window.minimumHeight() == 880
+    assert window.job_list.height() == 240
 
     window.job_list.setCurrentIndex(model.index(0, 0))
     qt_app.processEvents()
@@ -278,6 +279,12 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.view_stack.currentIndex() == 0
     assert window.job_creation_button.minimumWidth() == 64
     assert window.job_creation_button.minimumHeight() == 64
+    assert window.job_creation_button.width() == 64
+    assert window.job_creation_button.height() == 64
+    assert "border: none" in window.job_creation_button.styleSheet()
+    assert "#ff3b30" in window.job_creation_button.styleSheet()
+    assert "QToolButton:checked" in window.job_creation_button.styleSheet()
+    assert "background: transparent" in window.job_creation_button.styleSheet()
     assert window.queue_monitoring_button.minimumWidth() == 64
     assert window.queue_monitoring_button.minimumHeight() == 64
     left_gap = window.job_creation_button.geometry().left()
@@ -296,6 +303,7 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.findChild(QLabel, "sourcePreviewSource") is None
     assert window.findChild(QLabel, "sourcePreviewDisclaimer") is None
     assert window.source_preview.minimumWidth() == 600
+    assert window.editor.inputs.width() <= 623
     window.source_preview.preview_error.emit("Preview unavailable; preflight can still inspect this clip.")
     assert "Preview unavailable; preflight can still inspect this clip." in window.global_messages.toPlainText()
     assert window.source_preview.heightForWidth(300) == 400

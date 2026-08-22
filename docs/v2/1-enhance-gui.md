@@ -60,7 +60,7 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 - Phase 1 includes a main-window layout revision as an explicit GUI goal.
 - Keep the source-clip preview in the far-right content column of the application window.
 - The preview pane's default geometry uses a 3:4 width-to-height ratio. Its default height tracks the available application content height after the bottom message area, allowing for the menu/rail, spacing, and window margins. The default width is therefore three quarters of that preview height.
-- Use an initial and minimum main-window size of 1536 × 982 pixels. The window must not shrink below that minimum.
+- Use an initial and minimum main-window size of 1400 × 880 pixels. The window must not shrink below that minimum.
 - Make the integrated message widget's height user-resizable. Do not introduce preview scrolling; the minimum window size is the lower bound for the layout.
 - The pane geometry is a layout default, not a video distortion rule. The currently selected source clip remains the only preview source, and the displayed video preserves the native player's display aspect ratio with no crop or stretch. Unused space inside the pane is acceptable when the source aspect ratio differs from the pane's 3:4 default.
 - Add one integrated message widget along the bottom of the application window. It spans the main content width and remains visible while editing and monitoring jobs.
@@ -158,7 +158,7 @@ Phase 1 must build on these capabilities instead of duplicating them.
 All product decisions affecting the current layout and preview slice are approved.
 Before implementation, only these compact implementation details remain:
 
-- Exact splitter proportions and internal spacing within the fixed 1536 × 982 minimum window.
+- Exact splitter proportions and internal spacing within the fixed 1400 × 880 minimum window.
 
 Retain native Qt focus/accessibility behavior, keep preflight acknowledgement as
 the safety gate, and keep ordinary field validation inline. Do not add
@@ -185,7 +185,7 @@ message actions.
 - [x] Define reusable spacing, status, and icon semantics without introducing an unnecessary theme framework. See [Phase 1 Presentation Architecture](1-enhance-gui-presentation-architecture.md).
 - [x] Preserve Qt ownership, signal/slot thread boundaries, and clean shutdown. See [Phase 1 Presentation Architecture](1-enhance-gui-presentation-architecture.md).
 - [x] Define the main-window content layout with the editor/queue region, the far-right source-preview pane, and the bottom integrated message widget.
-- [x] Define the preview-pane initial geometry as 3:4 width-to-height, derive its width from the post-message-area available height, keep the window at or above 1536 × 982, make message height user-resizable, and avoid preview scrolling.
+- [x] Define the preview-pane initial geometry as 3:4 width-to-height, derive its width from the post-message-area available height, keep the window at or above 1400 × 880, make message height user-resizable, and avoid preview scrolling.
 - [x] Define typed global-message and job-message events, session-only ownership, complete per-tab in-memory history, completion routing, and GUI-thread delivery without changing backend logging or queue semantics.
 - [x] Define the two-view navigation state, icon semantics, state preservation, keyboard traversal, and visibility boundaries for creation versus queue controls.
 
@@ -264,7 +264,7 @@ The specification is ready for the GUI implementation agent. Use one vertical
 slice at a time and keep the checklist and evidence synchronized:
 
 1. Build the presentation shell: centralized identity/metrics, dark-theme
-   tokens, the 1536 × 982 window, left navigation rail, two view surfaces, and
+   tokens, the 1400 × 880 window, left navigation rail, two view surfaces, and
    the persistent message-area splitter.
 2. Build the Job Creation surface: filename-only drop/list editing, the
    Preferences menu path, and the selected-source preview boundary.
@@ -288,7 +288,7 @@ record each completed slice in Implementation evidence with its exact checks.
 - Preview starts muted on first launch, never autoplays audio, and remembers mute/volume only as non-safety preferences.
 - Selection changes stop and asynchronously load the new local source without changing concat order; processing start pauses preview without automatic resume; window shutdown releases the player.
 - URL and remote sources are rejected, and player failures appear inline without bypassing or replacing authoritative preflight errors.
-- The main window opens at 1536 × 982 pixels and cannot be resized below that minimum; the message widget height is user-resizable and the preview does not scroll.
+- The main window opens at 1400 × 880 pixels and cannot be resized below that minimum; the message widget height is user-resizable and the preview does not scroll.
 - Source rows show filenames only, duplicate clips are accepted, and the generated output name appears in the selected job's `Job Messages` tab immediately after job start.
 - Advanced options are available through `Edit` → `Preferences`, and the temporary v2 display identity is `Advanced AI Video Tools`.
 - Playback uses PySide6 `QMediaPlayer` and `QVideoWidget`; the preview presentation layer contains no FFmpeg, FFprobe, Real-ESRGAN, or processing-command integration.
@@ -357,7 +357,7 @@ Record subsequent completed slices here with links to the relevant modules/tests
 
 - Added [the typed session message presenter](../../src/ai_video_tools/gui/messages.py) with local timestamps, complete in-memory global/job history, selection-driven tab activation, and no persistence or message actions.
 - Connected immutable queue snapshots through `JobListModel.snapshot_changed`; global notices consume startup, settings, preflight, tool-validation, shutdown, and completion events while job notices consume queue, stage/progress, lifecycle, and cancellation events.
-- Added a vertical splitter so message height is user-resizable while the existing 1536 × 982 minimum window remains the layout lower bound.
+- Added a vertical splitter so message height is user-resizable while the existing 1400 × 880 minimum window remains the layout lower bound.
 - Added GUI regression coverage in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 182 passed; Black, Pylint, and pycodestyle passed.
 
@@ -422,6 +422,11 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Added a Qt `QLockFile` guard for the GUI process lifetime; a second launch reports that the application is already running and exits before creating the runtime/window.
 - Added regression coverage for exclusive lock ownership in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
+
+### Basic settings layout slice — completed
+
+- Added a left-side `Basic Settings` group with an always-visible vertical scroll area containing separate Output Directory, Target Height, and fixed AI Model groups.
+- Moved the existing settings controls into those groups and removed the former form-row labels; the source clip list remains beside the settings panel and contracts responsively up to its 623 px maximum.
 
 ### Queue table slice — completed
 
