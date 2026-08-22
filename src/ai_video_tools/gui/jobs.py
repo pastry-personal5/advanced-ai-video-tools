@@ -9,7 +9,7 @@ from enum import IntEnum
 from pathlib import Path
 
 from loguru import logger
-from PySide6.QtCore import QAbstractListModel, QByteArray, QModelIndex, QObject, Qt, QThread, Signal, Slot
+from PySide6.QtCore import QAbstractTableModel, QByteArray, QModelIndex, QObject, Qt, QThread, Signal, Slot
 
 from ai_video_tools.core.models import JobState
 from ai_video_tools.services.queue import JobQueue, QueueJobSnapshot
@@ -44,7 +44,7 @@ class QueueSnapshotBridge(QObject):
         self.snapshot_received.emit(snapshot)
 
 
-class JobListModel(QAbstractListModel):
+class JobListModel(QAbstractTableModel):
     """Observable queue state with all mutations confined to the Qt thread."""
 
     # Qt's virtual method names are fixed by its public API.
@@ -83,6 +83,18 @@ class JobListModel(QAbstractListModel):
 
         return 0 if parent.isValid() else len(self._order)
 
+    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
+        """Return the queue table's Status, Job Name, and Remove columns."""
+
+        return 0 if parent.isValid() else 3
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = int(Qt.ItemDataRole.DisplayRole)) -> object | None:
+        """Return accessible textual queue column headers."""
+
+        if orientation is Qt.Orientation.Horizontal and role == int(Qt.ItemDataRole.DisplayRole):
+            return ("Status", "Job Name", "Remove")[section] if 0 <= section < 3 else None
+        return None
+
     def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> object | None:
         """Resolve display and typed queue data for one row."""
 
@@ -93,8 +105,12 @@ class JobListModel(QAbstractListModel):
             return None
         progress = snapshot.last_progress
         if role == int(Qt.ItemDataRole.DisplayRole):
-            source = snapshot.request.inputs[0].name if snapshot.request.inputs else "Untitled job"
-            return f"{source} — {snapshot.state.value.replace('_', ' ').title()}"
+            if index.column() == 0:
+                return snapshot.state.value.replace("_", " ").title()
+            if index.column() == 1:
+                return snapshot.request.generated_output_basename or (snapshot.request.inputs[0].name if snapshot.request.inputs else "Untitled job")
+            if index.column() == 2:
+                return "Remove" if snapshot.state in {JobState.CANCELLED, JobState.FAILED} else ""
         if role == int(JobRole.JOB_ID):
             return snapshot.job_id
         if role == int(JobRole.STATE):
@@ -137,6 +153,19 @@ class JobListModel(QAbstractListModel):
 
         snapshot = self.snapshot_at(index)
         return self._queue.cancel(snapshot.job_id) if snapshot is not None else False
+
+    def remove(self, index: QModelIndex) -> bool:
+        """Remove a failed or cancelled row from session presentation history."""
+
+        snapshot = self.snapshot_at(index)
+        if snapshot is None or snapshot.state not in {JobState.CANCELLED, JobState.FAILED}:
+            return False
+        row = index.row()
+        self.beginRemoveRows(QModelIndex(), row, row)
+        self._snapshots.pop(snapshot.job_id, None)
+        self._order.pop(row)
+        self.endRemoveRows()
+        return True
 
     def move_pending(self, index: QModelIndex, offset: int) -> bool:
         """Move a selected pending record one or more queue positions."""
@@ -182,8 +211,7 @@ class JobListModel(QAbstractListModel):
             self.snapshot_changed.emit(value)
             return
         row = self._order.index(value.job_id)
-        changed = self.index(row, 0)
-        self.dataChanged.emit(changed, changed, list(self.roleNames()))
+        self.dataChanged.emit(self.index(row, 0), self.index(row, self.columnCount() - 1), list(self.roleNames()))
         self.snapshot_changed.emit(value)
 
     def _store_initial(self, snapshot: QueueJobSnapshot) -> None:

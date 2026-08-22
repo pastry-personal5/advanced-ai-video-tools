@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QModelIndex, Qt, Slot
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QLabel, QListView, QMainWindow, QProgressBar, QPushButton, QSplitter, QStackedWidget, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QStackedWidget, QTableView, QToolButton, QVBoxLayout, QWidget
 
 from ai_video_tools.core.models import JobState
 from ai_video_tools.gui.editor import JobEditor
@@ -45,10 +45,16 @@ class MainWindow(QMainWindow):
         self.preferences_action.setObjectName("preferencesAction")
         self.preferences_action.setEnabled(tool_validator is not None and settings_store is not None)
         edit_menu.addAction(self.preferences_action)
-        self.job_list = QListView()
+        self.job_list = QTableView()
         self.job_list.setObjectName("jobList")
         self.job_list.setModel(model)
         self.job_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.job_list.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.job_list.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.job_list.horizontalHeader().setStretchLastSection(False)
+        self.job_list.setColumnWidth(0, 180)
+        self.job_list.setColumnWidth(1, 520)
+        self.job_list.setColumnWidth(2, 120)
         self.job_list.setAlternatingRowColors(True)
         self.job_list.setAccessibleName("Processing jobs")
         self.status_label = QLabel("No jobs have been submitted.")
@@ -130,6 +136,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(splitter)
 
         self.job_list.selectionModel().currentChanged.connect(self._selection_changed)
+        self.job_list.clicked.connect(self._queue_cell_clicked)
         model.dataChanged.connect(self._model_changed)
         model.rowsInserted.connect(self._rows_inserted)
         model.modelReset.connect(self._refresh_selection)
@@ -232,6 +239,13 @@ class MainWindow(QMainWindow):
     @Slot(QModelIndex, QModelIndex)
     def _selection_changed(self, _current: QModelIndex, _previous: QModelIndex) -> None:
         self._refresh_selection()
+
+    @Slot(QModelIndex)
+    def _queue_cell_clicked(self, index: QModelIndex) -> None:
+        """Handle the terminal-row Remove action in the queue table."""
+
+        if index.column() == 2:
+            self._model.remove(index)
 
     @Slot(QModelIndex, QModelIndex, list)
     def _model_changed(self, _first: QModelIndex, _last: QModelIndex, _roles: list[int]) -> None:

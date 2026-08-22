@@ -223,7 +223,7 @@ message actions.
 ### 4. Queue and job details
 
 - [ ] Implement concise, accessible job-row presentation.
-- [ ] Present the queue in a multi-column widget with textual `Status` first, `Job Name` second, and `Remove` actions for cancelled/failed rows.
+- [x] Present the queue in a multi-column widget with textual `Status` first, `Job Name` second, and `Remove` actions for cancelled/failed rows.
 - [ ] Add the approved selected-job details surface.
 - [ ] Distinguish measured determinate progress from indeterminate work.
 - [ ] Make legal actions obvious for each job state and guard illegal transitions.
@@ -421,6 +421,13 @@ Record subsequent completed slices here with links to the relevant modules/tests
 
 - Added a Qt `QLockFile` guard for the GUI process lifetime; a second launch reports that the application is already running and exits before creating the runtime/window.
 - Added regression coverage for exclusive lock ownership in `tests/test_gui.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
+
+### Queue table slice — completed
+
+- Replaced the queue list with a three-column table: textual `Status`, `Job Name`, and terminal-row `Remove` action.
+- Preserved typed queue snapshots, row selection, progress/details, reorder, cancellation, and backend queue ownership; Remove only clears failed/cancelled rows from session presentation.
+- Added regression coverage for the queue headers and table presentation in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
 
 ## Risks

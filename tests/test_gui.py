@@ -118,6 +118,9 @@ def test_bridge_mutates_model_on_qt_thread_and_rejects_stale_revisions(qt_app: Q
     assert model.data(index, int(JobRole.PROGRESS_COMPLETED)) == 4
     assert model.data(index, int(JobRole.PROGRESS_TOTAL)) == 10
     assert model.data(index, int(JobRole.OUTPUT_PATH)) == str(tmp_path / "alpha.mp4")
+    assert model.headerData(0, Qt.Orientation.Horizontal) == "Status"
+    assert model.headerData(1, Qt.Orientation.Horizontal) == "Job Name"
+    assert model.headerData(2, Qt.Orientation.Horizontal) == "Remove"
 
     bridge.forward(_snapshot(tmp_path, "alpha", JobState.QUEUED, 0, revision=1))
     qt_app.processEvents()
