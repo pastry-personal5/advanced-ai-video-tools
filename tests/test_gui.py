@@ -215,6 +215,10 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert "Add clips in order they should be concatenated." in window.global_messages.toPlainText()
     assert window.message_tabs.currentIndex() == 0
     assert window.view_stack.currentIndex() == 0
+    assert window.job_creation_button.minimumWidth() == 64
+    assert window.job_creation_button.minimumHeight() == 64
+    assert window.queue_monitoring_button.minimumWidth() == 64
+    assert window.queue_monitoring_button.minimumHeight() == 64
     window.queue_monitoring_button.click()
     assert window.view_stack.currentIndex() == 1
     assert not window.job_creation_button.isChecked()

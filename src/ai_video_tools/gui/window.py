@@ -171,6 +171,7 @@ class MainWindow(QMainWindow):
         button.setToolTip(label)
         button.setCheckable(True)
         button.setAutoRaise(True)
+        button.setMinimumSize(64, 64)
         return button
 
     @Slot(int)
