@@ -250,7 +250,7 @@ message actions.
 - [ ] Test dark-theme rendering, Codex-created icon accessibility, file-manager drag-and-drop, and URL/remote-drop rejection.
 - [ ] Test player load, decode, and unsupported-format failures as non-blocking preview states without proxy generation.
 - [ ] Test native preview-as-is rotation behavior, custom target height without presets, Preferences-menu settings access, and removal of the main-window External Tools button.
-- [ ] Test queue Status/Job Name columns, completion messages in `Global Messages`, and five-line tails in both message tabs.
+- [x] Test queue Status/Job Name columns, completion messages in `Global Messages`, and five-line tails in both message tabs.
 - [ ] Test that retry actions are absent for failed and cancelled jobs.
 - [ ] Test width-driven resizing, exact aspect preservation, and native preview rotation behavior.
 - [ ] Add regression tests for thread affinity, state transitions, and frozen job intent.
@@ -461,6 +461,13 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Added an accessible `Available actions` summary that reflects the selected job state and the guarded Cancel, reorder, and Remove controls.
 - Illegal actions remain disabled and backend transition guards are unchanged.
 - Added regression coverage for running-job action presentation.
+
+### Upscale message summaries slice — completed
+
+- Converted typed `UPSCALE` progress events into concise job-message summaries with frame counts and integer percentages.
+- Emit summaries at 10-percent intervals and at completion so the five-line `Job Messages` tail remains readable while a job runs; progress remains presentation-only on the GUI thread.
+- Added regression coverage proving repeated progress events are throttled to `0%`, `10%`, `20%`, and `100%` summaries.
+- The upscale service observes frame outputs on its worker-side monitor and emits typed progress events; no probing or polling work runs on the GUI thread.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
 
 ### Preflight issue grouping slice — completed

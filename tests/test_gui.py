@@ -188,6 +188,28 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     window.close()
 
 
+def test_upscale_messages_are_throttled_to_progress_summaries(qt_app: QApplication, tmp_path: Path) -> None:
+    """Upscale progress is summarized without flooding the five-line job tail."""
+
+    del qt_app
+    queue = FakeQueue()
+    bridge = QueueSnapshotBridge()
+    model = JobListModel(queue, bridge)  # type: ignore[arg-type]
+    window = MainWindow(model, ApplicationSettings(target_height=2160))
+    for revision, completed in enumerate((0, 1, 9, 10, 11, 20, 100), start=1):
+        progress = ProgressEvent(PipelineStage.UPSCALE, completed, 100, f"Processed {completed} frames")
+        window._queue_snapshot_changed(_snapshot(tmp_path, "upscale", JobState.RUNNING, None, revision=revision, progress=progress))  # pylint: disable=protected-access
+
+    lines = window.message_widget.history.job_lines("upscale")
+    progress_lines = [line for line in lines if "Upscale progress:" in line]
+    assert len(progress_lines) == 4
+    assert progress_lines[0].endswith("0% (0/100 frames).")
+    assert progress_lines[1].endswith("10% (10/100 frames).")
+    assert progress_lines[2].endswith("20% (20/100 frames).")
+    assert progress_lines[3].endswith("100% (100/100 frames).")
+    window.close()
+
+
 def test_message_history_keeps_five_timestamped_lines_and_job_selection(qt_app: QApplication) -> None:
     """Message presentation is session-only, bounded, and selection-driven."""
 

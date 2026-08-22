@@ -34,6 +34,7 @@ class MainWindow(QMainWindow):
         self._tool_validator = tool_validator
         self._settings_store = settings_store
         self._last_snapshots: dict[str, object] = {}
+        self._last_upscale_message_percent: dict[str, int] = {}
         self._global_shutdown_recorded = False
         self.setWindowTitle("AI Video Tools")
         self.setMinimumSize(1536, 1024)
@@ -240,6 +241,22 @@ class MainWindow(QMainWindow):
     def _append_job(self, job_id: str, text: str) -> None:
         self.message_widget.append(MessageEvent(text, job_id))
 
+    def _append_upscale_progress(self, job_id: str, progress: object) -> None:
+        """Append a concise upscale summary at 10-percent intervals."""
+
+        total = getattr(progress, "total", None)
+        completed = max(0, int(getattr(progress, "completed", 0)))
+        if total is None or int(total) <= 0:
+            return
+        total = int(total)
+        percent = min(100, completed * 100 // total)
+        previous_percent = self._last_upscale_message_percent.get(job_id, -10)
+        if percent < previous_percent:
+            previous_percent = -10
+        if percent == 100 or percent >= previous_percent + 10:
+            self._append_job(job_id, f"Upscale progress: {percent}% ({completed}/{total} frames).")
+            self._last_upscale_message_percent[job_id] = percent
+
     @Slot(object)
     def _queue_snapshot_changed(self, snapshot: object) -> None:
         job_id = getattr(snapshot, "job_id", None)
@@ -255,7 +272,10 @@ class MainWindow(QMainWindow):
             self._append_job(job_id, f"Job {state.value.replace('_', ' ')}.")
         previous_progress = getattr(previous, "last_progress", None)
         if progress is not None and (previous_progress is None or (progress.stage, progress.message) != (previous_progress.stage, previous_progress.message)):
-            self._append_job(job_id, f"{progress.stage.value}: {progress.message}")
+            if progress.stage is PipelineStage.UPSCALE:
+                self._append_upscale_progress(job_id, progress)
+            else:
+                self._append_job(job_id, f"{progress.stage.value}: {progress.message}")
         if state is JobState.COMPLETED and getattr(previous, "state", None) is not JobState.COMPLETED:
             name = snapshot.request.generated_output_basename or snapshot.request.explicit_output_path or job_id
             self._append_global(f"Job completed: {name}.")

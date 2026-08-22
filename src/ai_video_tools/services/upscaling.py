@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event, Thread
 
 from ai_video_tools.core.models import JobPlan, PipelineStage, ProgressEvent, Toolchain
 from ai_video_tools.services.frame_extraction import FrameExtractionResult
@@ -15,6 +16,7 @@ from ai_video_tools.video.frames import FRAME_FILENAME_TEMPLATE, FrameInventoryE
 
 ProgressCallback = Callable[[ProgressEvent], None]
 DEFAULT_UPSCALE_TIMEOUT_SECONDS = 24 * 60 * 60
+UPSCALE_PROGRESS_POLL_SECONDS = 0.1
 
 
 @dataclass(frozen=True)
@@ -99,6 +101,27 @@ class UpscalingExecutor:
         self._verifier.verify(plan.input_directory, plan.input_width, plan.input_height, plan.expected_frame_count)
         return plan
 
+    @staticmethod
+    def _count_output_frames(directory: Path) -> int:
+        """Count Real-ESRGAN frame-shaped outputs without validating partial files."""
+
+        try:
+            return sum(1 for entry in directory.iterdir() if entry.name.startswith("frame-") and entry.suffix == ".png")
+        except OSError:
+            return 0
+
+    def _monitor_output_progress(self, directory: Path, total: int, callback: ProgressCallback, stop: Event) -> None:
+        """Report observed output-frame counts while the child process runs."""
+
+        observed = 0
+        while not stop.wait(UPSCALE_PROGRESS_POLL_SECONDS):
+            count = min(total, self._count_output_frames(directory))
+            if count > observed:
+                observed = count
+                self._emit(callback, count, total, f"Upscaling frame {count} of {total}")
+
+    # The bounded retry/error branches mirror the pipeline's explicit stage contract.
+    # pylint: disable=too-many-branches,too-many-statements
     def execute(self, extracted: FrameExtractionResult, job: JobPlan, toolchain: Toolchain, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None) -> UpscalingResult:
         """Skip or upscale once, retrying only recognized Vulkan-memory failures."""
 
@@ -124,7 +147,16 @@ class UpscalingExecutor:
             try:
                 self._workspace_manager.recreate_direct_child(workspace, plan.output_directory.name)
                 self._emit(progress, 0, plan.expected_frame_count, f"Upscaling {plan.expected_frame_count} frames with {tile_label} (attempt {attempt_number} of {len(tile_sizes)})")
-                result = self._process_runner.run(command, token, self._command_timeout_seconds)
+                monitor_stop = Event()
+                monitor = Thread(target=self._monitor_output_progress, args=(plan.output_directory, plan.expected_frame_count, progress, monitor_stop), daemon=True) if progress is not None else None
+                if monitor is not None:
+                    monitor.start()
+                try:
+                    result = self._process_runner.run(command, token, self._command_timeout_seconds)
+                finally:
+                    monitor_stop.set()
+                    if monitor is not None:
+                        monitor.join()
                 if token.cancelled:
                     raise ProcessCancelled("upscaling cancelled", command, result.stdout_tail, result.stderr_tail)
                 attempts.append(self._attempt(tile_size, command, result))
