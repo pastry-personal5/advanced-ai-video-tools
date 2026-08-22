@@ -12,6 +12,7 @@ Read:
 
 - [README.md](README.md) for product scope and intended commands
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the processing pipeline and system boundaries
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for detailed engineering and runtime practices
 - [AGENTS.md](AGENTS.md) for repository-wide implementation rules
 
 Check the repository before choosing a framework, dependency, entry point, or command. The typed core, preflight and processing CLI commands, compatibility analysis, safe media command builders, owned-workspace manager, cancellable process runner, composable preparation/extraction/upscaling/finalization services, strict Real-ESRGAN adapter, output verification, atomic publisher, full-job orchestration, single-worker FIFO queue, PySide6 queue shell, reviewed GUI job-submission workflow, and asynchronously validated external-tool settings editor exist.
