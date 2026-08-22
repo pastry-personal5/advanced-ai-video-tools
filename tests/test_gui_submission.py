@@ -18,7 +18,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QThread, QUrl, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QListWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.editor import JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
@@ -231,6 +231,7 @@ def test_stream_drop_review_requires_checkbox_and_unrelated_errors_cannot_queue(
     stream_issue = PreflightIssue(IssueSeverity.ERROR, IssueCode.STREAM_ACKNOWLEDGEMENT, "One subtitle will be dropped.", tmp_path / "clip.mov")
     stream_dialog = PreflightDialog(PreflightReport((stream_issue,), None, None))
     assert not stream_dialog.queue_button.isEnabled()
+    assert stream_dialog.findChild(QListWidget, "preflightIssues").item(0).text() == "Blocking issues"
     stream_dialog.acknowledge.setChecked(True)
     assert stream_dialog.queue_button.isEnabled()
 

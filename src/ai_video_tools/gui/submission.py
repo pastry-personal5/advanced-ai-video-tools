@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from loguru import logger
-from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtCore import QObject, Qt, Signal, Slot
 from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QLabel, QListWidget, QListWidgetItem, QMessageBox, QVBoxLayout, QWidget
 
 from ai_video_tools.core.models import IssueCode, IssueSeverity, JobRequest, PreflightReport, ProgressEvent
@@ -45,10 +45,22 @@ class PreflightDialog(QDialog):
         issues.setObjectName("preflightIssues")
         if not report.issues:
             issues.addItem("READY — no warnings")
-        for issue in report.issues:
-            location = f" — {issue.path}" if issue.path is not None else ""
-            item = QListWidgetItem(f"{issue.severity.value.upper()} [{issue.code.value}] {issue.message}{location}")
-            issues.addItem(item)
+        else:
+            blocking = tuple(issue for issue in report.issues if issue.severity is IssueSeverity.ERROR)
+            warnings = tuple(issue for issue in report.issues if issue.severity is IssueSeverity.WARNING)
+            for heading_text, grouped in (("Blocking issues", blocking), ("Warnings", warnings)):
+                if not grouped:
+                    continue
+                heading_item = QListWidgetItem(heading_text)
+                heading_item.setFlags(Qt.ItemFlag.NoItemFlags)
+                font = heading_item.font()
+                font.setBold(True)
+                heading_item.setFont(font)
+                issues.addItem(heading_item)
+                for issue in grouped:
+                    location = f" — {issue.path}" if issue.path is not None else ""
+                    item = QListWidgetItem(f"{issue.severity.value.upper()} [{issue.code.value}] {issue.message}{location}")
+                    issues.addItem(item)
 
         self.acknowledge = QCheckBox("I understand that the listed unsupported secondary streams and chapters will be dropped for this job.")
         self.acknowledge.setObjectName("acknowledgeDroppedStreams")

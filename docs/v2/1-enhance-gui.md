@@ -222,16 +222,16 @@ message actions.
 
 ### 4. Queue and job details
 
-- [ ] Implement concise, accessible job-row presentation.
+- [x] Implement concise, accessible job-row presentation.
 - [x] Present the queue in a multi-column widget with textual `Status` first, `Job Name` second, and `Remove` actions for cancelled/failed rows.
-- [ ] Add the approved selected-job details surface.
-- [ ] Distinguish measured determinate progress from indeterminate work.
-- [ ] Make legal actions obvious for each job state and guard illegal transitions.
+- [x] Add the approved selected-job details surface.
+- [x] Distinguish measured determinate progress from indeterminate work.
+- [x] Make legal actions obvious for each job state and guard illegal transitions.
 - [ ] Implement the approved session-history policy and omit retry support in v2.
 
 ### 5. Preflight, settings, and diagnostics
 
-- [ ] Improve issue grouping and inline presentation without adding severity controls or weakening acknowledgement gates.
+- [x] Improve issue grouping and inline presentation without adding severity controls or weakening acknowledgement gates.
 - [ ] Improve external-tool validation status and resolved-tool feedback.
 - [x] Add `Edit` → `Preferences` as a separate settings window for External Tools and remove the main-window `External Tools…` button.
 - [x] Append completed-job messages to `Global Messages` and show the latest five lines in each message tab's read-only log-tail widget.
@@ -428,6 +428,45 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Replaced the queue list with a three-column table: textual `Status`, `Job Name`, and terminal-row `Remove` action.
 - Preserved typed queue snapshots, row selection, progress/details, reorder, cancellation, and backend queue ownership; Remove only clears failed/cancelled rows from session presentation.
 - Added regression coverage for the queue headers and table presentation in `tests/test_gui.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
+
+### Queue progress slice — completed
+
+- Added a separate whole-job progress bar alongside the existing measured stage progress bar in Queue Monitoring.
+- Whole-job progress is presentation-derived from the typed pipeline stage and measured stage fraction; backend progress emission and queue ownership are unchanged.
+- Added GUI regression coverage for both progress surfaces.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
+
+### Progress-state clarity slice — completed
+
+- Stage progress now explicitly renders measured `Stage: completed/total` values or `Stage: … (measuring…)` for indeterminate work, with accessible names for both stage and whole-job controls.
+- Added regression coverage for determinate stage formatting.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
+
+### Selected-job details slice — completed
+
+- Added a dedicated `Selected Job` details surface showing job name, status, stage, current message, and output path alongside the stage and whole-job progress controls.
+- The details surface updates from immutable queue snapshots and shows `No job selected` when the queue table has no active selection.
+- Added regression coverage for selected-job details in `tests/test_gui.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
+
+### Accessible queue rows slice — completed
+
+- Added concise accessible row text and contextual cell tooltips for queue status, job name, and terminal Remove actions.
+- Added regression coverage for queue accessibility text and tooltips in `tests/test_gui.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
+
+### Queue action clarity slice — completed
+
+- Added an accessible `Available actions` summary that reflects the selected job state and the guarded Cancel, reorder, and Remove controls.
+- Illegal actions remain disabled and backend transition guards are unchanged.
+- Added regression coverage for running-job action presentation.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
+
+### Preflight issue grouping slice — completed
+
+- Grouped typed preflight findings under non-interactive `Blocking issues` and `Warnings` headings while retaining native severity text and the dropped-stream acknowledgement gate.
+- Added regression coverage for grouped blocking findings in `tests/test_gui_submission.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
 
 ## Risks

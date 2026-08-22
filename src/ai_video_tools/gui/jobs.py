@@ -104,11 +104,23 @@ class JobListModel(QAbstractTableModel):
         if snapshot is None:
             return None
         progress = snapshot.last_progress
+        job_name = snapshot.request.generated_output_basename or (snapshot.request.inputs[0].name if snapshot.request.inputs else "Untitled job")
+        state_text = snapshot.state.value.replace("_", " ").title()
+        if role == int(Qt.ItemDataRole.AccessibleTextRole):
+            return f"Status: {state_text}; Job Name: {job_name}"
+        if role == int(Qt.ItemDataRole.ToolTipRole):
+            if index.column() == 0:
+                return f"Job status: {state_text}"
+            if index.column() == 1:
+                return f"Job name: {job_name}"
+            if index.column() == 2 and snapshot.state in {JobState.CANCELLED, JobState.FAILED}:
+                return "Remove this terminal job from session history"
+            return None
         if role == int(Qt.ItemDataRole.DisplayRole):
             if index.column() == 0:
-                return snapshot.state.value.replace("_", " ").title()
+                return state_text
             if index.column() == 1:
-                return snapshot.request.generated_output_basename or (snapshot.request.inputs[0].name if snapshot.request.inputs else "Untitled job")
+                return job_name
             if index.column() == 2:
                 return "Remove" if snapshot.state in {JobState.CANCELLED, JobState.FAILED} else ""
         if role == int(JobRole.JOB_ID):

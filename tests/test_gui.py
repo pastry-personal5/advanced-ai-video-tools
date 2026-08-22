@@ -121,6 +121,8 @@ def test_bridge_mutates_model_on_qt_thread_and_rejects_stale_revisions(qt_app: Q
     assert model.headerData(0, Qt.Orientation.Horizontal) == "Status"
     assert model.headerData(1, Qt.Orientation.Horizontal) == "Job Name"
     assert model.headerData(2, Qt.Orientation.Horizontal) == "Remove"
+    assert "Status: Running" in str(model.data(index, int(Qt.ItemDataRole.AccessibleTextRole)))
+    assert model.data(model.index(0, 1), int(Qt.ItemDataRole.ToolTipRole)) == "Job name: alpha.mov"
 
     bridge.forward(_snapshot(tmp_path, "alpha", JobState.QUEUED, 0, revision=1))
     qt_app.processEvents()
@@ -167,9 +169,16 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     window.job_list.setCurrentIndex(model.index(0, 0))
     qt_app.processEvents()
     assert window.status_label.text() == "Encoding output"
+    assert window.job_name_value.text() == "first.mov"
+    assert window.job_state_value.text() == "Running"
+    assert window.job_stage_value.text() == "encode"
     assert window.progress.maximum() == 8
     assert window.progress.value() == 3
+    assert window.progress.format() == "Stage: 3/8"
+    assert window.overall_progress.value() > 0
+    assert window.overall_progress.format().startswith("Whole job:")
     assert window.cancel_button.isEnabled()
+    assert "Cancel Job" in window.action_summary.text()
     window.cancel_button.click()
     assert queue.cancelled == ["first"]
 

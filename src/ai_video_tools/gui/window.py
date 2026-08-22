@@ -9,9 +9,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QModelIndex, Qt, Slot
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QStackedWidget, QTableView, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QStackedWidget, QTableView, QToolButton, QVBoxLayout, QWidget
 
-from ai_video_tools.core.models import JobState
+from ai_video_tools.core.models import JobState, PipelineStage
 from ai_video_tools.gui.editor import JobEditor
 from ai_video_tools.gui.jobs import JobListModel, JobRole
 from ai_video_tools.gui.messages import MessageEvent, MessageWidget
@@ -66,18 +66,42 @@ class MainWindow(QMainWindow):
         self.output_label.setWordWrap(True)
         self.progress = QProgressBar()
         self.progress.setObjectName("jobProgress")
+        self.progress.setAccessibleName("Stage progress")
         self.progress.setRange(0, 1)
         self.progress.setTextVisible(True)
+        self.overall_progress = QProgressBar()
+        self.overall_progress.setObjectName("wholeJobProgress")
+        self.overall_progress.setAccessibleName("Whole job progress")
+        self.overall_progress.setRange(0, 100)
+        self.overall_progress.setValue(0)
+        self.overall_progress.setFormat("Whole job: 0%")
         self.move_up_button = QPushButton("Move Up")
         self.move_up_button.setObjectName("moveUpButton")
         self.move_down_button = QPushButton("Move Down")
         self.move_down_button.setObjectName("moveDownButton")
         self.cancel_button = QPushButton("Cancel Job")
         self.cancel_button.setObjectName("cancelButton")
+        self.action_summary = QLabel("No actions available")
+        self.action_summary.setObjectName("jobActionSummary")
+        self.action_summary.setWordWrap(True)
         log_label = QLabel(f"Diagnostics: {log_path}" if log_path is not None else "Diagnostics log is not configured")
         log_label.setObjectName("logPathLabel")
         log_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         log_label.setWordWrap(True)
+        details = QGroupBox("Selected Job")
+        details.setObjectName("selectedJobDetails")
+        details_layout = QFormLayout(details)
+        self.job_name_value = QLabel("No job selected")
+        self.job_name_value.setObjectName("selectedJobName")
+        self.job_state_value = QLabel("No job selected")
+        self.job_state_value.setObjectName("selectedJobStatus")
+        self.job_stage_value = QLabel("No job selected")
+        self.job_stage_value.setObjectName("selectedJobStage")
+        details_layout.addRow("Job Name", self.job_name_value)
+        details_layout.addRow("Status", self.job_state_value)
+        details_layout.addRow("Stage", self.job_stage_value)
+        details_layout.addRow("Message", self.status_label)
+        details_layout.addRow("Output", self.output_label)
 
         creation_page = QWidget()
         creation_layout = QVBoxLayout(creation_page)
@@ -88,8 +112,8 @@ class MainWindow(QMainWindow):
         monitoring_page = QWidget()
         monitoring_layout = QVBoxLayout(monitoring_page)
         monitoring_layout.addWidget(self.job_list, 1)
-        monitoring_layout.addWidget(self.status_label)
-        monitoring_layout.addWidget(self.output_label)
+        monitoring_layout.addWidget(details)
+        monitoring_layout.addWidget(self.overall_progress)
         monitoring_layout.addWidget(self.progress)
         controls = QHBoxLayout()
         controls.addWidget(self.move_up_button)
@@ -97,6 +121,7 @@ class MainWindow(QMainWindow):
         controls.addStretch(1)
         controls.addWidget(self.cancel_button)
         monitoring_layout.addLayout(controls)
+        monitoring_layout.addWidget(self.action_summary)
         monitoring_layout.addWidget(log_label)
 
         self.view_stack = QStackedWidget()
@@ -259,34 +284,67 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _refresh_selection(self) -> None:
+        # Selection binding intentionally updates the complete details surface together.
+        # pylint: disable=too-many-statements
         index = self.job_list.currentIndex()
         if not index.isValid():
             self.status_label.setText("No jobs have been submitted.")
             self.output_label.clear()
             self.progress.setRange(0, 1)
             self.progress.setValue(0)
-            self.progress.setFormat("No job selected")
+            self.progress.setFormat("Stage: no job selected")
+            self.overall_progress.setValue(0)
+            self.overall_progress.setFormat("Whole job: 0%")
             self.cancel_button.setEnabled(False)
             self.move_up_button.setEnabled(False)
             self.move_down_button.setEnabled(False)
+            self.action_summary.setText("No actions available")
+            self.job_name_value.setText("No job selected")
+            self.job_state_value.setText("No job selected")
+            self.job_stage_value.setText("No job selected")
             self.message_widget.select_job(None)
             return
         message = self._model.data(index, int(JobRole.ERROR)) or self._model.data(index, int(JobRole.MESSAGE))
         self.status_label.setText(str(message))
-        self.output_label.setText(f"Output: {self._model.data(index, int(JobRole.OUTPUT_PATH))}")
+        self.output_label.setText(str(self._model.data(index, int(JobRole.OUTPUT_PATH))))
+        self.job_name_value.setText(str(self._model.data(self._model.index(index.row(), 1), int(Qt.ItemDataRole.DisplayRole))))
+        self.job_state_value.setText(str(self._model.data(index, int(JobRole.STATE))).replace("_", " ").title())
+        self.job_stage_value.setText(str(self._model.data(index, int(JobRole.STAGE)) or "Waiting"))
         completed = int(self._model.data(index, int(JobRole.PROGRESS_COMPLETED)) or 0)
         total = self._model.data(index, int(JobRole.PROGRESS_TOTAL))
+        state = self._model.data(index, int(JobRole.STATE))
+        stage = self._model.data(index, int(JobRole.STAGE))
+        if state == JobState.COMPLETED.value:
+            whole_percent = 100
+        elif stage is None:
+            whole_percent = 0
+        else:
+            stage_index = tuple(item.value for item in PipelineStage).index(str(stage))
+            stage_fraction = completed / max(1, int(total)) if total is not None else 0.0
+            whole_percent = min(99, int(((stage_index + stage_fraction) / len(PipelineStage)) * 100))
+        self.overall_progress.setValue(whole_percent)
+        self.overall_progress.setFormat(f"Whole job: {whole_percent}%")
         if total is None:
             self.progress.setRange(0, 0)
-            self.progress.setFormat(str(self._model.data(index, int(JobRole.STAGE)) or "Working"))
+            self.progress.setFormat(f"Stage: {stage or 'Working'} (measuring…)")
         else:
             self.progress.setRange(0, max(1, int(total)))
             self.progress.setValue(completed)
-            self.progress.setFormat(f"{completed}/{total}")
+            self.progress.setFormat(f"Stage: {completed}/{total}")
         self.cancel_button.setEnabled(bool(self._model.data(index, int(JobRole.CAN_CANCEL))))
         position = self._model.data(index, int(JobRole.QUEUE_POSITION))
         self.move_up_button.setEnabled(position is not None and int(position) > 0)
         self.move_down_button.setEnabled(position is not None and int(position) + 1 < self._model.pending_count)
+        actions: list[str] = []
+        if self.cancel_button.isEnabled():
+            actions.append("Cancel Job")
+        if self.move_up_button.isEnabled():
+            actions.append("Move Up")
+        if self.move_down_button.isEnabled():
+            actions.append("Move Down")
+        if str(self._model.data(index, int(JobRole.STATE))) in {JobState.CANCELLED.value, JobState.FAILED.value}:
+            actions.append("Remove")
+        self.action_summary.setText(f"Available actions: {', '.join(actions)}" if actions else "No actions available")
         self.message_widget.select_job(str(self._model.data(index, int(JobRole.JOB_ID))))
 
     @Slot()
