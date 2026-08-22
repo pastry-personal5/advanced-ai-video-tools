@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
         self._last_upscale_message_percent: dict[str, int] = {}
         self._global_shutdown_recorded = False
         self.setWindowTitle("AI Video Tools")
-        self.setMinimumSize(1536, 1024)
+        self.setMinimumSize(1536, 982)
 
         self.editor = JobEditor(settings)
         self.source_preview = SourcePreviewPane()
@@ -106,6 +106,7 @@ class MainWindow(QMainWindow):
 
         creation_page = QWidget()
         creation_layout = QVBoxLayout(creation_page)
+        creation_layout.setContentsMargins(0, 9, 9, 9)
         creation_content = QHBoxLayout()
         creation_content.addWidget(self.editor, 1)
         creation_content.addWidget(self.source_preview)
@@ -134,8 +135,13 @@ class MainWindow(QMainWindow):
         rail_layout = QVBoxLayout(self.navigation_rail)
         self.job_creation_button = self._navigation_button("✎", "Job Creation", "jobCreationButton")
         self.queue_monitoring_button = self._navigation_button("☷", "Queue Monitoring", "queueMonitoringButton")
-        rail_layout.addWidget(self.job_creation_button)
-        rail_layout.addWidget(self.queue_monitoring_button)
+        left_button_space = self.job_creation_button.minimumWidth() // 8
+        right_button_space = 9
+        rail_layout.setContentsMargins(left_button_space, 9, right_button_space, 0)
+        rail_width = self.job_creation_button.minimumWidth() + left_button_space + right_button_space
+        self.navigation_rail.setFixedWidth(rail_width)
+        rail_layout.addWidget(self.job_creation_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        rail_layout.addWidget(self.queue_monitoring_button, alignment=Qt.AlignmentFlag.AlignHCenter)
         rail_layout.addStretch(1)
         self.job_creation_button.clicked.connect(lambda: self._switch_view(0))
         self.queue_monitoring_button.clicked.connect(lambda: self._switch_view(1))
@@ -144,6 +150,7 @@ class MainWindow(QMainWindow):
         content = QWidget()
         content_layout = QHBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
         content_layout.addWidget(self.navigation_rail)
         content_layout.addWidget(self.view_stack, 1)
 

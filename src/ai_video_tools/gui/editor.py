@@ -91,6 +91,7 @@ class JobEditor(QWidget):
 
         group = QGroupBox()
         group_layout = QVBoxLayout()
+        group_layout.setContentsMargins(2, 9, 9, 9)
         group_layout.addWidget(self.inputs)
         group_layout.addLayout(input_controls)
         group_layout.addLayout(options)

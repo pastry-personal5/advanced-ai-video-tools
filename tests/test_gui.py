@@ -164,7 +164,7 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     window.show()
     qt_app.processEvents()
     assert window.minimumWidth() == 1536
-    assert window.minimumHeight() == 1024
+    assert window.minimumHeight() == 982
 
     window.job_list.setCurrentIndex(model.index(0, 0))
     qt_app.processEvents()
@@ -191,11 +191,12 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
 def test_upscale_messages_are_throttled_to_progress_summaries(qt_app: QApplication, tmp_path: Path) -> None:
     """Upscale progress is summarized without flooding the job history."""
 
-    del qt_app
     queue = FakeQueue()
     bridge = QueueSnapshotBridge()
     model = JobListModel(queue, bridge)  # type: ignore[arg-type]
     window = MainWindow(model, ApplicationSettings(target_height=2160))
+    window.show()
+    qt_app.processEvents()
     for revision, completed in enumerate((0, 1, 9, 10, 11, 20, 100), start=1):
         progress = ProgressEvent(PipelineStage.UPSCALE, completed, 100, f"Processed {completed} frames")
         window._queue_snapshot_changed(_snapshot(tmp_path, "upscale", JobState.RUNNING, None, revision=revision, progress=progress))  # pylint: disable=protected-access
@@ -239,14 +240,15 @@ def test_message_history_keeps_timestamped_lines_and_job_selection(qt_app: QAppl
     assert widget.global_messages.isReadOnly()
 
 
-def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_app: QApplication, tmp_path: Path) -> None:
+def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_app: QApplication, tmp_path: Path) -> None:  # pylint: disable=too-many-statements
     """The integrated panel stays in the window and consumes queue snapshots."""
 
-    del qt_app
     queue = FakeQueue()
     bridge = QueueSnapshotBridge()
     model = JobListModel(queue, bridge)  # type: ignore[arg-type]
     window = MainWindow(model, ApplicationSettings(target_height=2160))
+    window.show()
+    qt_app.processEvents()
     assert window.findChild(QSplitter, "mainContentSplitter") is not None
     assert window.findChild(QPushButton, "externalToolsButton") is None
     assert window.preferences_action.text() == "Preferences"
@@ -259,6 +261,12 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.job_creation_button.minimumHeight() == 64
     assert window.queue_monitoring_button.minimumWidth() == 64
     assert window.queue_monitoring_button.minimumHeight() == 64
+    left_gap = window.job_creation_button.geometry().left()
+    right_gap = window.navigation_rail.width() - window.job_creation_button.geometry().right() - 1
+    assert left_gap == 8
+    assert right_gap == 9
+    assert window.view_stack.geometry().left() - window.navigation_rail.geometry().right() - 1 == 0
+    assert window.view_stack.geometry().left() - window.job_creation_button.geometry().right() - 1 == right_gap
     window.queue_monitoring_button.click()
     assert window.view_stack.currentIndex() == 1
     assert not window.job_creation_button.isChecked()

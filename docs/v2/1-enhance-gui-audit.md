@@ -74,7 +74,7 @@ Qt construction order and must be made deliberate during implementation.
 
 Additional findings:
 
-- The current minimum window is 880 × 760, below the approved 1536 × 1024 Phase 1 minimum.
+- The current minimum window is 880 × 760, below the approved 1536 × 982 Phase 1 minimum.
 - Source rows currently display full path text and support picker-based input only.
 - There is no dark-theme implementation, navigation rail, source preview, queue table, integrated message widget, or file-manager drop handling.
 - The current player/preview boundary does not exist; Phase 1 must keep preview behavior independent from authoritative preflight.
@@ -95,7 +95,7 @@ Additional findings:
 - The rail is always visible and switches between mutually exclusive views.
 - The message widget is always visible, retains its selected tab and contents,
   and has a user-resizable height.
-- The main window opens at 1536 × 1024 and cannot shrink below that size.
+- The main window opens at 1536 × 982 and cannot shrink below that size.
 - Job Creation uses an editor/content region and a far-right preview pane with
   the approved 3:4 default geometry. Queue Monitoring hides creation controls.
 - The queue view uses `Status`, `Job Name`, and `Remove` columns. Remove is
@@ -170,7 +170,7 @@ features:
 
 ## Measurable layout and resizing criteria
 
-- Initial and minimum window size are exactly 1536 × 1024 logical pixels.
+- Initial and minimum window size are exactly 1536 × 982 logical pixels.
 - At the minimum size, the rail, active view, source preview (when applicable),
   queue controls, and message tabs are visible without application-level
   scrolling.
