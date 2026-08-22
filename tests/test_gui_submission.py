@@ -17,7 +17,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QCoreApplication, QObject, QThread, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QThread, QUrl, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
@@ -159,6 +159,36 @@ def test_editor_preserves_concat_order_and_builds_frozen_supported_request(qt_ap
     assert request.created_at == _CREATED
     assert request.generated_output_basename is not None and request.generated_output_basename.startswith("ai-video-20260821-143052-")
     assert QCoreApplication.instance() is qt_app
+
+
+def test_editor_drop_boundary_accepts_local_files_and_rejects_remote_urls(qt_app: QApplication, tmp_path: Path) -> None:
+    """File-manager drops accept local files only and preserve URL safety."""
+
+    del qt_app
+    first = tmp_path / "first.mov"
+    second = tmp_path / "second.mov"
+    first.touch()
+    second.touch()
+    editor = JobEditor(ApplicationSettings())
+
+    class DropEvent:
+        """Minimal typed mime-data boundary for headless drop testing."""
+
+        def __init__(self, urls: tuple[QUrl, ...]) -> None:
+            """Build one fake drop event."""
+
+            self._mime = QMimeData()
+            self._mime.setUrls(list(urls))
+
+        def mimeData(self) -> QMimeData:  # pylint: disable=invalid-name
+            """Return the event mime payload."""
+
+            return self._mime
+
+    local = DropEvent((QUrl.fromLocalFile(str(first)), QUrl.fromLocalFile(str(second))))
+    assert editor._local_drop_paths(local) == (first, second)  # pylint: disable=protected-access
+    remote = DropEvent((QUrl("https://example.com/video.mov"),))
+    assert not editor._local_drop_paths(remote)  # pylint: disable=protected-access
 
 
 def test_preflight_controller_runs_off_gui_thread_forwards_progress_and_releases_plan(qt_app: QApplication, tmp_path: Path) -> None:

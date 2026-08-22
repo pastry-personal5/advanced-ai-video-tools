@@ -198,7 +198,7 @@ message actions.
 - [x] Add the far-right source-preview pane and verify its default 3:4 geometry, available-height calculation, and responsive behavior.
 - [ ] Add previous-clip, play/pause, go-to-first-frame, go-to-last-frame, and next-clip controls; start playback automatically when the selected source clip changes; disable navigation at list boundaries; provide no loop controls.
 - [ ] Use the approved icon-only glyphs, accessible names, tooltips, enabled/disabled states, and keyboard focus behavior for all source-preview controls.
-- [ ] Add drag-and-drop from the operating-system file manager, append accepted files in drop order, retain the picker, and reject URL/remote drops.
+- [x] Add drag-and-drop from the operating-system file manager, append accepted files in drop order, retain the picker, and reject URL/remote drops.
 - [ ] Render filename-only source rows without metadata or thumbnails.
 - [x] Add a video preview whose source is exclusively the currently selected source clip.
 - [x] Implement playback with PySide6 `QMediaPlayer` and `QVideoWidget` behind a small, testable presentation boundary.
@@ -389,6 +389,13 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Added native `KeepAspectRatio` rendering, required inline preview failure text, and explicit player/output shutdown handling in `MainWindow.closeEvent`.
 - Added headless coverage for muted audio and aspect-ratio configuration in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 182 passed; Black, Pylint, and pycodestyle passed.
+
+### Local file drop slice — completed
+
+- Added local file-manager drag-and-drop to `JobEditor`; accepted files append in drop order and automatically select/autoplay the newest source through the existing preview binding.
+- Remote URLs, non-local URLs, and non-file paths are rejected without application-initiated network activity.
+- Added headless coverage for local-file acceptance and remote-URL rejection in `tests/test_gui_submission.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 183 passed; Black, Pylint, and pycodestyle passed.
 
 ## Risks
 

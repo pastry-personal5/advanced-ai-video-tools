@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Signal, Slot
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
 from ai_video_tools.core.models import JobRequest
@@ -30,6 +31,7 @@ class JobEditor(QWidget):
         # Declarative widget construction is intentionally kept together.
         # pylint: disable=too-many-statements
         super().__init__(parent)
+        self.setAcceptDrops(True)
         self._settings = settings
         self._clock = clock
 
@@ -127,6 +129,37 @@ class JobEditor(QWidget):
         if paths:
             self.inputs.setCurrentRow(first_added_row + len(paths) - 1)
         self._update_input_controls()
+
+    @staticmethod
+    def _local_drop_paths(event: QDragEnterEvent | QDropEvent) -> tuple[Path, ...]:
+        """Return only existing local files from one file-manager event."""
+
+        mime = event.mimeData()
+        if not mime.hasUrls():
+            return ()
+        urls = tuple(mime.urls())
+        if not urls or any(not url.isLocalFile() for url in urls):
+            return ()
+        paths = tuple(Path(url.toLocalFile()) for url in urls)
+        return tuple(path for path in paths if path.is_file())
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # pylint: disable=invalid-name
+        """Accept only local-file drags; reject URLs and remote sources."""
+
+        if self._local_drop_paths(event):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent) -> None:  # pylint: disable=invalid-name
+        """Append local files in the operating-system drop order."""
+
+        paths = self._local_drop_paths(event)
+        if paths:
+            self.add_inputs(paths)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
     @Slot()
     def remove_selected(self) -> None:

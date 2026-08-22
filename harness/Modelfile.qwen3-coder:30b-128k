@@ -1,0 +1,4 @@
+FROM qwen3-coder:30b
+
+PARAMETER num_ctx 131072
+PARAMETER num_batch 4096
