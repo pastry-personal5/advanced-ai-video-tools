@@ -16,7 +16,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QCoreApplication, QModelIndex, Qt  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtCore import QCoreApplication, QLockFile, QModelIndex, Qt  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSplitter  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
@@ -265,3 +265,15 @@ def test_runtime_loads_settings_and_owns_clean_queue_shutdown(qt_app: QApplicati
     assert runtime.window.findChild(QLabel, "subtitleLabel") is None
     runtime.window.close()
     runtime.shutdown()
+
+
+def test_single_instance_lock_rejects_second_owner(tmp_path: Path) -> None:
+    """The application lock permits one owner and rejects a second owner."""
+
+    first = QLockFile(str(tmp_path / "gui.lock"))
+    second = QLockFile(str(tmp_path / "gui.lock"))
+    assert first.tryLock(0)
+    assert not second.tryLock(0)
+    first.unlock()
+    assert second.tryLock(0)
+    second.unlock()

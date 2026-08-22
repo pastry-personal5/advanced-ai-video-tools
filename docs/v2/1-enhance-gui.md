@@ -417,6 +417,12 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Added headless coverage for the Preferences action and button removal in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 183 passed; Black, Pylint, and pycodestyle passed.
 
+### Single-instance startup slice — completed
+
+- Added a Qt `QLockFile` guard for the GUI process lifetime; a second launch reports that the application is already running and exits before creating the runtime/window.
+- Added regression coverage for exclusive lock ownership in `tests/test_gui.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
+
 ## Risks
 
 - The later project rename may cause rework if application identity remains scattered through widgets, settings paths, logs, and packaging metadata.

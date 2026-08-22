@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from loguru import logger
-from PySide6.QtCore import QCoreApplication
+
+from PySide6.QtCore import QCoreApplication, QLockFile, QStandardPaths
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from ai_video_tools.gui.jobs import JobListModel, QueueSnapshotBridge
@@ -20,6 +22,15 @@ from ai_video_tools.services.pipeline import PipelineService
 from ai_video_tools.services.queue import JobQueue, PipelineRunner
 from ai_video_tools.system.diagnostics import current_log_path
 from ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
+
+
+def _single_instance_lock() -> QLockFile:
+    """Return the process lock used to enforce one GUI instance."""
+
+    directory = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.TempLocation))
+    lock = QLockFile(str(directory / "ai-video-tools-gui.lock"))
+    lock.setStaleLockTime(30_000)
+    return lock
 
 
 @dataclass
@@ -75,6 +86,10 @@ def run_gui(arguments: list[str] | None = None) -> int:
     if existing is not None:
         raise RuntimeError("the GUI entry point requires ownership of the Qt application")
     application = QApplication(["ai-video-tools", *(arguments or [])])
+    instance_lock = _single_instance_lock()
+    if not instance_lock.tryLock(0):
+        QMessageBox.warning(None, "AI Video Tools", "AI Video Tools is already running.")
+        return 1
     application.setOrganizationName("AI Video Tools")
     application.setApplicationName("AI Video Tools")
     application.setApplicationDisplayName("AI Video Tools")
@@ -83,6 +98,7 @@ def run_gui(arguments: list[str] | None = None) -> int:
     except SettingsError as error:
         logger.error("GUI startup failed while loading settings: {}", error)
         QMessageBox.critical(None, "AI Video Tools", f"Could not load application settings:\n{error}")
+        instance_lock.unlock()
         return 1
     application.aboutToQuit.connect(runtime.shutdown)
     runtime.window.show()
@@ -90,3 +106,4 @@ def run_gui(arguments: list[str] | None = None) -> int:
         return application.exec()
     finally:
         runtime.shutdown()
+        instance_lock.unlock()

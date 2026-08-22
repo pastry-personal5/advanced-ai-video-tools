@@ -89,6 +89,8 @@ can rename the product without changing processing behavior.
 
 - `QApplication` owns the main window lifetime. `GuiRuntime` continues to own
   settings, preview, tool validation, queue, model, and submission services.
+- The GUI entry point acquires one process-wide Qt lock; a second application
+  launch exits before runtime/window creation.
 - The Qt model is mutated only on the GUI thread. Cross-thread queue callbacks
   use the existing queued signal bridge.
 - Preflight and tool validation remain worker-thread operations; their results
