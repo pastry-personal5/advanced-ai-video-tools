@@ -121,10 +121,11 @@ class JobEditor(QWidget):
     def add_inputs(self, paths: Sequence[Path]) -> None:
         """Append selected paths without silently sorting or deduplicating them."""
 
+        first_added_row = self.inputs.count()
         for path in paths:
             self.inputs.addItem(str(path))
-        if self.inputs.currentRow() < 0 and self.inputs.count():
-            self.inputs.setCurrentRow(0)
+        if paths:
+            self.inputs.setCurrentRow(first_added_row + len(paths) - 1)
         self._update_input_controls()
 
     @Slot()

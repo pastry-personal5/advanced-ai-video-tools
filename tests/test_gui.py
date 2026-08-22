@@ -16,7 +16,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QCoreApplication, QModelIndex  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtCore import QCoreApplication, QModelIndex, Qt  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication, QLabel, QSplitter  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
@@ -220,8 +221,26 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.view_stack.currentIndex() == 0
     assert window.queue_monitoring_button.isEnabled()
     window.editor.add_inputs((tmp_path / "first.mov",))
-    assert window.source_preview.source.text() == "first.mov"
+    assert window.findChild(QLabel, "sourcePreviewSource") is None
+    assert window.findChild(QLabel, "sourcePreviewDisclaimer") is None
+    assert window.source_preview.minimumWidth() == 600
+    window.source_preview.preview_error.emit("Preview unavailable; preflight can still inspect this clip.")
+    assert "Preview unavailable; preflight can still inspect this clip." in window.global_messages.toPlainText()
     assert window.source_preview.heightForWidth(300) == 400
+    assert window.source_preview.play_pause_button.isEnabled()
+    assert window.source_preview.previous_button.text() == "⏪"
+    assert window.source_preview.next_button.text() == "⏩"
+    assert window.source_preview.play_pause_button.text() == "▶"
+    assert window.source_preview.audio.isMuted()
+    assert window.source_preview.video.aspectRatioMode() == Qt.AspectRatioMode.KeepAspectRatio
+    assert window.source_preview.video.sizePolicy().verticalPolicy().name == "Expanding"
+    window.source_preview._media_status_changed(QMediaPlayer.MediaStatus.EndOfMedia)  # pylint: disable=protected-access
+    assert not window.source_preview.previous_button.isEnabled()
+    window.editor.add_inputs((tmp_path / "second.mov",))
+    assert window.editor.inputs.currentRow() == 1
+    assert window.source_preview.player.source().toLocalFile() == str(tmp_path / "second.mov")
+    window.source_preview.previous_button.click()
+    assert window.editor.inputs.currentRow() == 0
     window.close()
 
 

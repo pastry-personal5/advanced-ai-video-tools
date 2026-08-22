@@ -39,14 +39,14 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 
 ### Source-preview playback controls
 
-- Provide only these playback controls: go to the previous clip, play/pause, go to the beginning of the selected clip, go to the end of the selected clip, and go to the next clip.
+- Provide only these playback controls, in order: play/pause, go to the first frame of the selected clip, go to the last frame of the selected clip, go to the previous clip, and go to the next clip.
 - Selecting a clip in the ordered source list automatically starts playback for that clip.
 - The previous-clip and next-clip controls move selection by one row in the ordered source list and automatically start playback for the newly selected clip. They do not reorder clips or mutate frozen job intent.
 - Disable previous-clip at the first source clip and next-clip at the last source clip; navigation does not wrap around.
-- “Go to the beginning” seeks to the start of the selected clip; “go to the end” seeks to its end without changing the ordered input list or job intent.
+- “Go to the first frame” seeks to the start of the selected clip; “go to the last frame” seeks to its last frame without changing the ordered input list or job intent.
 - Do not provide loop, repeat, A/B, trim, timeline-editing, filtering, frame-export, or concat-boundary controls in v2.
 - Autoplay, seeking, and control state remain convenience-preview behavior and never become authoritative preflight or processing input.
-- Render the five controls as icon-only buttons: previous clip uses a leading vertical bar with double left-pointing triangles; play/pause uses the conventional play triangle and pause bars; go-to-beginning uses a leading vertical bar with one left-pointing triangle; go-to-end uses one right-pointing triangle with a trailing vertical bar; next clip uses double right-pointing triangles with a trailing vertical bar. The double- versus single-triangle treatment distinguishes clip navigation from seeking within the selected clip.
+- Render the five controls as icon-only buttons in this order: play/pause uses the conventional play triangle and pause bars; go-to-first-frame uses a leading vertical bar with one left-pointing triangle; go-to-last-frame uses one right-pointing triangle with a trailing vertical bar; previous clip uses double left-pointing triangles; next clip uses double right-pointing triangles. The double- versus single-triangle treatment distinguishes clip navigation from seeking within the selected clip.
 - Use Qt-native icon construction or small app-owned vector glyphs for these controls rather than relying on undocumented platform theme names or third-party icon assets. Keep one consistent monochrome visual treatment at the supported display scale.
 - Every icon-only button has a programmatic accessible name, a tooltip, and a non-color state indication. The play/pause accessible name reflects the action that will occur next (for example, “Pause preview” while playing and “Play preview” while paused).
 - Start preview playback muted on first launch. Remember mute and volume only as non-safety preferences, and never autoplay audio when a clip is selected or navigated to; autoplay begins muted and audio requires an explicit user action.
@@ -113,7 +113,7 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 - Use comfortable macOS density: 32 px minimum interactive-control height, 32 × 32 px icon-button hit area, 32 px queue/source rows, and at least 8 px between adjacent hit targets. Do not add a compact-density mode in v2.
 - Generate the final icon inventory as app-owned monochrome vector artwork:
   - Navigation rail: `Job Creation` (document-plus) and `Queue Monitoring` (stacked list).
-  - Source preview: `Previous clip` (bar plus double-left triangles), `Play/Pause`, `Beginning` (bar plus single-left triangle), `End` (single-right triangle plus bar), and `Next clip` (double-right triangles plus bar).
+  - Source preview: `Play/Pause`, `First frame` (bar plus single-left triangle), `Last frame` (single-right triangle plus bar), `Previous clip` (double-left triangles), and `Next clip` (double-right triangles).
   - Queue: `Remove` (trash) for cancelled and failed rows only.
 - Keep source-list actions (`Add Clips…`, `Remove`, `Move Up`, `Move Down`) and `Edit` → `Preferences` text-labeled rather than adding extra icon-only controls. Do not add status/severity icons in v2.
 - Draw icons at an 18 px visual mark inside the 32 × 32 px hit area, use the same stroke/fill treatment throughout, and provide accessible names and tooltips independently of the artwork.
@@ -196,13 +196,13 @@ message actions.
 - [x] Add the integrated two-tab message widget at the bottom of the main window and connect it to global and selected-job event streams.
 - [x] Add the far-left two-icon navigation rail and switch between Job Creation and Queue Monitoring views without losing either view's state.
 - [x] Add the far-right source-preview pane and verify its default 3:4 geometry, available-height calculation, and responsive behavior.
-- [ ] Add previous-clip, play/pause, go-to-beginning, go-to-end, and next-clip controls; start playback automatically when the selected source clip changes; disable navigation at list boundaries; provide no loop controls.
+- [ ] Add previous-clip, play/pause, go-to-first-frame, go-to-last-frame, and next-clip controls; start playback automatically when the selected source clip changes; disable navigation at list boundaries; provide no loop controls.
 - [ ] Use the approved icon-only glyphs, accessible names, tooltips, enabled/disabled states, and keyboard focus behavior for all source-preview controls.
 - [ ] Add drag-and-drop from the operating-system file manager, append accepted files in drop order, retain the picker, and reject URL/remote drops.
 - [ ] Render filename-only source rows without metadata or thumbnails.
-- [ ] Add a video preview whose source is exclusively the currently selected source clip.
-- [ ] Implement playback with PySide6 `QMediaPlayer` and `QVideoWidget` behind a small, testable presentation boundary.
-- [ ] Use `Qt.AspectRatioMode.KeepAspectRatio` and a width-driven container whose height follows the exact display aspect ratio without adding application-level rotation handling.
+- [x] Add a video preview whose source is exclusively the currently selected source clip.
+- [x] Implement playback with PySide6 `QMediaPlayer` and `QVideoWidget` behind a small, testable presentation boundary.
+- [x] Use `Qt.AspectRatioMode.KeepAspectRatio` and a width-driven container whose height follows the exact display aspect ratio without adding application-level rotation handling.
 - [ ] Verify that preview resizing never crops, stretches, or substitutes a rounded aspect ratio.
 - [ ] Label and describe the widget visibly and accessibly as a convenience preview that is not color-accurate or processing-authoritative.
 - [ ] Ensure selection-driven preview changes cannot reorder clips, mutate frozen job intent, or influence authoritative preflight results.
@@ -210,7 +210,7 @@ message actions.
 - [ ] Pause preview at processing start, avoid automatic resume, and release the player during window shutdown.
 - [ ] Reject URL/remote preview sources and accept only local files already in the editor.
 - [ ] Ensure player metadata, rendering, duration, errors, and playback success cannot influence rotation, HDR, color, timing, stream, compatibility, or processing decisions.
-- [ ] Map native player load, decode, and unsupported-format errors to the inline message “Preview unavailable; preflight can still inspect this clip.”
+- [x] Map native player load, decode, and unsupported-format errors to the inline message “Preview unavailable; preflight can still inspect this clip.”
 - [ ] Keep a preview-unavailable source clip in the ordered input list and allow authoritative preflight and queue submission to proceed.
 - [ ] Do not generate proxy media or launch FFmpeg as a preview fallback.
 - [ ] Keep native preview playback as-is for v2; do not add a preview rotation gate or custom rotation renderer, while retaining authoritative preflight rotation policy.
@@ -284,7 +284,7 @@ record each completed slice in Implementation evidence with its exact checks.
 - A first-time user can configure tools, order clips, choose output intent, understand preflight, and queue a job without consulting CLI documentation.
 - Selecting a source clip updates only that clip's preview; no queue item, merged intermediate, completed output, or simulated processed result is presented as the Phase 1 preview.
 - The preview is playback-only and cannot create or mutate trim points, timeline edits, filters, frame exports, or concat boundaries.
-- The preview provides previous-clip, play/pause, go-to-beginning, go-to-end, and next-clip controls, starts playback when a source clip is selected or navigated to, disables navigation at list boundaries, and provides no loop controls in v2.
+- The preview provides previous-clip, play/pause, go-to-first-frame, go-to-last-frame, and next-clip controls, starts playback when a source clip is selected or navigated to, disables navigation at list boundaries, and provides no loop controls in v2.
 - Preview controls are icon-only with the approved clip-navigation and playback glyphs; each exposes an accessible action name and tooltip and remains understandable without color.
 - Preview starts muted on first launch, never autoplays audio, and remembers mute/volume only as non-safety preferences.
 - Selection changes stop and asynchronously load the new local source without changing concat order; processing start pauses preview without automatic resume; window shutdown releases the player.
@@ -374,6 +374,20 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Added the far-right `SourcePreviewPane` presentation boundary with width-driven 3:4 geometry, selected-source filename binding, and an explicit convenience-preview disclaimer.
 - Kept the pane independent of FFmpeg, FFprobe, Real-ESRGAN, preflight, and processing intent; native playback and controls remain subsequent slices.
 - Added headless coverage for source selection and aspect-ratio geometry in `tests/test_gui.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 182 passed; Black, Pylint, and pycodestyle passed.
+
+### Preview control surface slice — completed
+
+- Added previous, play/pause, first-frame, last-frame, and next icon-only controls with accessible names, tooltips, and source-list boundary enablement.
+- Navigation changes only the editor's current source selection and cannot reorder clips or affect frozen processing intent; native playback wiring remains the next preview slice.
+- Added headless coverage for control enablement and previous/next selection behavior in `tests/test_gui.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 182 passed; Black, Pylint, and pycodestyle passed.
+
+### Native preview playback slice — completed
+
+- Connected `SourcePreviewPane` to PySide6 `QMediaPlayer`, `QAudioOutput`, and `QVideoWidget`; local source selection stops and reloads the selected file, starts playback muted, and keeps processing independent.
+- Added native `KeepAspectRatio` rendering, required inline preview failure text, and explicit player/output shutdown handling in `MainWindow.closeEvent`.
+- Added headless coverage for muted audio and aspect-ratio configuration in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 182 passed; Black, Pylint, and pycodestyle passed.
 
 ## Risks

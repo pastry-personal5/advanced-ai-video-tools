@@ -137,6 +137,13 @@ class MainWindow(QMainWindow):
         self.move_down_button.clicked.connect(lambda: self._move_selected(1))
         self.settings_button.clicked.connect(self._open_tool_settings)
         self.editor.inputs.currentRowChanged.connect(self._source_selection_changed)
+        self.editor.inputs.model().rowsInserted.connect(lambda *_: self._source_selection_changed(self.editor.inputs.currentRow()))
+        self.editor.inputs.model().rowsRemoved.connect(lambda *_: self._source_selection_changed(self.editor.inputs.currentRow()))
+        self.source_preview.previous_requested.connect(lambda: self._select_source_relative(-1))
+        self.source_preview.next_requested.connect(lambda: self._select_source_relative(1))
+        self.source_preview.first_frame_requested.connect(self.source_preview.go_to_first_frame)
+        self.source_preview.last_frame_requested.connect(self.source_preview.go_to_last_frame)
+        self.source_preview.preview_error.connect(self._append_global)
         self._append_global("Application started.")
         if submission is not None:
             self.editor.request_ready.connect(submission.start)
@@ -177,8 +184,19 @@ class MainWindow(QMainWindow):
     def _source_selection_changed(self, row: int) -> None:
         """Bind preview identity to editor selection only."""
 
-        path = Path(self.editor.inputs.item(row).text()) if row >= 0 and self.editor.inputs.item(row) is not None else None
-        self.source_preview.set_source(path)
+        paths = self.editor.input_paths()
+        self.source_preview.set_sources(paths, row)
+
+    def _select_source_relative(self, offset: int) -> None:
+        """Navigate source selection without changing concat order."""
+
+        self._select_source_index(self.editor.inputs.currentRow() + offset)
+
+    def _select_source_index(self, row: int) -> None:
+        """Select one existing source row and leave the ordered list intact."""
+
+        if 0 <= row < self.editor.inputs.count():
+            self.editor.inputs.setCurrentRow(row)
 
     def _append_global(self, text: str) -> None:
         self.message_widget.append(MessageEvent(text))
@@ -279,6 +297,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: object) -> None:  # pylint: disable=invalid-name
         """Record session shutdown before Qt releases the window."""
+        self.source_preview.shutdown()
         if not self._global_shutdown_recorded:
             self._append_global("Application shutting down.")
             self._global_shutdown_recorded = True
