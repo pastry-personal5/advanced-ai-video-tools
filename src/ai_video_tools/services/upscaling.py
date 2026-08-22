@@ -16,7 +16,7 @@ from ai_video_tools.video.frames import FRAME_FILENAME_TEMPLATE, FrameInventoryE
 
 ProgressCallback = Callable[[ProgressEvent], None]
 DEFAULT_UPSCALE_TIMEOUT_SECONDS = 24 * 60 * 60
-UPSCALE_PROGRESS_POLL_SECONDS = 0.1
+UPSCALE_PROGRESS_POLL_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
