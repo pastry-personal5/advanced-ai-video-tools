@@ -149,7 +149,6 @@ class MainWindow(QMainWindow):
 
         self.message_widget = MessageWidget()
         self.message_widget.setObjectName("messageWidget")
-        self.message_widget.setMinimumHeight(130)
         self.message_tabs = self.message_widget.tabs
         self.global_messages = self.message_widget.global_messages
         self.job_messages = self.message_widget.job_messages

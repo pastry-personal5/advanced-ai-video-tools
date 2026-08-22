@@ -189,7 +189,7 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
 
 
 def test_upscale_messages_are_throttled_to_progress_summaries(qt_app: QApplication, tmp_path: Path) -> None:
-    """Upscale progress is summarized without flooding the five-line job tail."""
+    """Upscale progress is summarized without flooding the job history."""
 
     del qt_app
     queue = FakeQueue()
@@ -210,8 +210,8 @@ def test_upscale_messages_are_throttled_to_progress_summaries(qt_app: QApplicati
     window.close()
 
 
-def test_message_history_keeps_five_timestamped_lines_and_job_selection(qt_app: QApplication) -> None:
-    """Message presentation is session-only, bounded, and selection-driven."""
+def test_message_history_keeps_timestamped_lines_and_job_selection(qt_app: QApplication) -> None:
+    """Message presentation is session-only, unbounded, and selection-driven."""
 
     del qt_app
     history = MessageHistory(clock=lambda: datetime(2026, 8, 22, 12, 34, 56))
@@ -221,12 +221,16 @@ def test_message_history_keeps_five_timestamped_lines_and_job_selection(qt_app: 
     for number in range(6):
         widget.append(MessageEvent(f"Job {number}", "job-1"))
     assert widget.global_messages.toPlainText().splitlines() == [
+        "[2026-08-22 12:34:56] Global 0",
         "[2026-08-22 12:34:56] Global 1",
         "[2026-08-22 12:34:56] Global 2",
         "[2026-08-22 12:34:56] Global 3",
         "[2026-08-22 12:34:56] Global 4",
         "[2026-08-22 12:34:56] Global 5",
     ]
+    assert widget.global_messages.minimumHeight() >= widget.global_messages.fontMetrics().lineSpacing() * 5
+    assert widget.global_messages.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded
+    assert widget.minimumHeight() >= widget.global_messages.minimumHeight() + widget.tabs.tabBar().sizeHint().height()
     widget.select_job("job-1")
     assert widget.tabs.currentIndex() == 1
     assert widget.job_messages.toPlainText().splitlines()[-1].endswith("Job 5")

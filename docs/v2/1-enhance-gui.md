@@ -67,7 +67,7 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 - Implement the message widget as a two-tab `QTabWidget`. The tabs are named `Global Messages` and `Job Messages`.
 - `Global Messages` presents application-wide log-style notices such as startup, tool-configuration, settings, preflight-gate, and shutdown events. `Job Messages` presents log-style notices for the selected/current job, including stage changes, measured progress summaries, warnings, failures, cancellation, cleanup, and publication results.
 - Message entries include a local timestamp without timezone information and concise text. Do not add severity levels or filtering controls in v2; state must remain understandable from the message text and native control state, not color alone. Exact sensitive subprocess command lines remain in the diagnostic log rather than being shown in the widget.
-- Each tab contains a read-only log-tail widget showing exactly the latest five lines for that tab, with the newest line at the bottom. Five lines are sufficient; do not add an expansion control in v2.
+- Each tab contains a read-only log widget showing the complete in-memory history for that tab, with the newest line at the bottom. The widget's minimum height must display at least five lines; normal scrolling may expose older lines.
 - Keep message history for the duration of the running application only. Do not persist it.
 - Do not add clear, copy, or diagnostics-reveal actions to the message tabs in v2.
 - Selecting a job activates the `Job Messages` tab. When no job is selected, that tab displays `No job is selected.`
@@ -186,7 +186,7 @@ message actions.
 - [x] Preserve Qt ownership, signal/slot thread boundaries, and clean shutdown. See [Phase 1 Presentation Architecture](1-enhance-gui-presentation-architecture.md).
 - [x] Define the main-window content layout with the editor/queue region, the far-right source-preview pane, and the bottom integrated message widget.
 - [x] Define the preview-pane initial geometry as 3:4 width-to-height, derive its width from the post-message-area available height, keep the window at or above 1536 × 1024, make message height user-resizable, and avoid preview scrolling.
-- [x] Define typed global-message and job-message events, session-only ownership, five-line per-tab tails, completion routing, and GUI-thread delivery without changing backend logging or queue semantics.
+- [x] Define typed global-message and job-message events, session-only ownership, complete per-tab in-memory history, completion routing, and GUI-thread delivery without changing backend logging or queue semantics.
 - [x] Define the two-view navigation state, icon semantics, state preservation, keyboard traversal, and visibility boundaries for creation versus queue controls.
 
 ### 3. Job editor enhancement
@@ -234,7 +234,7 @@ message actions.
 - [x] Improve issue grouping and inline presentation without adding severity controls or weakening acknowledgement gates.
 - [ ] Improve external-tool validation status and resolved-tool feedback.
 - [x] Add `Edit` → `Preferences` as a separate settings window for External Tools and remove the main-window `External Tools…` button.
-- [x] Append completed-job messages to `Global Messages` and show the latest five lines in each message tab's read-only log-tail widget.
+- [x] Append completed-job messages to `Global Messages` and show session history in each message tab's read-only log widget.
 - [ ] Ensure settings changes continue to affect only future drafts, never frozen queued requests.
 
 ### 6. Accessibility and macOS polish
@@ -250,7 +250,7 @@ message actions.
 - [ ] Test dark-theme rendering, Codex-created icon accessibility, file-manager drag-and-drop, and URL/remote-drop rejection.
 - [ ] Test player load, decode, and unsupported-format failures as non-blocking preview states without proxy generation.
 - [ ] Test native preview-as-is rotation behavior, custom target height without presets, Preferences-menu settings access, and removal of the main-window External Tools button.
-- [x] Test queue Status/Job Name columns, completion messages in `Global Messages`, and five-line tails in both message tabs.
+- [x] Test queue Status/Job Name columns, completion messages in `Global Messages`, and session history/minimum five-line message widgets.
 - [ ] Test that retry actions are absent for failed and cancelled jobs.
 - [ ] Test width-driven resizing, exact aspect preservation, and native preview rotation behavior.
 - [ ] Add regression tests for thread affinity, state transitions, and frozen job intent.
@@ -269,7 +269,7 @@ slice at a time and keep the checklist and evidence synchronized:
 2. Build the Job Creation surface: filename-only drop/list editing, the
    Preferences menu path, and the selected-source preview boundary.
 3. Build Queue Monitoring and messages: `Status`/`Job Name`/`Remove` columns,
-   selected-job details, stage/whole-job progress, five-line tails, and terminal
+   selected-job details, stage/whole-job progress, complete session message history, and terminal
    actions.
 4. Add the fixed preview controls, native-player lifecycle, and remaining
    inline validation behavior.
@@ -314,7 +314,7 @@ record each completed slice in Implementation evidence with its exact checks.
 - `Edit` → `Preferences` opens a separate External Tools settings window, and the main-window `External Tools…` button is absent.
 - Retry actions are absent in v2.
 - The default preview pane uses a 3:4 width-to-height geometry calculated from the available height after the message widget; resizing preserves the source video's exact aspect ratio without crop or stretch while following native preview rotation behavior.
-- Global and job messages are concise local-timestamped log lines delivered without blocking the GUI thread. Completed jobs append to `Global Messages`; each tab shows exactly its latest five lines, messages are session-only, no severity filtering or message actions are provided, and sensitive exact command lines remain out of the GUI.
+- Global and job messages are concise local-timestamped log lines delivered without blocking the GUI thread. Completed jobs append to `Global Messages`; each tab shows complete session-only history with at least five visible lines, no severity filtering or message actions are provided, and sensitive exact command lines remain out of the GUI.
 - Existing v1 CLI and media-pipeline behavior remains unchanged unless separately approved.
 - Automated checks pass and target-macOS manual verification is recorded.
 
@@ -355,7 +355,7 @@ Record subsequent completed slices here with links to the relevant modules/tests
 
 ### Integrated message widget slice — completed
 
-- Added [the typed session message presenter](../../src/ai_video_tools/gui/messages.py) with local timestamps, five-line global/job tails, selection-driven tab activation, and no persistence or message actions.
+- Added [the typed session message presenter](../../src/ai_video_tools/gui/messages.py) with local timestamps, complete in-memory global/job history, selection-driven tab activation, and no persistence or message actions.
 - Connected immutable queue snapshots through `JobListModel.snapshot_changed`; global notices consume startup, settings, preflight, tool-validation, shutdown, and completion events while job notices consume queue, stage/progress, lifecycle, and cancellation events.
 - Added a vertical splitter so message height is user-resizable while the existing 1536 × 1024 minimum window remains the layout lower bound.
 - Added GUI regression coverage in `tests/test_gui.py`.
@@ -406,7 +406,7 @@ Record subsequent completed slices here with links to the relevant modules/tests
 ### Welcome guidance slice — completed
 
 - Removed the persistent `Create processing job` and concat-order instruction labels from the editor.
-- Added a startup welcome instruction to the session-only `Global Messages` tail describing the required add, output-directory, and preflight/queue flow.
+- Added a startup welcome instruction to the session-only `Global Messages` history describing the required add, output-directory, and preflight/queue flow.
 - Added GUI regression coverage for the welcome message.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 183 passed; Black, Pylint, and pycodestyle passed.
 
@@ -465,7 +465,7 @@ Record subsequent completed slices here with links to the relevant modules/tests
 ### Upscale message summaries slice — completed
 
 - Converted typed `UPSCALE` progress events into concise job-message summaries with frame counts and integer percentages.
-- Emit summaries at 10-percent intervals and at completion so the five-line `Job Messages` tail remains readable while a job runs; progress remains presentation-only on the GUI thread.
+- Emit summaries at 10-percent intervals and at completion so the `Job Messages` history remains readable while a job runs; progress remains presentation-only on the GUI thread.
 - Added regression coverage proving repeated progress events are throttled to `0%`, `10%`, `20%`, and `100%` summaries.
 - The upscale service observes frame outputs on its worker-side monitor and emits typed progress events; no probing or polling work runs on the GUI thread.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.

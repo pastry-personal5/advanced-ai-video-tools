@@ -23,15 +23,15 @@ class MessageEvent:
 
 
 class MessageHistory(QObject):
-    """Own bounded, non-persistent message tails for one application run."""
+    """Own non-persistent message history for one application run."""
 
     changed = Signal()
 
     def __init__(self, *, clock: Callable[[], datetime] | None = None, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._clock = clock or datetime.now
-        self._global: deque[str] = deque(maxlen=5)
-        self._jobs: defaultdict[str, deque[str]] = defaultdict(lambda: deque(maxlen=5))
+        self._global: deque[str] = deque()
+        self._jobs: defaultdict[str, deque[str]] = defaultdict(deque)
 
     def append(self, event: MessageEvent) -> None:
         """Append one typed event with a local timestamp and notify the view."""
@@ -41,16 +41,16 @@ class MessageHistory(QObject):
         self.changed.emit()
 
     def global_lines(self) -> tuple[str, ...]:
-        """Return the current global tail in display order."""
+        """Return all current global lines in display order."""
         return tuple(self._global)
 
     def job_lines(self, job_id: str | None) -> tuple[str, ...]:
-        """Return the current selected-job tail in display order."""
+        """Return all current selected-job lines in display order."""
         return tuple(self._jobs[job_id]) if job_id is not None else ()
 
 
 class MessageWidget(QWidget):
-    """Integrated two-tab read-only message tail."""
+    """Integrated two-tab read-only message history."""
 
     def __init__(self, history: MessageHistory | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -62,6 +62,7 @@ class MessageWidget(QWidget):
         self.job_messages = self._log("jobMessages")
         self.tabs.addTab(self.global_messages, "Global Messages")
         self.tabs.addTab(self.job_messages, "Job Messages")
+        self.setMinimumHeight(self.global_messages.minimumHeight() + self.tabs.tabBar().sizeHint().height())
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.tabs)
@@ -75,8 +76,9 @@ class MessageWidget(QWidget):
         log.setReadOnly(True)
         log.setUndoRedoEnabled(False)
         log.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        log.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        log.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         log.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        log.setMinimumHeight(log.fontMetrics().lineSpacing() * 5 + 12)
         return log
 
     @Slot(str)
@@ -93,7 +95,7 @@ class MessageWidget(QWidget):
 
     @Slot()
     def _render(self) -> None:
-        """Render only the bounded tails; no backend work occurs here."""
+        """Render session history; no backend work occurs here."""
         self.global_messages.setPlainText("\n".join(self.history.global_lines()))
         lines = self.history.job_lines(self._selected_job_id)
         self.job_messages.setPlainText("\n".join(lines) if lines else "No job is selected." if self._selected_job_id is None else "")
