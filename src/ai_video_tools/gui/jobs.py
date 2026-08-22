@@ -50,6 +50,8 @@ class JobListModel(QAbstractListModel):
     # Qt's virtual method names are fixed by its public API.
     # pylint: disable=invalid-name
 
+    snapshot_changed = Signal(object)
+
     def __init__(self, queue: JobQueue, bridge: QueueSnapshotBridge, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._queue = queue
@@ -125,6 +127,11 @@ class JobListModel(QAbstractListModel):
             return None
         return self._snapshots[self._order[index.row()]]
 
+    def snapshot_for_job(self, job_id: str) -> QueueJobSnapshot | None:
+        """Return an observed immutable snapshot by its stable job ID."""
+
+        return self._snapshots.get(job_id)
+
     def cancel(self, index: QModelIndex) -> bool:
         """Request cancellation for the selected cancellable record."""
 
@@ -172,10 +179,12 @@ class JobListModel(QAbstractListModel):
             self.beginResetModel()
             self._order = desired
             self.endResetModel()
+            self.snapshot_changed.emit(value)
             return
         row = self._order.index(value.job_id)
         changed = self.index(row, 0)
         self.dataChanged.emit(changed, changed, list(self.roleNames()))
+        self.snapshot_changed.emit(value)
 
     def _store_initial(self, snapshot: QueueJobSnapshot) -> None:
         self._submission_order[snapshot.job_id] = len(self._submission_order)

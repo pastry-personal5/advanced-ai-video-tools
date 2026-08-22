@@ -17,11 +17,12 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QModelIndex  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QLabel, QSplitter  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
+from ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot  # noqa: E402  # pylint: disable=wrong-import-position
@@ -156,6 +157,8 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     window = MainWindow(model, ApplicationSettings(target_height=2160), tmp_path / "application.log")
     window.show()
     qt_app.processEvents()
+    assert window.minimumWidth() == 1536
+    assert window.minimumHeight() == 1024
 
     window.job_list.setCurrentIndex(model.index(0, 0))
     qt_app.processEvents()
@@ -169,6 +172,56 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     window.job_list.setCurrentIndex(model.index(1, 0))
     qt_app.processEvents()
     assert not window.move_up_button.isEnabled()
+    window.close()
+
+
+def test_message_history_keeps_five_timestamped_lines_and_job_selection(qt_app: QApplication) -> None:
+    """Message presentation is session-only, bounded, and selection-driven."""
+
+    del qt_app
+    history = MessageHistory(clock=lambda: datetime(2026, 8, 22, 12, 34, 56))
+    widget = MessageWidget(history)
+    for number in range(6):
+        widget.append(MessageEvent(f"Global {number}"))
+    for number in range(6):
+        widget.append(MessageEvent(f"Job {number}", "job-1"))
+    assert widget.global_messages.toPlainText().splitlines() == [
+        "[2026-08-22 12:34:56] Global 1",
+        "[2026-08-22 12:34:56] Global 2",
+        "[2026-08-22 12:34:56] Global 3",
+        "[2026-08-22 12:34:56] Global 4",
+        "[2026-08-22 12:34:56] Global 5",
+    ]
+    widget.select_job("job-1")
+    assert widget.tabs.currentIndex() == 1
+    assert widget.job_messages.toPlainText().splitlines()[-1].endswith("Job 5")
+    widget.select_job(None)
+    assert widget.job_messages.toPlainText() == "No job is selected."
+    assert widget.global_messages.isReadOnly()
+
+
+def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_app: QApplication, tmp_path: Path) -> None:
+    """The integrated panel stays in the window and consumes queue snapshots."""
+
+    del qt_app
+    queue = FakeQueue()
+    bridge = QueueSnapshotBridge()
+    model = JobListModel(queue, bridge)  # type: ignore[arg-type]
+    window = MainWindow(model, ApplicationSettings(target_height=2160))
+    assert window.findChild(QSplitter, "mainContentSplitter") is not None
+    assert [window.message_tabs.tabText(index) for index in range(2)] == ["Global Messages", "Job Messages"]
+    assert "Application started." in window.global_messages.toPlainText()
+    assert window.message_tabs.currentIndex() == 0
+    assert window.view_stack.currentIndex() == 0
+    window.queue_monitoring_button.click()
+    assert window.view_stack.currentIndex() == 1
+    assert not window.job_creation_button.isChecked()
+    window.job_creation_button.click()
+    assert window.view_stack.currentIndex() == 0
+    assert window.queue_monitoring_button.isEnabled()
+    window.editor.add_inputs((tmp_path / "first.mov",))
+    assert window.source_preview.source.text() == "first.mov"
+    assert window.source_preview.heightForWidth(300) == 400
     window.close()
 
 

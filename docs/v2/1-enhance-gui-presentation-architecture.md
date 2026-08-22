@@ -4,7 +4,7 @@
 
 - Phase: 1 — Enhance GUI
 - Specification state: Complete
-- Implementation state: Not started
+- Implementation state: In progress
 - Date: 2026-08-22
 
 This document defines the presentation-layer boundaries for the approved Phase 1
@@ -126,4 +126,3 @@ This specification completes the Presentation architecture planning tasks:
 
 Exact splitter proportions and internal spacing remain the only open visual
 implementation details recorded by Phase 1.
-
