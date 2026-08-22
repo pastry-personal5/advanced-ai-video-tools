@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QModelIndex, Qt, Slot
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QLabel, QListView, QMainWindow, QProgressBar, QPushButton, QSplitter, QStackedWidget, QToolButton, QVBoxLayout, QWidget
 
 from ai_video_tools.core.models import JobState
@@ -39,9 +40,11 @@ class MainWindow(QMainWindow):
 
         self.editor = JobEditor(settings)
         self.source_preview = SourcePreviewPane()
-        self.settings_button = QPushButton("External Tools…")
-        self.settings_button.setObjectName("externalToolsButton")
-        self.settings_button.setEnabled(tool_validator is not None and settings_store is not None)
+        edit_menu = self.menuBar().addMenu("Edit")
+        self.preferences_action = QAction("Preferences", self)
+        self.preferences_action.setObjectName("preferencesAction")
+        self.preferences_action.setEnabled(tool_validator is not None and settings_store is not None)
+        edit_menu.addAction(self.preferences_action)
         self.job_list = QListView()
         self.job_list.setObjectName("jobList")
         self.job_list.setModel(model)
@@ -72,7 +75,6 @@ class MainWindow(QMainWindow):
 
         creation_page = QWidget()
         creation_layout = QVBoxLayout(creation_page)
-        creation_layout.addWidget(self.settings_button)
         creation_content = QHBoxLayout()
         creation_content.addWidget(self.editor, 1)
         creation_content.addWidget(self.source_preview)
@@ -135,7 +137,7 @@ class MainWindow(QMainWindow):
         self.cancel_button.clicked.connect(self._cancel_selected)
         self.move_up_button.clicked.connect(lambda: self._move_selected(-1))
         self.move_down_button.clicked.connect(lambda: self._move_selected(1))
-        self.settings_button.clicked.connect(self._open_tool_settings)
+        self.preferences_action.triggered.connect(self._open_tool_settings)
         self.editor.inputs.currentRowChanged.connect(self._source_selection_changed)
         self.editor.inputs.model().rowsInserted.connect(lambda *_: self._source_selection_changed(self.editor.inputs.currentRow()))
         self.editor.inputs.model().rowsRemoved.connect(lambda *_: self._source_selection_changed(self.editor.inputs.currentRow()))

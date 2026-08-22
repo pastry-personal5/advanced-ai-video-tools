@@ -233,7 +233,7 @@ message actions.
 
 - [ ] Improve issue grouping and inline presentation without adding severity controls or weakening acknowledgement gates.
 - [ ] Improve external-tool validation status and resolved-tool feedback.
-- [ ] Add `Edit` → `Preferences` as a separate settings window for External Tools and remove the main-window `External Tools…` button.
+- [x] Add `Edit` → `Preferences` as a separate settings window for External Tools and remove the main-window `External Tools…` button.
 - [x] Append completed-job messages to `Global Messages` and show the latest five lines in each message tab's read-only log-tail widget.
 - [ ] Ensure settings changes continue to affect only future drafts, never frozen queued requests.
 
@@ -408,6 +408,13 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Removed the persistent `Create processing job` and concat-order instruction labels from the editor.
 - Added a startup welcome instruction to the session-only `Global Messages` tail describing the required add, output-directory, and preflight/queue flow.
 - Added GUI regression coverage for the welcome message.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 183 passed; Black, Pylint, and pycodestyle passed.
+
+### Preferences menu slice — completed
+
+- Moved External Tools access to `Edit` → `Preferences` and removed the main-window `External Tools…` button.
+- Preserved the existing asynchronous validation and persistence behavior for future drafts.
+- Added headless coverage for the Preferences action and button removal in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 183 passed; Black, Pylint, and pycodestyle passed.
 
 ## Risks

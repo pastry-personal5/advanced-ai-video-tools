@@ -18,7 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QModelIndex, Qt  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QLabel, QSplitter  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSplitter  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
@@ -210,6 +210,8 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     model = JobListModel(queue, bridge)  # type: ignore[arg-type]
     window = MainWindow(model, ApplicationSettings(target_height=2160))
     assert window.findChild(QSplitter, "mainContentSplitter") is not None
+    assert window.findChild(QPushButton, "externalToolsButton") is None
+    assert window.preferences_action.text() == "Preferences"
     assert [window.message_tabs.tabText(index) for index in range(2)] == ["Global Messages", "Job Messages"]
     assert "Application started." in window.global_messages.toPlainText()
     assert "Add clips in order they should be concatenated." in window.global_messages.toPlainText()
