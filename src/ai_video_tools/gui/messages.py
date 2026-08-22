@@ -76,16 +76,16 @@ class MessageWidget(QWidget):
         log.setReadOnly(True)
         log.setUndoRedoEnabled(False)
         log.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        log.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        log.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         log.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         log.setMinimumHeight(log.fontMetrics().lineSpacing() * 5 + 12)
         return log
 
     @Slot(str)
-    def select_job(self, job_id: str | None) -> None:
+    def select_job(self, job_id: str | None, *, activate: bool = True) -> None:
         """Select a job and activate its message tab."""
         self._selected_job_id = job_id
-        if job_id is not None:
+        if job_id is not None and activate:
             self.tabs.setCurrentWidget(self.job_messages)
         self._render()
 

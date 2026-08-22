@@ -289,7 +289,7 @@ class MainWindow(QMainWindow):
 
     @Slot(QModelIndex, QModelIndex)
     def _selection_changed(self, _current: QModelIndex, _previous: QModelIndex) -> None:
-        self._refresh_selection()
+        self._refresh_selection(activate_job_tab=True)
 
     @Slot(QModelIndex)
     def _queue_cell_clicked(self, index: QModelIndex) -> None:
@@ -309,7 +309,7 @@ class MainWindow(QMainWindow):
         self._refresh_selection()
 
     @Slot()
-    def _refresh_selection(self) -> None:
+    def _refresh_selection(self, *, activate_job_tab: bool = False) -> None:
         # Selection binding intentionally updates the complete details surface together.
         # pylint: disable=too-many-statements
         index = self.job_list.currentIndex()
@@ -371,7 +371,7 @@ class MainWindow(QMainWindow):
         if str(self._model.data(index, int(JobRole.STATE))) in {JobState.CANCELLED.value, JobState.FAILED.value}:
             actions.append("Remove")
         self.action_summary.setText(f"Available actions: {', '.join(actions)}" if actions else "No actions available")
-        self.message_widget.select_job(str(self._model.data(index, int(JobRole.JOB_ID))))
+        self.message_widget.select_job(str(self._model.data(index, int(JobRole.JOB_ID))), activate=activate_job_tab)
 
     @Slot()
     def _cancel_selected(self) -> None:

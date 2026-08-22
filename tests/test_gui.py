@@ -211,6 +211,25 @@ def test_upscale_messages_are_throttled_to_progress_summaries(qt_app: QApplicati
     window.close()
 
 
+def test_background_queue_refresh_preserves_active_message_tab(qt_app: QApplication, tmp_path: Path) -> None:
+    """Queue updates do not switch away from the tab chosen by the user."""
+
+    snapshot = _snapshot(tmp_path, "running", JobState.RUNNING, None, revision=1, progress=ProgressEvent(PipelineStage.ENCODE, 1, 2, "Encoding"))
+    queue = FakeQueue((snapshot,))
+    bridge = QueueSnapshotBridge()
+    model = JobListModel(queue, bridge)  # type: ignore[arg-type]
+    window = MainWindow(model, ApplicationSettings(target_height=2160))
+    window.show()
+    qt_app.processEvents()
+    assert window.message_tabs.currentIndex() == 0
+    window.job_list.setCurrentIndex(model.index(0, 0))
+    assert window.message_tabs.currentIndex() == 1
+    window.message_tabs.setCurrentIndex(0)
+    window._refresh_selection()  # pylint: disable=protected-access
+    assert window.message_tabs.currentIndex() == 0
+    window.close()
+
+
 def test_message_history_keeps_timestamped_lines_and_job_selection(qt_app: QApplication) -> None:
     """Message presentation is session-only, unbounded, and selection-driven."""
 
@@ -230,7 +249,7 @@ def test_message_history_keeps_timestamped_lines_and_job_selection(qt_app: QAppl
         "[2026-08-22 12:34:56] Global 5",
     ]
     assert widget.global_messages.minimumHeight() >= widget.global_messages.fontMetrics().lineSpacing() * 5
-    assert widget.global_messages.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded
+    assert widget.global_messages.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOn
     assert widget.minimumHeight() >= widget.global_messages.minimumHeight() + widget.tabs.tabBar().sizeHint().height()
     widget.select_job("job-1")
     assert widget.tabs.currentIndex() == 1
