@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Defined the Phase 1 widget as selected-source playback while retaining FFprobe-backed preflight and the processing pipeline as the media contract.
 - Defined unsupported native preview formats as a non-blocking state with no FFmpeg proxy fallback.
 - Defined full-width Phase 1 preview playback with exact unrotated aspect preservation and no crop, stretch, or rotation.
+- Completed preview-control accessibility and sizing: action labels update with play/pause state, and all five controls use fixed 32 × 32 pixel hit areas.
 
 ## [1.0.0] - 2026-08-21
 

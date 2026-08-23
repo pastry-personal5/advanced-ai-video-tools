@@ -322,6 +322,24 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.source_preview.previous_button.text() == "⏪"
     assert window.source_preview.next_button.text() == "⏩"
     assert window.source_preview.play_pause_button.text() == "▶"
+    controls = window.source_preview.layout().itemAt(1).layout()
+    assert [controls.itemAt(index).widget() for index in range(controls.count())] == [
+        window.source_preview.play_pause_button,
+        window.source_preview.first_frame_button,
+        window.source_preview.last_frame_button,
+        window.source_preview.previous_button,
+        window.source_preview.next_button,
+    ]
+    for button in (window.source_preview.play_pause_button, window.source_preview.first_frame_button, window.source_preview.last_frame_button, window.source_preview.previous_button, window.source_preview.next_button):
+        assert button.size().width() == 32
+        assert button.size().height() == 32
+        assert button.toolTip() == button.accessibleName()
+    assert window.source_preview.play_pause_button.accessibleName() == "Play preview"
+    window.source_preview._playback_state_changed(QMediaPlayer.PlaybackState.PlayingState)  # pylint: disable=protected-access
+    assert window.source_preview.play_pause_button.accessibleName() == "Pause preview"
+    assert window.source_preview.play_pause_button.toolTip() == "Pause preview"
+    window.source_preview._playback_state_changed(QMediaPlayer.PlaybackState.PausedState)  # pylint: disable=protected-access
+    assert window.source_preview.play_pause_button.accessibleName() == "Play preview"
     assert window.source_preview.audio.isMuted()
     assert window.source_preview.video.aspectRatioMode() == Qt.AspectRatioMode.KeepAspectRatio
     assert window.source_preview.video.sizePolicy().verticalPolicy().name == "Expanding"
@@ -330,6 +348,8 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     window.editor.add_inputs((tmp_path / "second.mov",))
     assert window.editor.inputs.currentRow() == 1
     assert window.source_preview.player.source().toLocalFile() == str(tmp_path / "second.mov")
+    assert window.source_preview.previous_button.isEnabled()
+    assert not window.source_preview.next_button.isEnabled()
     window.source_preview.previous_button.click()
     assert window.editor.inputs.currentRow() == 0
     window.close()

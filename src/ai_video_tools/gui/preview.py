@@ -35,9 +35,9 @@ class SourcePreviewPane(QFrame):
         self.player.setAudioOutput(self.audio)
         self.player.setVideoOutput(self.video)
         self.previous_button = self._control("⏪", "Previous clip", "previewPreviousButton")
-        self.play_pause_button = self._control("▶", "Play or pause preview", "previewPlayPauseButton")
-        self.first_frame_button = self._control("⏮", "Go to the first frame of the video", "previewFirstFrameButton")
-        self.last_frame_button = self._control("⏭", "Go to the last frame of the video", "previewLastFrameButton")
+        self.play_pause_button = self._control("▶", "Play preview", "previewPlayPauseButton")
+        self.first_frame_button = self._control("⏮", "Go to first frame", "previewFirstFrameButton")
+        self.last_frame_button = self._control("⏭", "Go to last frame", "previewLastFrameButton")
         self.next_button = self._control("⏩", "Next clip", "previewNextButton")
         controls = QHBoxLayout()
         for button in (self.play_pause_button, self.first_frame_button, self.last_frame_button, self.previous_button, self.next_button):
@@ -68,6 +68,7 @@ class SourcePreviewPane(QFrame):
         button.setAccessibleName(label)
         button.setToolTip(label)
         button.setAutoRaise(True)
+        button.setFixedSize(32, 32)
         return button
 
     def set_source(self, path: Path | None) -> None:
@@ -127,8 +128,10 @@ class SourcePreviewPane(QFrame):
     @Slot(QMediaPlayer.PlaybackState)
     def _playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
         playing = state == QMediaPlayer.PlaybackState.PlayingState
+        action = "Pause preview" if playing else "Play preview"
         self.play_pause_button.setText("Ⅱ" if playing else "▶")
-        self.play_pause_button.setToolTip("Pause preview" if playing else "Play preview")
+        self.play_pause_button.setAccessibleName(action)
+        self.play_pause_button.setToolTip(action)
 
     @Slot(QMediaPlayer.MediaStatus)
     def _media_status_changed(self, status: QMediaPlayer.MediaStatus) -> None:

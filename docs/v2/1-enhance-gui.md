@@ -196,8 +196,8 @@ message actions.
 - [x] Add the integrated two-tab message widget at the bottom of the main window and connect it to global and selected-job event streams.
 - [x] Add the far-left two-icon navigation rail and switch between Job Creation and Queue Monitoring views without losing either view's state.
 - [x] Add the far-right source-preview pane and verify its default 3:4 geometry, available-height calculation, and responsive behavior.
-- [ ] Add previous-clip, play/pause, go-to-first-frame, go-to-last-frame, and next-clip controls; start playback automatically when the selected source clip changes; disable navigation at list boundaries; provide no loop controls.
-- [ ] Use the approved icon-only glyphs, accessible names, tooltips, enabled/disabled states, and keyboard focus behavior for all source-preview controls.
+- [x] Add previous-clip, play/pause, go-to-first-frame, go-to-last-frame, and next-clip controls; start playback automatically when the selected source clip changes; disable navigation at list boundaries; provide no loop controls.
+- [x] Use the approved icon-only glyphs, accessible names, tooltips, enabled/disabled states, and keyboard focus behavior for all source-preview controls.
 - [x] Add video-file drag-and-drop from the operating-system file manager, append accepted files in drop order, retain the picker, and reject non-video, URL, and remote drops.
 - [x] Render filename-only source rows without metadata or thumbnails.
 - [x] Add a video preview whose source is exclusively the currently selected source clip.
@@ -379,6 +379,12 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Navigation changes only the editor's current source selection and cannot reorder clips or affect frozen processing intent; native playback wiring remains the next preview slice.
 - Added headless coverage for control enablement and previous/next selection behavior in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 182 passed; Black, Pylint, and pycodestyle passed.
+
+### Preview control accessibility slice — completed
+
+- Fixed the play/pause accessible action name and tooltip to reflect the next action, and fixed every preview control hit area at 32 × 32 pixels.
+- Verified the approved control order, source-list boundary enablement, and one-to-one accessible tooltip/action labels in `tests/test_gui.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 10 passed.
 
 ### Native preview playback slice — completed
 
