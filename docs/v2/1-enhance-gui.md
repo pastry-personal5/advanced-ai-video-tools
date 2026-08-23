@@ -217,8 +217,8 @@ message actions.
 - [x] Keep native preview playback as-is for v2; do not add a preview rotation gate or custom rotation renderer, while retaining authoritative preflight rotation policy.
 - [x] Keep preview state isolated from processing intent and expose no editing, filtering, trimming, frame-export, or concat-boundary controls.
 - [x] Keep FFmpeg, FFprobe, Real-ESRGAN, command builders, and processing services out of the preview presentation layer.
-- [ ] Implement the separately approved controls, audio, error, and cleanup policies around the fixed playback backend.
-- [ ] Keep custom target-height input without adding output-height presets.
+- [x] Implement the separately approved controls, audio, error, and cleanup policies around the fixed playback backend.
+- [x] Keep custom target-height input without adding output-height presets.
 - [x] Route job-editor validation and status messages to `Global Messages`; do not show inline editor error or warning widgets.
 
 ### 4. Queue and job details
@@ -250,7 +250,7 @@ message actions.
 - [ ] Add headless GUI tests for every changed critical interaction.
 - [ ] Test dark-theme rendering, Codex-created icon accessibility, file-manager drag-and-drop, and URL/remote-drop rejection.
 - [ ] Test player load, decode, and unsupported-format failures as non-blocking preview states without proxy generation.
-- [ ] Test native preview-as-is rotation behavior, custom target height without presets, Preferences-menu settings access, and removal of the main-window External Tools button.
+- [x] Test native preview-as-is rotation behavior, custom target height without presets, Preferences-menu settings access, and removal of the main-window External Tools button.
 - [x] Test queue Status/Job Name columns, completion messages in `Global Messages`, and session history/minimum five-line message widgets.
 - [ ] Test that retry actions are absent for failed and cancelled jobs.
 - [ ] Test width-driven resizing, exact aspect preservation, and native preview rotation behavior.
@@ -482,6 +482,23 @@ Record subsequent completed slices here with links to the relevant modules/tests
 
 - Verified that `SourcePreviewPane` depends only on Qt media/presentation types and local `Path` values; FFmpeg, FFprobe, Real-ESRGAN, command builders, and processing services remain outside the module.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 204 passed; Black, Pylint, and pycodestyle passed.
+
+### Native preview lifecycle policy slice — completed
+
+- Verified the approved playback/navigation controls, muted autoplay and persisted audio preferences, inline native-player error state, source-change reset behavior, processing-start pause, and shutdown output detachment around the fixed `QMediaPlayer`/`QVideoWidget` backend.
+- Existing headless GUI coverage exercises these control, audio, error, processing-lifecycle, and cleanup paths.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 204 passed; Black, Pylint, and pycodestyle passed.
+
+### Custom target-height control slice — completed
+
+- Confirmed the editor retains a custom even-pixel target-height spinbox and exposes no output-height preset selector.
+- Added regression coverage for custom 1440 px input, the pixel suffix, two-pixel stepping, and absence of `QComboBox` presets.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 205 passed; Black, Pylint, and pycodestyle passed.
+
+### Combined GUI boundary verification slice — completed
+
+- Added focused headless coverage for enabled `Edit` → `Preferences`, absence of the legacy main-window External Tools button, custom target height, and direct native preview output.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 206 passed; Black, Pylint, and pycodestyle passed.
 
 ### Local file drop slice — completed
 

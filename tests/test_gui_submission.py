@@ -18,7 +18,7 @@ import yaml
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QThread, QUrl, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QListWidget, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QLabel, QListWidget, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.editor import SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH, JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
@@ -216,6 +216,19 @@ def test_basic_settings_width_and_target_height_guidance(qt_app: QApplication) -
     assert "font-weight: 700" in editor.findChild(QGroupBox, "outputDirectoryGroup").styleSheet()
     assert "font-weight: 700" in editor.findChild(QGroupBox, "targetHeightGroup").styleSheet()
     assert "font-weight: 700" in upscaler_group.styleSheet()
+
+
+def test_target_height_remains_custom_without_presets(qt_app: QApplication) -> None:
+    """Target height stays an editable even-pixel control with no preset selector."""
+
+    del qt_app
+    editor = JobEditor(ApplicationSettings(target_height=2160))
+    editor.target_height.setValue(1440)
+
+    assert editor.target_height.value() == 1440
+    assert editor.target_height.suffix() == " px"
+    assert editor.target_height.singleStep() == 2
+    assert editor.findChildren(QComboBox) == []
 
 
 def test_source_clip_reorder_controls_are_grouped_and_right_aligned(qt_app: QApplication) -> None:

@@ -16,7 +16,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QCoreApplication, QLockFile, QModelIndex, Qt  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtCore import QCoreApplication, QLockFile, QModelIndex, QObject, Qt, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtGui import QPalette  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSplitter, QToolButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
@@ -199,6 +199,38 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     window.job_list.setCurrentIndex(model.index(1, 0))
     qt_app.processEvents()
     assert not window.move_up_button.isEnabled()
+    window.close()
+
+
+def test_gui_preferences_target_height_and_native_preview_boundaries(qt_app: QApplication, tmp_path: Path) -> None:
+    """The revised creation surface keeps Preferences, custom height, and native preview boundaries."""
+
+    del qt_app
+
+    class FakeToolValidator(QObject):
+        """Signal-compatible validator double for Preferences-menu availability."""
+
+        succeeded = Signal(object)
+        failed = Signal(object, str)
+
+    queue = FakeQueue()
+    bridge = QueueSnapshotBridge()
+    model = JobListModel(queue, bridge)  # type: ignore[arg-type]
+    settings_store = SettingsStore(tmp_path / "settings.yaml")
+    window = MainWindow(
+        model,
+        ApplicationSettings(target_height=2160),
+        settings_store=settings_store,
+        tool_validator=FakeToolValidator(),  # type: ignore[arg-type]
+    )
+
+    assert window.preferences_action.text() == "Preferences"
+    assert window.preferences_action.isEnabled()
+    assert window.findChild(QPushButton, "externalToolsButton") is None
+    window.editor.target_height.setValue(1440)
+    assert window.editor.target_height.value() == 1440
+    assert window.source_preview.player.videoOutput() is window.source_preview.video
+    assert window.source_preview.video.aspectRatioMode() == Qt.AspectRatioMode.KeepAspectRatio
     window.close()
 
 
