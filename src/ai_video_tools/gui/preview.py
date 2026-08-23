@@ -7,10 +7,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker, QUrl, Qt, Signal, Slot
+from PySide6.QtCore import QSignalBlocker, QSize, QUrl, Qt, Signal, Slot
+from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
-from PySide6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QSlider, QSizePolicy, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QSlider, QSizePolicy, QStyle, QToolButton, QVBoxLayout, QWidget
+
+VOLUME_ICON_COLOR = "#b8bcc2"
+VOLUME_ICON_OPTICAL_OFFSET = 2
 
 
 class SourcePreviewPane(QFrame):
@@ -34,7 +38,7 @@ class SourcePreviewPane(QFrame):
         self.audio.setMuted(True)
         self.player.setAudioOutput(self.audio)
         self.player.setVideoOutput(self.video)
-        self.mute_toggle = QCheckBox("Mute preview")
+        self.mute_toggle = QCheckBox()
         self.mute_toggle.setObjectName("previewMuteToggle")
         self.mute_toggle.setAccessibleName("Mute preview")
         self.mute_toggle.setToolTip("Mute preview")
@@ -43,6 +47,7 @@ class SourcePreviewPane(QFrame):
         self.volume_slider.setAccessibleName("Preview volume")
         self.volume_slider.setToolTip("Preview volume")
         self.volume_slider.setRange(0, 100)
+        self.volume_slider.setFixedHeight(24)
         self._preferred_muted = bool(muted)
         self._apply_audio_preferences(muted, volume)
         self.previous_button = self._control("⏪", "Previous clip", "previewPreviousButton")
@@ -50,14 +55,48 @@ class SourcePreviewPane(QFrame):
         self.first_frame_button = self._control("⏮", "Go to first frame", "previewFirstFrameButton")
         self.last_frame_button = self._control("⏭", "Go to last frame", "previewLastFrameButton")
         self.next_button = self._control("⏩", "Next clip", "previewNextButton")
+        self.preview_label = QLabel("Preview")
+        self.preview_label.setObjectName("previewLabel")
+        self.volume_label = QLabel("Output volume")
+        self.volume_label.setObjectName("outputVolumeLabel")
+        self.volume_label.setFixedHeight(24)
+        self.minimum_volume_icon = self._volume_icon(QStyle.StandardPixmap.SP_MediaVolumeMuted, "Minimum volume", "minimumVolumeIcon")
+        self.maximum_volume_icon = self._volume_icon(QStyle.StandardPixmap.SP_MediaVolume, "Maximum volume", "maximumVolumeIcon")
+        self.mute_label = QLabel("Mute")
+        self.mute_label.setObjectName("muteLabel")
+        self.mute_label.setBuddy(self.mute_toggle)
+        playback_controls = QHBoxLayout()
+        for button in (self.play_pause_button, self.first_frame_button, self.last_frame_button):
+            playback_controls.addWidget(button)
+        navigation_controls = QHBoxLayout()
+        for button in (self.previous_button, self.next_button):
+            navigation_controls.addWidget(button)
         controls = QHBoxLayout()
-        for button in (self.play_pause_button, self.first_frame_button, self.last_frame_button, self.previous_button, self.next_button):
-            controls.addWidget(button)
+        controls.addLayout(playback_controls)
+        controls.addStretch(1)
+        controls.addLayout(navigation_controls)
         self._buttons = (self.play_pause_button, self.first_frame_button, self.last_frame_button, self.previous_button, self.next_button)
-        audio_controls = QHBoxLayout()
-        audio_controls.addWidget(self.mute_toggle)
-        audio_controls.addWidget(self.volume_slider, 1)
+        self.volume_row = QWidget()
+        self.volume_row.setObjectName("previewVolumeRow")
+        self.volume_row.setFixedHeight(24)
+        self.volume_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        volume_controls = QHBoxLayout(self.volume_row)
+        volume_controls.setContentsMargins(0, 0, 0, 0)
+        volume_controls.addWidget(self.volume_label, alignment=Qt.AlignmentFlag.AlignVCenter)
+        volume_controls.addWidget(self.minimum_volume_icon, alignment=Qt.AlignmentFlag.AlignVCenter)
+        volume_controls.addWidget(self.volume_slider, 1, alignment=Qt.AlignmentFlag.AlignVCenter)
+        volume_controls.addWidget(self.maximum_volume_icon, alignment=Qt.AlignmentFlag.AlignVCenter)
+        mute_controls = QHBoxLayout()
+        mute_controls.addStretch(1)
+        mute_group = QHBoxLayout()
+        mute_group.addWidget(self.mute_toggle)
+        mute_group.addWidget(self.mute_label)
+        mute_controls.addLayout(mute_group)
+        audio_controls = QVBoxLayout()
+        audio_controls.addWidget(self.volume_row)
+        audio_controls.addLayout(mute_controls)
         layout = QVBoxLayout(self)
+        layout.addWidget(self.preview_label)
         layout.addWidget(self.video, 1)
         layout.addLayout(controls)
         layout.addLayout(audio_controls)
@@ -86,7 +125,31 @@ class SourcePreviewPane(QFrame):
         button.setToolTip(label)
         button.setAutoRaise(True)
         button.setFixedSize(32, 32)
+        glyph_font = button.font()
+        glyph_font.setPointSizeF(max(1.0, glyph_font.pointSizeF() * 2))
+        button.setFont(glyph_font)
+        button.setStyleSheet("QToolButton { border: none; background: transparent; padding: 0px; }")
         return button
+
+    def _volume_icon(self, pixmap: QStyle.StandardPixmap, label: str, object_name: str) -> QLabel:
+        """Create a fixed native volume indicator with accessible context."""
+
+        icon = QLabel()
+        icon.setObjectName(object_name)
+        source = self.style().standardIcon(pixmap).pixmap(QSize(20, 20))
+        tinted = QPixmap(QSize(24, 24))
+        tinted.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(tinted)
+        painter.drawPixmap(2, 2 + VOLUME_ICON_OPTICAL_OFFSET, source)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(tinted.rect(), QColor(VOLUME_ICON_COLOR))
+        painter.end()
+        icon.setPixmap(tinted)
+        icon.setFixedSize(24, 24)
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon.setAccessibleName(label)
+        icon.setToolTip(label)
+        return icon
 
     def set_source(self, path: Path | None) -> None:
         """Show only the selected editor source filename."""

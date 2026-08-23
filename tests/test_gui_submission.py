@@ -141,6 +141,7 @@ def test_editor_preserves_concat_order_and_builds_frozen_supported_request(qt_ap
     settings = ApplicationSettings(tools=tools, target_height=2160, overwrite_mode=OverwriteMode.NO_OVERWRITE)
     editor = JobEditor(settings, clock=lambda: _CREATED)
     paths = (tmp_path / "one.mov", tmp_path / "two.mov", tmp_path / "three.mov")
+    assert editor.findChild(QLabel, "sourceClipsLabel").text() == "Source Clips"
     editor.add_inputs(paths)
     assert [editor.inputs.item(row).text() for row in range(editor.inputs.count())] == [""] * len(paths)
     editor.inputs.setCurrentRow(2)

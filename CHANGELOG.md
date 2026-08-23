@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Set preview controls to 32 × 32 glyph-only buttons with 2× glyphs and grouped playback/seek controls at the left with clip navigation controls at the right.
+- Added the labeled `Output volume` row with native volume indicators and a right-aligned checkbox/`Mute` label group.
+- Tinted the minimum and maximum volume indicators light gray for consistent dark-theme contrast.
+- Aligned the output-volume label, minimum icon, slider, and maximum icon on one shared horizontal centerline.
+- Corrected the native volume glyphs' padded-canvas visual offset so their rendered marks align with the slider line.
 - Changed persistent settings from JSON to YAML, added the `settings.yaml` default path, and migrated valid legacy `settings.json` preferences once without weakening atomic writes, quarantine, or newer-schema protection.
 - Set version 2 as the active development target while retaining v1.0.0 as the released behavior baseline.
 - Established GUI enhancement as Phase 1 and project renaming as a required v2 goal.

@@ -386,6 +386,19 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Verified the approved control order, source-list boundary enablement, and one-to-one accessible tooltip/action labels in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 10 passed.
 
+### Preview control grouping and scale slice — completed
+
+- Grouped play/pause, first-frame, and last-frame controls at the far left of the row; grouped previous-clip and next-clip controls at the far right.
+- Set each fixed hit area to 32 × 32 pixels, doubled the glyph font size, and kept the controls glyph-only with transparent button chrome while retaining accessible names and tooltips.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 14 passed.
+
+### Preview volume control layout slice — completed
+
+- Added an `Output volume` row with light-gray native minimum/maximum volume icons bracketing the persisted volume slider, with an explicit optical offset matching the slider's rendered line.
+- Fixed the volume row as a dedicated 24-pixel-tall widget with zero layout margins and explicit vertical-center alignment for the label, icons, and slider.
+- Added a right-aligned mute group containing the checkbox and separate `Mute` label without changing audio preference persistence or autoplay safety.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 14 passed.
+
 ### Preview resize verification slice — completed
 
 - Added headless regression coverage for actual 3:4 pane resizing at multiple widths and for the native `KeepAspectRatio` video setting in `tests/test_gui.py`.

@@ -25,7 +25,7 @@ from ai_video_tools.core.models import JobRequest, JobState, PipelineStage, Prog
 from ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.preview import SourcePreviewPane  # noqa: E402  # pylint: disable=wrong-import-position
+from ai_video_tools.gui.preview import VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, SourcePreviewPane  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.theme import apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
@@ -312,6 +312,23 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     window.job_creation_button.click()
     assert window.view_stack.currentIndex() == 0
     assert window.queue_monitoring_button.isEnabled()
+    assert window.editor.findChild(QLabel, "sourceClipsLabel").text() == "Source Clips"
+    assert window.source_preview.preview_label.text() == "Preview"
+    assert window.source_preview.volume_label.text() == "Output volume"
+    assert window.source_preview.mute_label.text() == "Mute"
+    assert window.source_preview.mute_label.buddy() is window.source_preview.mute_toggle
+    audio_controls = window.source_preview.layout().itemAt(3).layout()
+    assert audio_controls.itemAt(0).widget() is window.source_preview.volume_row
+    volume_controls = window.source_preview.volume_row.layout()
+    assert [volume_controls.itemAt(index).widget() for index in range(4)] == [window.source_preview.volume_label, window.source_preview.minimum_volume_icon, window.source_preview.volume_slider, window.source_preview.maximum_volume_icon]
+    volume_widgets = [window.source_preview.volume_label, window.source_preview.minimum_volume_icon, window.source_preview.volume_slider, window.source_preview.maximum_volume_icon]
+    assert len({widget.geometry().center().y() for widget in volume_widgets}) == 1
+    assert window.source_preview.volume_row.height() == 24
+    assert {widget.height() for widget in volume_widgets} == {24}
+    mute_controls = audio_controls.itemAt(1).layout()
+    assert mute_controls.itemAt(0).spacerItem() is not None
+    mute_group = mute_controls.itemAt(1).layout()
+    assert [mute_group.itemAt(index).widget() for index in range(2)] == [window.source_preview.mute_toggle, window.source_preview.mute_label]
     window.editor.add_inputs((tmp_path / "first.mov",))
     assert window.findChild(QLabel, "sourcePreviewSource") is None
     assert window.source_preview.minimumWidth() == 600
@@ -323,18 +340,24 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.source_preview.previous_button.text() == "⏪"
     assert window.source_preview.next_button.text() == "⏩"
     assert window.source_preview.play_pause_button.text() == "▶"
-    controls = window.source_preview.layout().itemAt(1).layout()
-    assert [controls.itemAt(index).widget() for index in range(controls.count())] == [
-        window.source_preview.play_pause_button,
-        window.source_preview.first_frame_button,
-        window.source_preview.last_frame_button,
-        window.source_preview.previous_button,
-        window.source_preview.next_button,
-    ]
+    controls = window.source_preview.layout().itemAt(2).layout()
+    assert controls.itemAt(0).layout() is not None
+    assert [controls.itemAt(0).layout().itemAt(index).widget() for index in range(3)] == [window.source_preview.play_pause_button, window.source_preview.first_frame_button, window.source_preview.last_frame_button]
+    assert controls.itemAt(1).spacerItem() is not None
+    assert controls.itemAt(2).layout() is not None
+    assert [controls.itemAt(2).layout().itemAt(index).widget() for index in range(2)] == [window.source_preview.previous_button, window.source_preview.next_button]
     for button in (window.source_preview.play_pause_button, window.source_preview.first_frame_button, window.source_preview.last_frame_button, window.source_preview.previous_button, window.source_preview.next_button):
         assert button.size().width() == 32
         assert button.size().height() == 32
+        assert button.font().pointSizeF() == pytest.approx(QApplication.font().pointSizeF() * 2)
         assert button.toolTip() == button.accessibleName()
+        assert "background: transparent" in button.styleSheet()
+        assert "border: none" in button.styleSheet()
+    for icon in (window.source_preview.minimum_volume_icon, window.source_preview.maximum_volume_icon):
+        image = icon.pixmap().toImage()
+        assert any(image.pixelColor(x, y).name() == VOLUME_ICON_COLOR for x in range(image.width()) for y in range(image.height()))
+        ink_rows = [y for y in range(image.height()) if any(image.pixelColor(x, y).alpha() > 0 for x in range(image.width()))]
+        assert min(ink_rows) == 5 + VOLUME_ICON_OPTICAL_OFFSET
     assert window.source_preview.play_pause_button.accessibleName() == "Play preview"
     window.source_preview._playback_state_changed(QMediaPlayer.PlaybackState.PlayingState)  # pylint: disable=protected-access
     assert window.source_preview.play_pause_button.accessibleName() == "Pause preview"
