@@ -48,7 +48,22 @@ class SourcePreviewPane(QFrame):
         self.volume_slider.setToolTip("Preview volume")
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setFixedHeight(24)
+        self.progress_slider = QSlider(Qt.Orientation.Horizontal)
+        self.progress_slider.setObjectName("previewProgressSlider")
+        self.progress_slider.setAccessibleName("Preview progress")
+        self.progress_slider.setToolTip("Seek preview")
+        self.progress_slider.setRange(0, 0)
+        self.progress_slider.setEnabled(False)
+        self.progress_slider.setTracking(True)
+        self.progress_slider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.progress_slider.setFixedHeight(24)
+        self.preview_time_label = QLabel("0:00 / 0:00")
+        self.preview_time_label.setObjectName("previewTimeLabel")
+        self.preview_time_label.setAccessibleName("Preview time")
+        self.preview_time_label.setMinimumWidth(84)
+        self.preview_time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._preferred_muted = bool(muted)
+        self._duration_ms = 0
         self._apply_audio_preferences(muted, volume)
         self.previous_button = self._control("⏪", "Previous clip", "previewPreviousButton")
         self.play_pause_button = self._control("▶", "Play preview", "previewPlayPauseButton")
@@ -60,6 +75,7 @@ class SourcePreviewPane(QFrame):
         self.volume_label = QLabel("Output volume")
         self.volume_label.setObjectName("outputVolumeLabel")
         self.volume_label.setFixedHeight(24)
+        self.volume_label.setContentsMargins(0, 0, 16, 0)
         self.minimum_volume_icon = self._volume_icon(QStyle.StandardPixmap.SP_MediaVolumeMuted, "Minimum volume", "minimumVolumeIcon")
         self.maximum_volume_icon = self._volume_icon(QStyle.StandardPixmap.SP_MediaVolume, "Maximum volume", "maximumVolumeIcon")
         self.mute_label = QLabel("Mute")
@@ -95,9 +111,14 @@ class SourcePreviewPane(QFrame):
         audio_controls = QVBoxLayout()
         audio_controls.addWidget(self.volume_row)
         audio_controls.addLayout(mute_controls)
+        progress_row = QHBoxLayout()
+        progress_row.setContentsMargins(0, 0, 0, 0)
+        progress_row.addWidget(self.progress_slider, 1)
+        progress_row.addWidget(self.preview_time_label)
         layout = QVBoxLayout(self)
         layout.addWidget(self.preview_label)
         layout.addWidget(self.video, 1)
+        layout.addLayout(progress_row)
         layout.addLayout(controls)
         layout.addLayout(audio_controls)
         layout.setStretch(1, 1)
@@ -108,10 +129,13 @@ class SourcePreviewPane(QFrame):
         self.next_button.clicked.connect(lambda: self.next_requested.emit())
         self.mute_toggle.toggled.connect(self._mute_toggled)
         self.volume_slider.valueChanged.connect(self._volume_changed)
+        self.progress_slider.valueChanged.connect(self._progress_changed)
         self._paths: tuple[Path, ...] = ()
         self._selected_index = -1
         self.player.playbackStateChanged.connect(self._playback_state_changed)
         self.player.mediaStatusChanged.connect(self._media_status_changed)
+        self.player.positionChanged.connect(self._position_changed)
+        self.player.durationChanged.connect(self._duration_changed)
         self.player.errorOccurred.connect(self._preview_error)
 
     @staticmethod
@@ -155,6 +179,7 @@ class SourcePreviewPane(QFrame):
         """Show only the selected editor source filename."""
 
         self.player.stop()
+        self._reset_progress()
         self._set_actual_muted(True)
         if path is None:
             self.player.setSource(QUrl())
@@ -206,6 +231,60 @@ class SourcePreviewPane(QFrame):
     def _volume_changed(self, volume: int) -> None:
         self.audio.setVolume(volume / 100)
         self.audio_preferences_changed.emit(self._preferred_muted, volume)
+
+    def _reset_progress(self) -> None:
+        """Clear timeline state while a new native source loads asynchronously."""
+
+        progress_blocker = QSignalBlocker(self.progress_slider)
+        self.progress_slider.setRange(0, 0)
+        self.progress_slider.setValue(0)
+        del progress_blocker
+        self.progress_slider.setEnabled(False)
+        self._duration_ms = 0
+        self.preview_time_label.setText("0:00 / 0:00")
+
+    @staticmethod
+    def _format_time(milliseconds: int) -> str:
+        """Format native player milliseconds as a compact media timestamp."""
+
+        total_seconds = max(0, milliseconds) // 1000
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
+
+    def _update_time_label(self, position: int, duration: int) -> None:
+        """Keep the accessible time readout synchronized with the timeline."""
+
+        self.preview_time_label.setText(f"{self._format_time(position)} / {self._format_time(duration)}")
+
+    @Slot(int)
+    def _position_changed(self, position: int) -> None:
+        """Reflect native playback progress without feeding it back as a seek."""
+
+        progress_blocker = QSignalBlocker(self.progress_slider)
+        self.progress_slider.setValue(max(0, position))
+        del progress_blocker
+        self._update_time_label(position, self._duration_ms)
+
+    @Slot(int)
+    def _duration_changed(self, duration: int) -> None:
+        """Size and enable the seeking control once media duration is known."""
+
+        duration = max(0, duration)
+        self._duration_ms = duration
+        progress_blocker = QSignalBlocker(self.progress_slider)
+        self.progress_slider.setRange(0, duration)
+        self.progress_slider.setValue(min(max(0, self.player.position()), duration))
+        del progress_blocker
+        self.progress_slider.setEnabled(duration > 0 and bool(self._paths) and 0 <= self._selected_index < len(self._paths))
+        self._update_time_label(self.player.position(), self._duration_ms)
+
+    @Slot(int)
+    def _progress_changed(self, position: int) -> None:
+        """Seek the selected native source when the user moves the timeline."""
+
+        if self.progress_slider.isEnabled():
+            self.player.setPosition(position)
 
     def heightForWidth(self, width: int) -> int:  # pylint: disable=invalid-name
         """Return the approved 3:4 preview geometry for a given width."""

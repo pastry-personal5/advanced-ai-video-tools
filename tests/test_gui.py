@@ -314,10 +314,22 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.queue_monitoring_button.isEnabled()
     assert window.editor.findChild(QLabel, "sourceClipsLabel").text() == "Source Clips"
     assert window.source_preview.preview_label.text() == "Preview"
+    assert window.source_preview.progress_slider.accessibleName() == "Preview progress"
+    assert window.source_preview.progress_slider.toolTip() == "Seek preview"
+    assert not window.source_preview.progress_slider.isEnabled()
+    window.source_preview._duration_changed(125000)  # pylint: disable=protected-access
+    window.source_preview._position_changed(61500)  # pylint: disable=protected-access
+    assert window.source_preview.progress_slider.maximum() == 125000
+    assert window.source_preview.progress_slider.value() == 61500
+    assert window.source_preview.preview_time_label.text() == "1:01 / 2:05"
     assert window.source_preview.volume_label.text() == "Output volume"
+    assert window.source_preview.volume_label.contentsMargins().right() == 16
     assert window.source_preview.mute_label.text() == "Mute"
     assert window.source_preview.mute_label.buddy() is window.source_preview.mute_toggle
-    audio_controls = window.source_preview.layout().itemAt(3).layout()
+    progress_row = window.source_preview.layout().itemAt(2).layout()
+    assert progress_row.itemAt(0).widget() is window.source_preview.progress_slider
+    assert progress_row.itemAt(1).widget() is window.source_preview.preview_time_label
+    audio_controls = window.source_preview.layout().itemAt(4).layout()
     assert audio_controls.itemAt(0).widget() is window.source_preview.volume_row
     volume_controls = window.source_preview.volume_row.layout()
     assert [volume_controls.itemAt(index).widget() for index in range(4)] == [window.source_preview.volume_label, window.source_preview.minimum_volume_icon, window.source_preview.volume_slider, window.source_preview.maximum_volume_icon]
@@ -340,7 +352,7 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.source_preview.previous_button.text() == "⏪"
     assert window.source_preview.next_button.text() == "⏩"
     assert window.source_preview.play_pause_button.text() == "▶"
-    controls = window.source_preview.layout().itemAt(2).layout()
+    controls = window.source_preview.layout().itemAt(3).layout()
     assert controls.itemAt(0).layout() is not None
     assert [controls.itemAt(0).layout().itemAt(index).widget() for index in range(3)] == [window.source_preview.play_pause_button, window.source_preview.first_frame_button, window.source_preview.last_frame_button]
     assert controls.itemAt(1).spacerItem() is not None
@@ -392,6 +404,7 @@ def test_source_preview_resize_preserves_pane_ratio_and_native_aspect_mode(qt_ap
     assert pane.width() == 300
     assert pane.height() == 400
     assert pane.video.aspectRatioMode() == Qt.AspectRatioMode.KeepAspectRatio
+    assert not pane.progress_slider.isEnabled()
 
     pane.resize(450, pane.heightForWidth(450))
     qt_app.processEvents()
@@ -400,6 +413,26 @@ def test_source_preview_resize_preserves_pane_ratio_and_native_aspect_mode(qt_ap
     pane.shutdown()
     assert pane.player.videoOutput() is None
     assert pane.player.audioOutput() is None
+    pane.close()
+
+
+def test_source_preview_progress_tracks_duration_and_user_seek(qt_app: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The timeline mirrors playback and sends user movement to QMediaPlayer."""
+
+    del qt_app
+    pane = SourcePreviewPane()
+    pane.set_sources((Path("clip.mov"),), 0)
+    pane._duration_changed(10_000)  # pylint: disable=protected-access
+    pane._position_changed(2_500)  # pylint: disable=protected-access
+
+    seek_positions: list[int] = []
+    monkeypatch.setattr(pane.player, "setPosition", seek_positions.append)
+    pane.progress_slider.setValue(7_500)
+
+    assert pane.progress_slider.value() == 7_500
+    assert seek_positions == [7_500]
+    assert pane.preview_time_label.text() == "0:02 / 0:10"
+    pane.shutdown()
     pane.close()
 
 

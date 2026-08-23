@@ -46,6 +46,7 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 - “Go to the first frame” seeks to the start of the selected clip; “go to the last frame” seeks to its last frame without changing the ordered input list or job intent.
 - Do not provide loop, repeat, A/B, trim, timeline-editing, filtering, frame-export, or concat-boundary controls in v2.
 - Autoplay, seeking, and control state affect playback only and never become preflight or processing input.
+- Show a duration-backed playback progress bar for the selected clip. The bar mirrors native player position, displays elapsed and total time, and lets the user seek without changing clip order or job intent.
 - Render the five controls as icon-only buttons in this order: play/pause uses the conventional play triangle and pause bars; go-to-first-frame uses a leading vertical bar with one left-pointing triangle; go-to-last-frame uses one right-pointing triangle with a trailing vertical bar; previous clip uses double left-pointing triangles; next clip uses double right-pointing triangles. The double- versus single-triangle treatment distinguishes clip navigation from seeking within the selected clip.
 - Use Qt-native icon construction or small app-owned vector glyphs for these controls rather than relying on undocumented platform theme names or third-party icon assets. Keep one consistent monochrome visual treatment at the supported display scale.
 - Every icon-only button has a programmatic accessible name, a tooltip, and a non-color state indication. The play/pause accessible name reflects the action that will occur next (for example, “Pause preview” while playing and “Play preview” while paused).
@@ -197,6 +198,7 @@ message actions.
 - [x] Add the far-left two-icon navigation rail and switch between Job Creation and Queue Monitoring views without losing either view's state.
 - [x] Add the far-right source-preview pane and verify its default 3:4 geometry, available-height calculation, and responsive behavior.
 - [x] Add previous-clip, play/pause, go-to-first-frame, go-to-last-frame, and next-clip controls; start playback automatically when the selected source clip changes; disable navigation at list boundaries; provide no loop controls.
+- [x] Add a native playback progress/seeking bar with elapsed and total time for the selected source clip; keep its state presentation-only.
 - [x] Use the approved icon-only glyphs, accessible names, tooltips, enabled/disabled states, and keyboard focus behavior for all source-preview controls.
 - [x] Add video-file drag-and-drop from the operating-system file manager, append accepted files in drop order, retain the picker, and reject non-video, URL, and remote drops.
 - [x] Render filename-only source rows without metadata or thumbnails.
@@ -437,6 +439,14 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Added headless coverage for muted audio and aspect-ratio configuration in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 182 passed; Black, Pylint, and pycodestyle passed.
 
+### Preview progress and seeking slice — completed
+
+- Added a duration-backed preview progress slider and elapsed/total time readout to `SourcePreviewPane`.
+- Native `QMediaPlayer` position and duration signals drive the readout; user slider movement seeks the selected local source only and remains outside the frozen job request.
+- The timeline resets while a source loads, stays disabled until native duration is available, and is released with the existing preview player lifecycle.
+- Added headless regression coverage for duration/position synchronization, user seeking, timestamp formatting, and disabled no-source state.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 15 passed; `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 200 passed; Black, Pylint, and pycodestyle passed.
+
 ### Local file drop slice — completed
 
 - Added local video-file drag-and-drop to `JobEditor`; supported `.mov`, `.mp4`, `.mkv`, and `.m4v` files append in drop order and automatically select/autoplay the newest source through the existing preview binding.
@@ -546,6 +556,12 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Added regression coverage with an injected Trash mover in `tests/test_gui_submission.py`.
 - Long source filenames now use middle ellipsis in the row, with the full path retained as a tooltip; each row is constrained to the list viewport, and the Trash control uses a compact 20 px hit area and 10 px icon.
 - Widened the source clip list maximum from 623 px to 673 px, adding 25 px of room on each side for filenames and row actions.
+
+### Source-list reorder controls slice — completed
+
+- Grouped Move Up and Move Down in one compact source-list reorder control group and right-aligned it within the source-list action row.
+- Added headless coverage for the group structure and right-edge alignment in `tests/test_gui_submission.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 201 passed; Black, Pylint, and pycodestyle passed.
 
 ### Always-dark theme decision — implemented
 

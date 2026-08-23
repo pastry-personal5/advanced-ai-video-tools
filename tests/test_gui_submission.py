@@ -18,7 +18,7 @@ import yaml
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QThread, QUrl, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QListWidget, QToolButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QListWidget, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.editor import SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH, JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
@@ -216,6 +216,31 @@ def test_basic_settings_width_and_target_height_guidance(qt_app: QApplication) -
     assert "font-weight: 700" in editor.findChild(QGroupBox, "outputDirectoryGroup").styleSheet()
     assert "font-weight: 700" in editor.findChild(QGroupBox, "targetHeightGroup").styleSheet()
     assert "font-weight: 700" in upscaler_group.styleSheet()
+
+
+def test_source_clip_reorder_controls_are_grouped_and_right_aligned(qt_app: QApplication) -> None:
+    """Move controls share one right-aligned group in the source-list row."""
+
+    editor = JobEditor(ApplicationSettings())
+    source_group = editor.findChild(QGroupBox, "sourceClipListGroup")
+    move_controls = editor.findChild(QWidget, "sourceClipMoveControls")
+    assert source_group is not None
+    assert move_controls is not None
+    move_layout = move_controls.layout()
+    assert move_layout is not None
+    assert [move_layout.itemAt(index).widget() for index in range(2)] == [editor.input_up_button, editor.input_down_button]
+
+    input_controls = source_group.layout().itemAt(2).layout()
+    assert input_controls is not None
+    assert [input_controls.itemAt(index).widget() for index in range(2)] == [editor.add_button, editor.remove_button]
+    assert input_controls.itemAt(2).spacerItem() is not None
+    assert input_controls.itemAt(3).widget() is move_controls
+
+    editor.resize(1200, 500)
+    editor.show()
+    qt_app.processEvents()
+    assert move_controls.geometry().right() == input_controls.geometry().right()
+    editor.close()
 
 
 def test_source_rows_offer_os_trash_action(qt_app: QApplication, tmp_path: Path) -> None:

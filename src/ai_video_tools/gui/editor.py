@@ -88,12 +88,20 @@ class JobEditor(QWidget):
         self.input_down_button = QPushButton("Move Down")
         self.input_down_button.setObjectName("inputDownButton")
 
+        self.source_clip_move_controls = QWidget()
+        self.source_clip_move_controls.setObjectName("sourceClipMoveControls")
+        self.source_clip_move_controls.setAccessibleName("Source clip reorder controls")
+        self.source_clip_move_controls.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        move_controls_layout = QHBoxLayout(self.source_clip_move_controls)
+        move_controls_layout.setContentsMargins(0, 0, 0, 0)
+        move_controls_layout.addWidget(self.input_up_button)
+        move_controls_layout.addWidget(self.input_down_button)
+
         input_controls = QHBoxLayout()
         input_controls.addWidget(self.add_button)
         input_controls.addWidget(self.remove_button)
-        input_controls.addWidget(self.input_up_button)
-        input_controls.addWidget(self.input_down_button)
         input_controls.addStretch(1)
+        input_controls.addWidget(self.source_clip_move_controls, alignment=Qt.AlignmentFlag.AlignRight)
 
         self.output_directory = QLineEdit(str(settings.recent_output_directory or ""))
         self.output_directory.setObjectName("outputDirectory")
