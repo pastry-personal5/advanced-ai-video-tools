@@ -218,7 +218,7 @@ message actions.
 - [ ] Keep FFmpeg, FFprobe, Real-ESRGAN, command builders, and processing services out of the preview presentation layer.
 - [ ] Implement the separately approved controls, audio, error, and cleanup policies around the fixed playback backend.
 - [ ] Keep custom target-height input without adding output-height presets.
-- [ ] Provide inline, accessible field errors while preserving authoritative preflight.
+- [x] Provide inline, accessible field errors while preserving authoritative preflight.
 
 ### 4. Queue and job details
 
@@ -485,6 +485,13 @@ Record subsequent completed slices here with links to the relevant modules/tests
 
 - The GUI bootstrap applies an application-owned dark palette and Fusion style before constructing windows, so the GUI does not follow the macOS light/dark appearance setting.
 - Added a headless regression test for the forced style and key palette colors.
+
+### Inline editor validation slice — completed
+
+- Added accessible, inline error labels for missing input clips, output directory, and invalid target-height submissions.
+- Validation remains a local submission check; authoritative FFprobe-backed preflight remains required before queueing.
+- Added regression coverage in `tests/test_gui_submission.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 188 passed; Black, Pylint, and pycodestyle passed.
 
 ## Risks
 

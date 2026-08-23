@@ -42,6 +42,7 @@ class JobEditor(QWidget):
         self.inputs = QListWidget()
         self.inputs.setObjectName("inputClips")
         self.inputs.setAccessibleName("Ordered input clips")
+        self.inputs.setAccessibleDescription("Clips are processed in the order shown.")
         self.inputs.setMinimumHeight(100)
         self.inputs.setMaximumWidth(SOURCE_CLIP_LIST_WIDTH)
         self.inputs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -70,6 +71,7 @@ class JobEditor(QWidget):
         output_row = QHBoxLayout()
         output_row.addWidget(self.output_directory, 1)
         output_row.addWidget(self.output_button)
+        self.output_error = self._error_label("Output directory error")
 
         self.target_height = QSpinBox()
         self.target_height.setObjectName("targetHeight")
@@ -86,10 +88,13 @@ class JobEditor(QWidget):
         output_group.setObjectName("outputDirectoryGroup")
         output_group_layout = QVBoxLayout(output_group)
         output_group_layout.addLayout(output_row)
+        output_group_layout.addWidget(self.output_error)
         target_group = QGroupBox("Target Height")
         target_group.setObjectName("targetHeightGroup")
         target_group_layout = QVBoxLayout(target_group)
         target_group_layout.addWidget(self.target_height)
+        self.target_error = self._error_label("Target height error")
+        target_group_layout.addWidget(self.target_error)
         model_group = QGroupBox("AI Model")
         model_group.setObjectName("aiModelGroup")
         model_group_layout = QVBoxLayout(model_group)
@@ -126,6 +131,8 @@ class JobEditor(QWidget):
         group_layout.setContentsMargins(2, 9, 9, 9)
         group_layout.addWidget(self.inputs)
         group_layout.addLayout(input_controls)
+        self.input_error = self._error_label("Input clips error")
+        group_layout.addWidget(self.input_error)
         submit_row = QHBoxLayout()
         submit_row.addWidget(self.editor_status, 1)
         submit_row.addWidget(self.submit_button)
@@ -145,8 +152,31 @@ class JobEditor(QWidget):
         self.input_down_button.clicked.connect(lambda: self.move_selected(1))
         self.output_button.clicked.connect(self._choose_output_directory)
         self.submit_button.clicked.connect(self._request_submission)
+        self.output_directory.textChanged.connect(lambda _text: self.output_error.clear())
+        self.target_height.valueChanged.connect(lambda _value: self.target_error.clear())
         self.inputs.currentRowChanged.connect(self._update_input_controls)
+        self.inputs.currentRowChanged.connect(lambda _row: self.input_error.clear())
         self._update_input_controls()
+
+    @staticmethod
+    def _error_label(accessible_name: str) -> QLabel:
+        """Create a hidden, text-bearing inline validation message."""
+
+        label = QLabel()
+        label.setObjectName(f"{accessible_name.replace(' ', '').lower()}Label")
+        label.setAccessibleName(accessible_name)
+        label.setWordWrap(True)
+        label.setStyleSheet("color: #ffb4ab;")
+        label.setVisible(False)
+        return label
+
+    @staticmethod
+    def _show_error(label: QLabel, message: str) -> None:
+        """Show one validation message and expose it to assistive technology."""
+
+        label.setText(message)
+        label.setVisible(bool(message))
+        label.setAccessibleDescription(message)
 
     def input_paths(self) -> tuple[Path, ...]:
         """Return clip paths in their visible concat order."""
@@ -294,8 +324,15 @@ class JobEditor(QWidget):
         try:
             request = self.build_request()
         except ValueError as error:
-            self.set_status(str(error))
+            message = str(error)
+            self._show_error(self.input_error, message if message.startswith("Add at least one") else "")
+            self._show_error(self.output_error, message if message.startswith("Choose an output") else "")
+            self._show_error(self.target_error, message if message.startswith("Target height") else "")
+            self.set_status(message)
             return
+        self._show_error(self.input_error, "")
+        self._show_error(self.output_error, "")
+        self._show_error(self.target_error, "")
         self.request_ready.emit(request)
 
     @Slot()

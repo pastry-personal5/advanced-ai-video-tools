@@ -162,6 +162,25 @@ def test_editor_preserves_concat_order_and_builds_frozen_supported_request(qt_ap
     assert QCoreApplication.instance() is qt_app
 
 
+def test_editor_shows_inline_accessible_validation_errors(qt_app: QApplication) -> None:
+    """Basic field errors are visible beside their fields before preflight."""
+
+    del qt_app
+    editor = JobEditor(ApplicationSettings())
+    editor.submit_button.click()
+
+    assert not editor.input_error.isHidden()
+    assert editor.input_error.text() == "Add at least one input clip."
+    assert editor.input_error.accessibleName() == "Input clips error"
+    assert editor.output_error.isHidden()
+    assert editor.target_error.isHidden()
+
+    editor.add_inputs((Path("clip.mov"),))
+    editor.output_directory.setText("/tmp/output")
+    editor.submit_button.click()
+    assert editor.input_error.isHidden()
+
+
 def test_editor_drop_boundary_accepts_local_files_and_rejects_remote_urls(qt_app: QApplication, tmp_path: Path) -> None:
     """File-manager drops accept local files only and preserve URL safety."""
 
