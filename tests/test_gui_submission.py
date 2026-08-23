@@ -17,11 +17,11 @@ import yaml
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QThread, QUrl, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QSize, QThread, QUrl, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QLabel, QListWidget, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.editor import SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH, JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
+from ai_video_tools.gui.editor import OUTPUT_DIRECTORY_ICON_COLOR, OUTPUT_DIRECTORY_ICON_SIZE, SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH, JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.preflight import GuiPreflightController  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.submission import JobSubmissionController, PreflightDecision, PreflightDialog  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
@@ -203,6 +203,18 @@ def test_basic_settings_width_and_target_height_guidance(qt_app: QApplication) -
     assert output_button is not None
     assert output_button.text() == ""
     assert output_button.accessibleName() == "Choose output directory"
+    assert editor.output_directory.height() == output_button.height() == 32
+    output_row = editor.findChild(QGroupBox, "outputDirectoryGroup").layout().itemAt(1).layout()
+    assert output_row is not None
+    assert [output_row.itemAt(index).widget() for index in range(2)] == [editor.output_directory, output_button]
+    assert output_button.iconSize() == QSize(16, 16)
+    image = output_button.icon().pixmap(QSize(OUTPUT_DIRECTORY_ICON_SIZE, OUTPUT_DIRECTORY_ICON_SIZE)).toImage()
+    assert any(image.pixelColor(x, y).name() == OUTPUT_DIRECTORY_ICON_COLOR for x in range(image.width()) for y in range(image.height()))
+    visible_rows = [row for row in range(image.height()) if any(image.pixelColor(column, row).alpha() > 0 for column in range(image.width()))]
+    assert visible_rows[0] == image.height() - visible_rows[-1] - 1
+    assert "background: transparent" in output_button.styleSheet()
+    assert "border: none" in output_button.styleSheet()
+    assert image.pixelColor(0, 0).alpha() == 0
 
     upscaler_group = editor.findChild(QGroupBox, "aiUpscalerGroup")
     upscaler_explanation = editor.findChild(QLabel, "aiUpscalerExplanation")

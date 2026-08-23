@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QFile, QSize, Qt, Signal, Slot
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QShowEvent
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QIcon, QPainter, QPixmap, QShowEvent
 from PySide6.QtWidgets import QFileDialog, QGroupBox, QHBoxLayout, QLabel, QListWidget, QLineEdit, QListWidgetItem, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QStyle, QToolButton, QVBoxLayout, QWidget
 
 from ai_video_tools.core.models import JobRequest
@@ -20,10 +20,52 @@ from ai_video_tools.system.settings import ApplicationSettings
 _VIDEO_SUFFIXES = frozenset({".mov", ".mp4", ".mkv", ".m4v"})
 SOURCE_CLIP_LIST_WIDTH = 673
 SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH = 320
+OUTPUT_DIRECTORY_ICON_COLOR = "#b8bcc2"
+# Keep the chooser glyph half the size of its 32 px button.
+OUTPUT_DIRECTORY_ICON_SIZE = 16
 
 
 def _local_now() -> datetime:
     return datetime.now().astimezone()
+
+
+def _light_gray_standard_icon(style: QStyle, standard_pixmap: QStyle.StandardPixmap) -> QIcon:
+    """Return one native standard icon tinted for the dark GUI palette."""
+
+    source = style.standardIcon(standard_pixmap).pixmap(QSize(OUTPUT_DIRECTORY_ICON_SIZE, OUTPUT_DIRECTORY_ICON_SIZE))
+    source = _vertically_center_pixmap_ink(source)
+    tinted = QPixmap(source.size())
+    tinted.setDevicePixelRatio(source.devicePixelRatio())
+    tinted.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(tinted)
+    painter.drawPixmap(0, 0, source)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(tinted.rect(), QColor(OUTPUT_DIRECTORY_ICON_COLOR))
+    painter.end()
+    return QIcon(tinted)
+
+
+def _vertically_center_pixmap_ink(source: QPixmap) -> QPixmap:
+    """Center a native pixmap's visible pixels on its existing canvas."""
+
+    image = source.toImage()
+    occupied_rows = [row for row in range(image.height()) if any(image.pixelColor(column, row).alpha() > 0 for column in range(image.width()))]
+    if not occupied_rows:
+        return source
+
+    ink_height = occupied_rows[-1] - occupied_rows[0] + 1
+    target_top = (image.height() - ink_height) // 2
+    vertical_offset = target_top - occupied_rows[0]
+    if vertical_offset == 0:
+        return source
+
+    centered = QPixmap(source.size())
+    centered.setDevicePixelRatio(source.devicePixelRatio())
+    centered.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(centered)
+    painter.drawPixmap(0, vertical_offset, source)
+    painter.end()
+    return centered
 
 
 class _ElidedFilenameLabel(QLabel):
@@ -106,15 +148,20 @@ class JobEditor(QWidget):
         self.output_directory = QLineEdit(str(settings.recent_output_directory or ""))
         self.output_directory.setObjectName("outputDirectory")
         self.output_directory.setPlaceholderText("Choose an output directory")
+        self.output_directory.setFixedHeight(32)
         self.output_button = QToolButton()
         self.output_button.setObjectName("chooseOutputButton")
-        self.output_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
+        self.output_button.setIcon(_light_gray_standard_icon(self.style(), QStyle.StandardPixmap.SP_DirOpenIcon))
+        self.output_button.setIconSize(QSize(OUTPUT_DIRECTORY_ICON_SIZE, OUTPUT_DIRECTORY_ICON_SIZE))
         self.output_button.setAccessibleName("Choose output directory")
         self.output_button.setToolTip("Choose output directory")
         self.output_button.setFixedSize(32, 32)
-        output_button_row = QHBoxLayout()
-        output_button_row.addStretch(1)
-        output_button_row.addWidget(self.output_button)
+        self.output_button.setAutoRaise(True)
+        self.output_button.setStyleSheet("QToolButton { border: none; background: transparent; padding: 0px; }")
+        output_row = QHBoxLayout()
+        output_row.setContentsMargins(0, 0, 0, 0)
+        output_row.addWidget(self.output_directory, 1, alignment=Qt.AlignmentFlag.AlignVCenter)
+        output_row.addWidget(self.output_button, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         self.target_height = QSpinBox()
         self.target_height.setObjectName("targetHeight")
@@ -136,8 +183,7 @@ class JobEditor(QWidget):
         output_explanation.setWordWrap(True)
         output_explanation.setStyleSheet("font-size: 10px; color: #a8aaad;")
         output_group_layout.addWidget(output_explanation)
-        output_group_layout.addLayout(output_button_row)
-        output_group_layout.addWidget(self.output_directory)
+        output_group_layout.addLayout(output_row)
         target_group = QGroupBox("Target Height")
         target_group.setObjectName("targetHeightGroup")
         self._emphasize_group_title(target_group)

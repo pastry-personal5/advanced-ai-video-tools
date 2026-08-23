@@ -596,7 +596,8 @@ Record subsequent completed slices here with links to the relevant modules/tests
 
 - Widened the `Basic Settings` panel from 240 px to 290 px.
 - Added compact target-height guidance above the 2160 px control, explaining that output width preserves the source aspect ratio.
-- Changed Output Directory to a full-width edit control with compact guidance above it and an icon-only directory chooser above the edit control.
+- Changed Output Directory to a full-width edit control with compact guidance above it and an icon-only directory chooser in the same row.
+- Placed the output-directory chooser beside the edit control, matched both controls at 32 px high, scaled its native directory glyph to 16 px, vertically centered the glyph's visible pixels, tinted it light gray, and kept the button background transparent for the dark theme.
 - Renamed the `AI Model` group to `AI Upscaler` and added compact guidance above the existing model label.
 - Made the `Basic Settings` title bold and 4 pt larger, with bold child section labels for Output Directory, Target Height, and AI Upscaler.
 - Added headless regression coverage in `tests/test_gui_submission.py`.
