@@ -11,6 +11,7 @@ from json import JSONDecodeError
 from pathlib import Path
 from typing import Mapping
 
+import yaml
 from loguru import logger
 
 from ai_video_tools.core.models import OverwriteMode, ToolOverrides
@@ -69,11 +70,12 @@ class ApplicationSettings:
 
 
 class SettingsStore:
-    """Load and atomically save one local JSON settings document."""
+    """Load and atomically save one local YAML settings document."""
 
     def __init__(self, path: Path | None = None) -> None:
-        selected = path if path is not None else application_data_directory() / "settings.json"
+        selected = path if path is not None else application_data_directory() / "settings.yaml"
         self._path = selected.expanduser().absolute()
+        self._legacy_path = self._path.with_suffix(".json") if self._path.suffix.lower() == ".yaml" else None
 
     @property
     def path(self) -> Path:
@@ -90,12 +92,14 @@ class SettingsStore:
 
         self._reject_symlink()
         if not self._path.exists():
+            if self._legacy_path is not None and self._legacy_path.exists():
+                return self._load_legacy_json()
             return ApplicationSettings()
         try:
-            document = json.loads(self._path.read_text(encoding="utf-8"))
+            document = yaml.safe_load(self._path.read_text(encoding="utf-8"))
             settings = _decode_document(document)
-        except (JSONDecodeError, UnicodeError, _InvalidSettings):
-            quarantined = self._quarantine_invalid_document()
+        except (yaml.YAMLError, UnicodeError, _InvalidSettings):
+            quarantined = self._quarantine_invalid_document(self._path)
             logger.warning("Invalid application settings quarantined as {}", quarantined.name)
             return ApplicationSettings()
         except OSError as error:
@@ -118,12 +122,11 @@ class SettingsStore:
         try:
             os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-                json.dump(_encode_document(settings), stream, ensure_ascii=False, indent=2, sort_keys=True)
-                stream.write("\n")
+                stream.write(yaml.safe_dump(_encode_document(settings), allow_unicode=True, default_flow_style=False, sort_keys=True))
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, self._path)
-        except (OSError, TypeError, ValueError) as error:
+        except (OSError, TypeError, ValueError, yaml.YAMLError) as error:
             try:
                 os.close(descriptor)
             except OSError:
@@ -136,10 +139,34 @@ class SettingsStore:
         if self._path.is_symlink():
             raise SettingsError("application settings path must not be a symbolic link")
 
-    def _quarantine_invalid_document(self) -> Path:
-        quarantined = self._path.with_name(f"{self._path.stem}.corrupt-{uuid.uuid4().hex}{self._path.suffix}")
+    def _load_legacy_json(self) -> ApplicationSettings:
+        """Migrate one valid legacy JSON document into the YAML location."""
+
+        assert self._legacy_path is not None
+        if self._legacy_path.is_symlink():
+            raise SettingsError("legacy application settings path must not be a symbolic link")
         try:
-            os.replace(self._path, quarantined)
+            document = json.loads(self._legacy_path.read_text(encoding="utf-8"))
+            settings = _decode_document(document)
+        except (JSONDecodeError, UnicodeError, _InvalidSettings):
+            quarantined = self._quarantine_invalid_document(self._legacy_path)
+            logger.warning("Invalid legacy application settings quarantined as {}", quarantined.name)
+            return ApplicationSettings()
+        except OSError as error:
+            raise SettingsError("could not read legacy application settings") from error
+        self.save(settings)
+        try:
+            self._legacy_path.unlink()
+        except OSError:
+            logger.warning("Legacy application settings retained at {} after YAML migration", self._legacy_path)
+        logger.debug("Legacy JSON application settings migrated to YAML")
+        return settings
+
+    @staticmethod
+    def _quarantine_invalid_document(path: Path) -> Path:
+        quarantined = path.with_name(f"{path.stem}.corrupt-{uuid.uuid4().hex}{path.suffix}")
+        try:
+            os.replace(path, quarantined)
         except OSError as error:
             raise SettingsError("could not quarantine invalid application settings") from error
         return quarantined

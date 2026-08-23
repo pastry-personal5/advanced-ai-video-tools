@@ -97,7 +97,7 @@ def test_dialog_resets_overrides_and_persists_only_after_success(qt_app: QApplic
     """Blank fields mean discovery defaults, and validated values replace settings atomically."""
 
     old_tools = ToolOverrides(tmp_path / "old-ffmpeg", tmp_path / "old-ffprobe", tmp_path / "old-realesrgan", tmp_path / "old-models")
-    store = SettingsStore(tmp_path / "settings.json")
+    store = SettingsStore(tmp_path / "settings.yaml")
     store.save(ApplicationSettings(tools=old_tools, target_height=1080))
     discovery = RecordingDiscovery(_toolchain(tmp_path))
     validator = ToolSettingsValidator(discovery)  # type: ignore[arg-type]
@@ -124,7 +124,7 @@ def test_failed_validation_keeps_previous_settings_and_dialog_open(qt_app: QAppl
     """A bad executable or backend never becomes a persisted future-job default."""
 
     old_tools = ToolOverrides(ffmpeg=tmp_path / "known-ffmpeg")
-    store = SettingsStore(tmp_path / "settings.json")
+    store = SettingsStore(tmp_path / "settings.yaml")
     store.save(ApplicationSettings(tools=old_tools))
     discovery = RecordingDiscovery(ToolDiscoveryError("Real-ESRGAN Vulkan smoke test failed: no device"))
     validator = ToolSettingsValidator(discovery)  # type: ignore[arg-type]

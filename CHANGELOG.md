@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Changed persistent settings from JSON to YAML, added the `settings.yaml` default path, and migrated valid legacy `settings.json` preferences once without weakening atomic writes, quarantine, or newer-schema protection.
 - Set version 2 as the active development target while retaining v1.0.0 as the released behavior baseline.
 - Established GUI enhancement as Phase 1 and project renaming as a required v2 goal.
 - Defined project renaming as Phase 2 with explicit identity, compatibility, persistent-data migration, packaging, legal, and verification gates.

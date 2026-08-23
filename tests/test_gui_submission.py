@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import threading
 import time
@@ -14,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+import yaml
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -367,7 +367,7 @@ def test_acknowledged_request_is_queued_and_only_non_safety_preferences_persist(
     request = _request(tmp_path)
     preview = FakePreview()
     queue = RecordingQueue()
-    store = SettingsStore(tmp_path / "settings.json")
+    store = SettingsStore(tmp_path / "settings.yaml")
     settings = ApplicationSettings(target_height=720)
     decisions: list[PreflightReport] = []
 
@@ -391,7 +391,7 @@ def test_acknowledged_request_is_queued_and_only_non_safety_preferences_persist(
     assert persisted.target_height == 2160
     assert persisted.recent_input_directory == input_directory
     assert persisted.recent_output_directory == output_directory
-    document = json.loads(store.path.read_text(encoding="utf-8"))
+    document = yaml.safe_load(store.path.read_text(encoding="utf-8"))
     assert "acknowledge_dropped_streams" not in document
     assert "acknowledge_dropped_streams" not in document["processing"]
 
@@ -401,7 +401,7 @@ def test_submission_controller_refuses_unrelated_error_even_if_provider_accepts(
 
     preview = FakePreview()
     queue = RecordingQueue()
-    controller = JobSubmissionController(queue, preview, ApplicationSettings(), SettingsStore(tmp_path / "settings.json"), decision_provider=lambda _parent, _report: PreflightDecision(True, True))  # type: ignore[arg-type]
+    controller = JobSubmissionController(queue, preview, ApplicationSettings(), SettingsStore(tmp_path / "settings.yaml"), decision_provider=lambda _parent, _report: PreflightDecision(True, True))  # type: ignore[arg-type]
     request = _request(tmp_path)
     controller.start(request)
     issue = PreflightIssue(IssueSeverity.ERROR, IssueCode.UNSUPPORTED_HDR, "HDR is unsupported.", request.inputs[0])

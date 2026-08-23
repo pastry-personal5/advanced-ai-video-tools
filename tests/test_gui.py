@@ -407,7 +407,7 @@ def test_preview_audio_preferences_restore_and_persist_without_job_impact(qt_app
     """Mute and volume persist atomically while remaining outside processing intent."""
 
     del qt_app
-    store = SettingsStore(tmp_path / "settings.json")
+    store = SettingsStore(tmp_path / "settings.yaml")
     settings = ApplicationSettings(preview_muted=False, preview_volume=42)
     store.save(settings)
     queue = FakeQueue()
@@ -458,7 +458,7 @@ def test_preview_pauses_when_processing_starts_without_automatic_resume(qt_app: 
 def test_runtime_loads_settings_and_owns_clean_queue_shutdown(qt_app: QApplication, tmp_path: Path) -> None:
     """Bootstrap composes real settings, queue, model, and window lifetimes."""
 
-    store = SettingsStore(tmp_path / "settings.json")
+    store = SettingsStore(tmp_path / "settings.yaml")
     store.save(ApplicationSettings(target_height=1080))
     assert QCoreApplication.instance() is qt_app
     runtime = create_gui_runtime(runner=UnusedRunner(), settings_store=store)  # type: ignore[arg-type]
