@@ -174,6 +174,8 @@ uv run ai-video-tools process --help
 
 In the desktop application, add clips in top-to-bottom concat order, choose an output directory, set the target height, and select **Preflight & Queue**. Diagnostic preflight runs outside the GUI thread and shows every warning or blocking issue before submission. Unsupported secondary streams require the dedicated acknowledgement checkbox; that acknowledgement is bound to the exact reviewed per-clip dropped-item inventory, applies only to that job, and is never saved as a preference. Accepted jobs enter the single-worker FIFO and perform authoritative preflight again immediately before processing. If the inventory changed while waiting, authoritative preflight rejects the job for another review.
 
+The GUI always uses its approved dark theme; it does not follow the macOS light/dark appearance setting.
+
 Run preflight against one or more real clips:
 
 ```bash

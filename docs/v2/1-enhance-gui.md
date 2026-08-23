@@ -101,7 +101,7 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 
 ### Visual style and icon authorship
 
-- Keep the v2 GUI in the approved dark-theme style. Phase 1 does not add a light-theme or system-theme variant.
+- Keep the v2 GUI in an always-dark approved style, regardless of the macOS appearance setting. Phase 1 does not add a light-theme or system-theme variant.
 - Codex creates the GUI icon set as app-owned vector artwork, including navigation-rail, source-preview, and queue icons. Do not add third-party icon assets or an unreviewed platform icon dependency.
 - Generated icons must remain legible at the supported display scale, work against the dark background, and expose accessible names independently of their artwork.
 
@@ -240,7 +240,7 @@ message actions.
 ### 6. Accessibility and macOS polish
 
 - [ ] Preserve native Qt focus behavior and verify accessible names for approved icon controls.
-- [ ] Verify the approved dark theme and increased-contrast behavior.
+- [ ] Verify the always-dark theme and increased-contrast behavior.
 - [ ] Verify resizing, long paths, localization-length expansion, and high-DPI rendering.
 - [ ] Perform native-dialog, dark-theme, and minimum-window checks on supported macOS hardware; no new VoiceOver feature is required in v2.
 
@@ -303,7 +303,7 @@ record each completed slice in Implementation evidence with its exact checks.
 - Required stream-drop acknowledgement cannot be bypassed or persisted.
 - Settings edits cannot mutate requests already queued or running.
 - Core workflows retain ordinary native Qt focus and accessibility behavior; no additional v2 shortcut, VoiceOver, or reduced-motion feature is required.
-- The interface behaves correctly in the approved dark theme, increased-contrast mode, and at the supported minimum window size.
+- The interface always uses the approved dark theme, behaves correctly in increased-contrast mode, and works at the supported minimum window size.
 - The main window places the source-clip preview at the far right and provides a bottom integrated two-tab message widget with `Global Messages` and `Job Messages`.
 - The main window provides a far-left two-icon navigation rail. Job Creation and Queue Monitoring controls are mutually exclusive by view, and switching views preserves each view's state without cancelling jobs or mutating job intent.
 - The bottom integrated message widget remains visible, with its active tab and contents preserved, in both navigation views.
@@ -480,6 +480,11 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Grouped typed preflight findings under non-interactive `Blocking issues` and `Warnings` headings while retaining native severity text and the dropped-stream acknowledgement gate.
 - Added regression coverage for grouped blocking findings in `tests/test_gui_submission.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
+
+### Always-dark theme decision — implemented
+
+- The GUI bootstrap applies an application-owned dark palette and Fusion style before constructing windows, so the GUI does not follow the macOS light/dark appearance setting.
+- Added a headless regression test for the forced style and key palette colors.
 
 ## Risks
 

@@ -17,6 +17,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QLockFile, QModelIndex, Qt  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtGui import QPalette  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSplitter  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
@@ -24,6 +25,7 @@ from ai_video_tools.core.models import JobRequest, JobState, PipelineStage, Prog
 from ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
+from ai_video_tools.gui.theme import apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot  # noqa: E402  # pylint: disable=wrong-import-position
@@ -49,6 +51,16 @@ def _process_until(qt_app: QApplication, predicate: Callable[[], bool], timeout:
         time.sleep(0.001)
     qt_app.processEvents()
     return predicate()
+
+
+def test_gui_theme_is_always_dark(qt_app: QApplication) -> None:
+    """The application-owned palette does not follow the system appearance."""
+
+    apply_dark_theme(qt_app)
+
+    assert qt_app.style().objectName().lower() == "fusion"
+    assert qt_app.palette().color(QPalette.ColorRole.Window).name() == "#202124"
+    assert qt_app.palette().color(QPalette.ColorRole.Text).name() == "#f1f3f4"
 
 
 def _snapshot(tmp_path: Path, job_id: str, state: JobState, position: int | None, *, revision: int, progress: ProgressEvent | None = None) -> QueueJobSnapshot:

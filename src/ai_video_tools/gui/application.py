@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from ai_video_tools.gui.jobs import JobListModel, QueueSnapshotBridge
 from ai_video_tools.gui.preflight import GuiPreflightController
 from ai_video_tools.gui.submission import JobSubmissionController
+from ai_video_tools.gui.theme import apply_dark_theme
 from ai_video_tools.gui.tool_settings import ToolSettingsValidator
 from ai_video_tools.gui.window import MainWindow
 from ai_video_tools.services.pipeline import PipelineService
@@ -86,6 +87,7 @@ def run_gui(arguments: list[str] | None = None) -> int:
     if existing is not None:
         raise RuntimeError("the GUI entry point requires ownership of the Qt application")
     application = QApplication(["ai-video-tools", *(arguments or [])])
+    apply_dark_theme(application)
     instance_lock = _single_instance_lock()
     if not instance_lock.tryLock(0):
         QMessageBox.warning(None, "AI Video Tools", "AI Video Tools is already running.")
