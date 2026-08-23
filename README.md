@@ -53,7 +53,7 @@ Active v2 planning is maintained in [docs/v2/plans.md](docs/v2/plans.md). Implem
   audio layout, dimensions, AI scale, concat strategy, and disk margin
 - Human-readable and JSON CLI results through `ai-video-tools preflight` and `ai-video-tools process`, with measured text progress on stderr
 - One-time Loguru bootstrap with human-readable stderr output, a thread-safe rotating `10 MB` local file retained for five rotations, stable job/stage context, exact shell-quoted INFO records for every FFmpeg, FFprobe, and Real-ESRGAN launch, and CLI-visible log paths
-- Typed schema-versioned JSON settings for tool overrides, recent input/output directories, target height, and overwrite preference, with private file permissions, atomic replacement, corruption quarantine, and protection against silently destroying newer schemas
+- Typed schema-versioned JSON settings for tool overrides, recent input/output directories, target height, overwrite preference, and non-safety preview mute/volume preferences, with private file permissions, atomic replacement, corruption quarantine, and protection against silently destroying newer schemas
 - A frontend-independent single-worker FIFO with frozen creation identities and destination claims, typed snapshots and terminal outcomes, pending-job reorder/removal, active cooperative cancellation, progress forwarding, failure isolation, and shutdown that cancels and joins all unfinished work
 - A PySide6 application bootstrap, cross-thread queue-snapshot signal bridge, typed `QAbstractListModel`, and native job window with measured progress, status/error details, pending reorder controls, cancellation, settings summary, diagnostics location, and joined backend shutdown
 - An ordered GUI job editor for clips, output directory, target height, fixed real-image model and compact UUIDv7 naming; QThread-backed diagnostic preflight; complete warning/error review; per-job dropped-stream acknowledgement; authoritative FIFO submission; and persistence of recent directories and target height without persisting safety acknowledgement
@@ -136,7 +136,7 @@ Extra audio streams, subtitles, chapters, and attachments are unsupported in v1.
 - Let Real-ESRGAN choose the GPU and worker threads, start with automatic tiling, and keep TTA disabled.
 - Retry recognized Vulkan memory failures only with bounded tile sizes of 512, 256, 128, 64, then 32.
 - Store settings and Loguru-managed local logs under `~/Library/Application Support/AI Video Tools/`.
-- Persist only non-secret, non-job-specific preferences. Dropped-stream acknowledgement is deliberately per job and is never remembered across inputs. Settings writes use a private same-directory temporary file and atomic replacement; malformed documents are quarantined, while unknown newer schema versions are preserved and rejected explicitly.
+- Persist only non-secret, non-job-specific preferences. Preview mute and volume are presentation preferences; dropped-stream acknowledgement is deliberately per job and is never remembered across inputs. Settings writes use a private same-directory temporary file and atomic replacement; malformed documents are quarantined, while unknown newer schema versions are preserved and rejected explicitly.
 - Configure Loguru once at startup with stderr and queued file sinks, rotate at 10 MiB, retain five backups, and avoid production exception-value exposure. Perform no telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
 
 ## Requirements

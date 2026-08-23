@@ -25,6 +25,7 @@ from ai_video_tools.core.models import JobRequest, JobState, PipelineStage, Prog
 from ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
+from ai_video_tools.gui.preview import SourcePreviewPane  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.theme import apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
@@ -352,6 +353,105 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert not window.source_preview.next_button.isEnabled()
     window.source_preview.previous_button.click()
     assert window.editor.inputs.currentRow() == 0
+    window.close()
+
+
+def test_source_preview_resize_preserves_pane_ratio_and_native_aspect_mode(qt_app: QApplication) -> None:
+    """The preview pane follows 3:4 geometry without changing native video aspect handling."""
+
+    pane = SourcePreviewPane()
+    pane.setMinimumWidth(0)
+    pane.resize(300, pane.heightForWidth(300))
+    pane.show()
+    qt_app.processEvents()
+
+    assert pane.hasHeightForWidth()
+    assert pane.width() == 300
+    assert pane.height() == 400
+    assert pane.video.aspectRatioMode() == Qt.AspectRatioMode.KeepAspectRatio
+
+    pane.resize(450, pane.heightForWidth(450))
+    qt_app.processEvents()
+    assert pane.width() == 450
+    assert pane.height() == 600
+    pane.shutdown()
+    assert pane.player.videoOutput() is None
+    assert pane.player.audioOutput() is None
+    pane.close()
+
+
+def test_source_preview_selection_does_not_change_processing_intent(qt_app: QApplication, tmp_path: Path) -> None:
+    """Preview navigation changes selection only, never the ordered request inputs."""
+
+    del qt_app
+    queue = FakeQueue()
+    bridge = QueueSnapshotBridge()
+    model = JobListModel(queue, bridge)  # type: ignore[arg-type]
+    window = MainWindow(model, ApplicationSettings())
+    paths = (tmp_path / "first.mov", tmp_path / "second.mov", tmp_path / "third.mov")
+    window.editor.output_directory.setText(str(tmp_path))
+    window.editor.add_inputs(paths)
+    window.editor.inputs.setCurrentRow(2)
+    frozen = window.editor.build_request()
+
+    window.source_preview.previous_button.click()
+
+    assert window.editor.inputs.currentRow() == 1
+    assert window.source_preview.player.source().toLocalFile() == str(paths[1])
+    assert window.editor.input_paths() == paths
+    assert window.editor.build_request().inputs == frozen.inputs
+    window.close()
+
+
+def test_preview_audio_preferences_restore_and_persist_without_job_impact(qt_app: QApplication, tmp_path: Path) -> None:
+    """Mute and volume persist atomically while remaining outside processing intent."""
+
+    del qt_app
+    store = SettingsStore(tmp_path / "settings.json")
+    settings = ApplicationSettings(preview_muted=False, preview_volume=42)
+    store.save(settings)
+    queue = FakeQueue()
+    bridge = QueueSnapshotBridge()
+    model = JobListModel(queue, bridge)  # type: ignore[arg-type]
+    window = MainWindow(model, settings, settings_store=store)
+
+    assert not window.source_preview.audio.isMuted()
+    assert window.source_preview.volume_slider.value() == 42
+    window.editor.output_directory.setText(str(tmp_path))
+    window.editor.add_inputs((tmp_path / "clip.mov",))
+    frozen = window.editor.build_request()
+
+    window.source_preview.volume_slider.setValue(37)
+    window.source_preview.mute_toggle.setChecked(False)
+    window.source_preview.mute_toggle.setChecked(True)
+
+    saved = store.load()
+    assert saved.preview_muted is True
+    assert saved.preview_volume == 37
+    assert frozen.inputs == (tmp_path / "clip.mov",)
+    assert frozen.target_height == settings.target_height
+    window.close()
+
+
+def test_preview_pauses_when_processing_starts_without_automatic_resume(qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Processing start pauses preview once and completion never resumes it."""
+
+    del qt_app
+    queue = FakeQueue()
+    bridge = QueueSnapshotBridge()
+    model = JobListModel(queue, bridge)  # type: ignore[arg-type]
+    window = MainWindow(model, ApplicationSettings())
+    pause_calls: list[str] = []
+    monkeypatch.setattr(window.source_preview, "pause_for_processing", lambda: pause_calls.append("paused"))
+
+    window._queue_snapshot_changed(_snapshot(tmp_path, "preview-job", JobState.QUEUED, 0, revision=0))  # pylint: disable=protected-access
+    window._queue_snapshot_changed(_snapshot(tmp_path, "preview-job", JobState.VALIDATING, None, revision=1))  # pylint: disable=protected-access
+    window._queue_snapshot_changed(_snapshot(tmp_path, "preview-job", JobState.RUNNING, None, revision=2))  # pylint: disable=protected-access
+    window._queue_snapshot_changed(_snapshot(tmp_path, "preview-job", JobState.RUNNING, None, revision=3))  # pylint: disable=protected-access
+    window._queue_snapshot_changed(_snapshot(tmp_path, "preview-job", JobState.COMPLETED, None, revision=4))  # pylint: disable=protected-access
+
+    assert pause_calls == ["paused"]
+    assert window._preview_processing_job_id is None  # pylint: disable=protected-access
     window.close()
 
 

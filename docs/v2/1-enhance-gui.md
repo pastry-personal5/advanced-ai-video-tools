@@ -203,11 +203,11 @@ message actions.
 - [x] Add a video preview whose source is exclusively the currently selected source clip.
 - [x] Implement playback with PySide6 `QMediaPlayer` and `QVideoWidget` behind a small, testable presentation boundary.
 - [x] Use `Qt.AspectRatioMode.KeepAspectRatio` and a width-driven container whose height follows the exact display aspect ratio without adding application-level rotation handling.
-- [ ] Verify that preview resizing never crops, stretches, or substitutes a rounded aspect ratio.
-- [ ] Ensure selection-driven preview changes cannot reorder clips, mutate frozen job intent, or influence authoritative preflight results.
-- [ ] Start muted on first launch, persist only mute/volume preferences, stop and asynchronously reload on selection changes, and preserve concat order independently from preview selection.
-- [ ] Pause preview at processing start, avoid automatic resume, and release the player during window shutdown.
-- [ ] Reject URL/remote preview sources and accept only local files already in the editor.
+- [x] Verify that preview resizing never crops, stretches, or substitutes a rounded aspect ratio.
+- [x] Ensure selection-driven preview changes cannot reorder clips, mutate frozen job intent, or influence authoritative preflight results.
+- [x] Start muted on first launch, persist only mute/volume preferences, stop and asynchronously reload on selection changes, and preserve concat order independently from preview selection.
+- [x] Pause preview at processing start, avoid automatic resume, and release the player during window shutdown.
+- [x] Reject URL/remote preview sources and accept only local files already in the editor.
 - [ ] Ensure player metadata, rendering, duration, errors, and playback success cannot influence rotation, HDR, color, timing, stream, compatibility, or processing decisions.
 - [x] Map native player load, decode, and unsupported-format errors to the inline message “Preview unavailable; preflight can still inspect this clip.”
 - [ ] Keep a preview-unavailable source clip in the ordered input list and allow authoritative preflight and queue submission to proceed.
@@ -385,6 +385,37 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Fixed the play/pause accessible action name and tooltip to reflect the next action, and fixed every preview control hit area at 32 × 32 pixels.
 - Verified the approved control order, source-list boundary enablement, and one-to-one accessible tooltip/action labels in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 10 passed.
+
+### Preview resize verification slice — completed
+
+- Added headless regression coverage for actual 3:4 pane resizing at multiple widths and for the native `KeepAspectRatio` video setting in `tests/test_gui.py`.
+- Offscreen tests verify Qt geometry and aspect-mode configuration; native macOS playback rendering remains part of the manual acceptance checklist.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 11 passed.
+
+### Preview selection isolation slice — completed
+
+- Added headless coverage proving previous-clip navigation changes only the selected source and leaves ordered editor inputs and the request passed toward preflight unchanged.
+- The preview remains presentation-only; selection does not enter media-policy or processing-plan state.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 12 passed.
+
+### Preview audio preferences slice — completed
+
+- Added typed `ApplicationSettings` persistence for mute state and integer volume percentage, using the existing private atomic settings document.
+- Added a preview mute toggle and volume slider; source changes re-mute autoplay without changing the saved preference, and explicit audio actions persist only non-safety preview settings.
+- Added settings and GUI regression coverage proving restored preferences, atomic saves, default mute behavior, and unchanged job inputs.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_settings.py tests/test_gui.py -q` — 26 passed.
+
+### Preview processing lifecycle slice — completed
+
+- Paused the source preview only when a queue snapshot transitions into `JobState.RUNNING`; progress and terminal snapshots never resume playback.
+- Kept shutdown ownership in `SourcePreviewPane.shutdown()` and covered detachment of native video and audio outputs.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 14 passed.
+
+### Preview source locality slice — completed
+
+- Kept preview source binding on the editor's ordered local `Path` values and retained the existing file-manager boundary that rejects remote URLs, non-local URLs, missing files, and non-video files before they reach the preview.
+- Existing headless coverage in `tests/test_gui_submission.py::test_editor_drop_boundary_accepts_local_files_and_rejects_remote_urls` verifies accepted local files and rejected `https://` sources without application-initiated network activity.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui_submission.py -q` — 10 passed.
 
 ### Native preview playback slice — completed
 

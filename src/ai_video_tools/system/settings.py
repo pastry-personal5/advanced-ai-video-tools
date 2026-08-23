@@ -18,6 +18,7 @@ from ai_video_tools.storage.paths import application_data_directory
 
 SETTINGS_SCHEMA_VERSION = 1
 DEFAULT_TARGET_HEIGHT = 2160
+DEFAULT_PREVIEW_VOLUME = 100
 
 
 class SettingsError(RuntimeError):
@@ -41,12 +42,18 @@ class ApplicationSettings:
     recent_output_directory: Path | None = None
     target_height: int = DEFAULT_TARGET_HEIGHT
     overwrite_mode: OverwriteMode = OverwriteMode.REPLACE
+    preview_muted: bool = True
+    preview_volume: int = DEFAULT_PREVIEW_VOLUME
 
     def __post_init__(self) -> None:
         if not isinstance(self.tools, ToolOverrides):
             raise TypeError("tools must be a ToolOverrides instance")
         if not isinstance(self.overwrite_mode, OverwriteMode):
             raise TypeError("overwrite mode must be an OverwriteMode")
+        if not isinstance(self.preview_muted, bool):
+            raise TypeError("preview muted must be a boolean")
+        if isinstance(self.preview_volume, bool) or not isinstance(self.preview_volume, int) or not 0 <= self.preview_volume <= 100:
+            raise ValueError("preview volume must be an integer from 0 to 100")
         for path in (
             self.tools.ffmpeg,
             self.tools.ffprobe,
@@ -142,6 +149,7 @@ def _encode_document(settings: ApplicationSettings) -> dict[str, object]:
     return {
         "schema_version": SETTINGS_SCHEMA_VERSION,
         "processing": {"overwrite_mode": settings.overwrite_mode.value, "target_height": settings.target_height},
+        "preview": {"muted": settings.preview_muted, "volume": settings.preview_volume},
         "recent": {"input_directory": _encode_path(settings.recent_input_directory), "output_directory": _encode_path(settings.recent_output_directory)},
         "tools": {
             "ffmpeg": _encode_path(settings.tools.ffmpeg),
@@ -162,12 +170,19 @@ def _decode_document(value: object) -> ApplicationSettings:
     tools = _mapping(document.get("tools", {}), "tools")
     recent = _mapping(document.get("recent", {}), "recent")
     processing = _mapping(document.get("processing", {}), "processing")
+    preview = _mapping(document.get("preview", {}), "preview")
     height = processing.get("target_height", DEFAULT_TARGET_HEIGHT)
     if isinstance(height, bool) or not isinstance(height, int):
         raise _InvalidSettings("processing.target_height must be an integer")
     raw_overwrite = processing.get("overwrite_mode", OverwriteMode.REPLACE.value)
     if not isinstance(raw_overwrite, str):
         raise _InvalidSettings("processing.overwrite_mode must be a string")
+    muted = preview.get("muted", True)
+    volume = preview.get("volume", DEFAULT_PREVIEW_VOLUME)
+    if not isinstance(muted, bool):
+        raise _InvalidSettings("preview.muted must be a boolean")
+    if isinstance(volume, bool) or not isinstance(volume, int) or not 0 <= volume <= 100:
+        raise _InvalidSettings("preview.volume must be an integer from 0 to 100")
     try:
         overwrite = OverwriteMode(raw_overwrite)
         return ApplicationSettings(
@@ -181,6 +196,8 @@ def _decode_document(value: object) -> ApplicationSettings:
             recent_output_directory=_optional_path(recent.get("output_directory"), "recent.output_directory"),
             target_height=height,
             overwrite_mode=overwrite,
+            preview_muted=muted,
+            preview_volume=volume,
         )
     except ValueError as error:
         raise _InvalidSettings(str(error)) from error

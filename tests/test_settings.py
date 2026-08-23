@@ -41,6 +41,8 @@ def test_settings_round_trip_with_private_atomic_file(tmp_path: Path) -> None:
         recent_output_directory=Path("/media/exports"),
         target_height=1080,
         overwrite_mode=OverwriteMode.NO_OVERWRITE,
+        preview_muted=False,
+        preview_volume=42,
     )
     store = SettingsStore(path)
 
@@ -51,6 +53,7 @@ def test_settings_round_trip_with_private_atomic_file(tmp_path: Path) -> None:
     document = json.loads(path.read_text(encoding="utf-8"))
     assert document["schema_version"] == 1
     assert document["processing"] == {"overwrite_mode": "no_overwrite", "target_height": 1080}
+    assert document["preview"] == {"muted": False, "volume": 42}
     assert "acknowledge_dropped_streams" not in path.read_text(encoding="utf-8")
     assert not list(path.parent.glob(".settings.json-*.tmp"))
 
@@ -76,6 +79,8 @@ def test_invalid_json_is_quarantined_and_defaults_are_recovered(tmp_path: Path) 
         {"schema_version": 1, "processing": {"target_height": 1079}},
         {"schema_version": 1, "tools": {"ffmpeg": ""}},
         {"schema_version": 1, "recent": []},
+        {"schema_version": 1, "preview": {"muted": "false"}},
+        {"schema_version": 1, "preview": {"volume": 101}},
     ],
 )
 def test_schema_violations_are_quarantined(tmp_path: Path, document: object) -> None:

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QModelIndex, Qt, Slot
@@ -18,7 +19,7 @@ from ai_video_tools.gui.messages import MessageEvent, MessageWidget
 from ai_video_tools.gui.preview import SourcePreviewPane
 from ai_video_tools.gui.submission import JobSubmissionController
 from ai_video_tools.gui.tool_settings import ToolSettingsDialog, ToolSettingsValidator
-from ai_video_tools.system.settings import ApplicationSettings, SettingsStore
+from ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
 
 
 class MainWindow(QMainWindow):
@@ -35,12 +36,13 @@ class MainWindow(QMainWindow):
         self._settings_store = settings_store
         self._last_snapshots: dict[str, object] = {}
         self._last_upscale_message_percent: dict[str, int] = {}
+        self._preview_processing_job_id: str | None = None
         self._global_shutdown_recorded = False
         self.setWindowTitle("AI Video Tools")
         self.setMinimumSize(1400, 880)
 
         self.editor = JobEditor(settings)
-        self.source_preview = SourcePreviewPane()
+        self.source_preview = SourcePreviewPane(muted=settings.preview_muted, volume=settings.preview_volume)
         edit_menu = self.menuBar().addMenu("Edit")
         self.preferences_action = QAction("Preferences", self)
         self.preferences_action.setObjectName("preferencesAction")
@@ -186,6 +188,7 @@ class MainWindow(QMainWindow):
         self.source_preview.first_frame_requested.connect(self.source_preview.go_to_first_frame)
         self.source_preview.last_frame_requested.connect(self.source_preview.go_to_last_frame)
         self.source_preview.preview_error.connect(self._append_global)
+        self.source_preview.audio_preferences_changed.connect(self._audio_preferences_changed)
         self.editor.message.connect(self._append_global)
         self._append_global("Application started.")
         self._append_global("Add clips in order they should be concatenated.")
@@ -277,10 +280,16 @@ class MainWindow(QMainWindow):
         previous = self._last_snapshots.get(job_id)
         state = getattr(snapshot, "state", None)
         progress = getattr(snapshot, "last_progress", None)
+        previous_state = getattr(previous, "state", None)
+        if state is JobState.RUNNING and previous_state is not JobState.RUNNING:
+            self.source_preview.pause_for_processing()
+            self._preview_processing_job_id = job_id
+        elif self._preview_processing_job_id == job_id and state in {JobState.CANCELLED, JobState.FAILED, JobState.COMPLETED}:
+            self._preview_processing_job_id = None
         if previous is None:
             name = snapshot.request.generated_output_basename or snapshot.request.explicit_output_path or "output"
             self._append_job(job_id, f"Job started: {name}." if state is JobState.RUNNING else "Job queued.")
-        elif getattr(previous, "state", None) is not state:
+        elif previous_state is not state:
             self._append_job(job_id, f"Job {state.value.replace('_', ' ')}.")
         previous_progress = getattr(previous, "last_progress", None)
         if progress is not None and (previous_progress is None or (progress.stage, progress.message) != (previous_progress.stage, previous_progress.message)):
@@ -399,9 +408,23 @@ class MainWindow(QMainWindow):
         if isinstance(value, ApplicationSettings):
             self._settings = value
             self.editor.apply_settings(value)
+            self.source_preview.set_audio_preferences(value.preview_muted, value.preview_volume)
             if self._submission is not None:
                 self._submission.apply_settings(value)
             self._append_global("Application settings updated.")
+
+    @Slot(bool, int)
+    def _audio_preferences_changed(self, muted: bool, volume: int) -> None:
+        """Persist only non-safety preview audio preferences."""
+
+        updated = replace(self._settings, preview_muted=muted, preview_volume=volume)
+        if self._settings_store is not None:
+            try:
+                self._settings_store.save(updated)
+            except SettingsError as error:
+                self._append_global(f"Preview audio preferences could not be saved: {error}")
+                return
+        self._settings = updated
 
     def closeEvent(self, event: object) -> None:  # pylint: disable=invalid-name
         """Record session shutdown before Qt releases the window."""

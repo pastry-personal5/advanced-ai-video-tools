@@ -18,6 +18,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Defined unsupported native preview formats as a non-blocking state with no FFmpeg proxy fallback.
 - Defined full-width Phase 1 preview playback with exact unrotated aspect preservation and no crop, stretch, or rotation.
 - Completed preview-control accessibility and sizing: action labels update with play/pause state, and all five controls use fixed 32 × 32 pixel hit areas.
+- Added headless regression coverage for width-driven 3:4 preview resizing and native `KeepAspectRatio` handling.
+- Added regression coverage proving preview navigation cannot reorder clips or mutate processing request inputs.
+- Added persisted non-safety preview mute and volume preferences with explicit audio controls; source autoplay remains muted until user action.
+- Pause source preview playback when queued processing enters the running state without automatically resuming it after progress or completion; retain native output release during window shutdown.
+- Confirmed preview source locality: only existing local video files from the editor can enter preview binding; remote and non-local URLs are rejected before any media load.
 
 ## [1.0.0] - 2026-08-21
 
