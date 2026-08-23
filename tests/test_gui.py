@@ -19,7 +19,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QCoreApplication, QLockFile, QModelIndex, Qt  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtGui import QPalette  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSplitter  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSplitter, QToolButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
@@ -345,8 +345,11 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.findChild(QLabel, "sourcePreviewSource") is None
     assert window.source_preview.minimumWidth() == 600
     assert window.editor.inputs.width() <= 673
-    window.source_preview.preview_error.emit("Preview unavailable; preflight can still inspect this clip.")
+    window.source_preview._preview_error(QMediaPlayer.Error.ResourceError, "Unsupported preview media")  # pylint: disable=protected-access
     assert "Preview unavailable; preflight can still inspect this clip." in window.global_messages.toPlainText()
+    assert window.source_preview.preview_label.text() == "Preview unavailable; preflight can still inspect this clip."
+    window.editor.output_directory.setText(str(tmp_path))
+    assert window.editor.build_request().inputs == (tmp_path / "first.mov",)
     assert window.source_preview.heightForWidth(300) == 400
     assert window.source_preview.play_pause_button.isEnabled()
     assert window.source_preview.previous_button.text() == "⏪"
@@ -388,6 +391,7 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert not window.source_preview.next_button.isEnabled()
     window.source_preview.previous_button.click()
     assert window.editor.inputs.currentRow() == 0
+    assert window.source_preview.preview_label.text() == "Preview"
     window.close()
 
 
@@ -416,6 +420,38 @@ def test_source_preview_resize_preserves_pane_ratio_and_native_aspect_mode(qt_ap
     pane.close()
 
 
+def test_source_preview_keeps_native_rotation_behavior(qt_app: QApplication) -> None:
+    """The preview uses the native video output without an application rotation layer."""
+
+    del qt_app
+    pane = SourcePreviewPane()
+    assert pane.player.videoOutput() is pane.video
+    assert pane.video.aspectRatioMode() == Qt.AspectRatioMode.KeepAspectRatio
+    assert not hasattr(pane, "rotation_button")
+    pane.shutdown()
+    pane.close()
+
+
+def test_source_preview_exposes_playback_controls_only(qt_app: QApplication) -> None:
+    """Preview controls cannot introduce editing or processing-boundary actions."""
+
+    del qt_app
+    pane = SourcePreviewPane()
+    assert {button.objectName() for button in pane.findChildren(QToolButton)} == {
+        "previewPreviousButton",
+        "previewPlayPauseButton",
+        "previewFirstFrameButton",
+        "previewLastFrameButton",
+        "previewNextButton",
+    }
+    assert not hasattr(pane, "trim_start")
+    assert not hasattr(pane, "trim_end")
+    assert not hasattr(pane, "filter_controls")
+    assert not hasattr(pane, "frame_export_button")
+    pane.shutdown()
+    pane.close()
+
+
 def test_source_preview_progress_tracks_duration_and_user_seek(qt_app: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
     """The timeline mirrors playback and sends user movement to QMediaPlayer."""
 
@@ -432,6 +468,26 @@ def test_source_preview_progress_tracks_duration_and_user_seek(qt_app: QApplicat
     assert pane.progress_slider.value() == 7_500
     assert seek_positions == [7_500]
     assert pane.preview_time_label.text() == "0:02 / 0:10"
+    pane.shutdown()
+    pane.close()
+
+
+def test_preview_failure_does_not_replace_source_or_create_proxy_media(qt_app: QApplication, tmp_path: Path) -> None:
+    """Native preview failure stops at the status message without a fallback source."""
+
+    del qt_app
+    source = tmp_path / "clip.mov"
+    source.touch()
+    pane = SourcePreviewPane()
+    pane.set_sources((source,), 0)
+    original_source = pane.player.source().toLocalFile()
+    files_before = set(tmp_path.iterdir())
+
+    pane._preview_error(QMediaPlayer.Error.ResourceError, "Unsupported preview media")  # pylint: disable=protected-access
+
+    assert pane.player.source().toLocalFile() == original_source
+    assert set(tmp_path.iterdir()) == files_before
+    assert pane.preview_label.text() == "Preview unavailable; preflight can still inspect this clip."
     pane.shutdown()
     pane.close()
 
@@ -456,6 +512,13 @@ def test_source_preview_selection_does_not_change_processing_intent(qt_app: QApp
     assert window.source_preview.player.source().toLocalFile() == str(paths[1])
     assert window.editor.input_paths() == paths
     assert window.editor.build_request().inputs == frozen.inputs
+    window.source_preview._duration_changed(12_000)  # pylint: disable=protected-access
+    window.source_preview._position_changed(4_000)  # pylint: disable=protected-access
+    window.source_preview._preview_error(QMediaPlayer.Error.ResourceError, "Preview-only failure")  # pylint: disable=protected-access
+    preview_affected_request = window.editor.build_request()
+    assert preview_affected_request.inputs == frozen.inputs
+    assert preview_affected_request.output_directory == frozen.output_directory
+    assert preview_affected_request.target_height == frozen.target_height
     window.close()
 
 

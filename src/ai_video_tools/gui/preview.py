@@ -72,6 +72,8 @@ class SourcePreviewPane(QFrame):
         self.next_button = self._control("⏩", "Next clip", "previewNextButton")
         self.preview_label = QLabel("Preview")
         self.preview_label.setObjectName("previewLabel")
+        self.preview_label.setAccessibleName("Preview status")
+        self.preview_label.setWordWrap(True)
         self.volume_label = QLabel("Output volume")
         self.volume_label.setObjectName("outputVolumeLabel")
         self.volume_label.setFixedHeight(24)
@@ -180,6 +182,7 @@ class SourcePreviewPane(QFrame):
 
         self.player.stop()
         self._reset_progress()
+        self.preview_label.setText("Preview")
         self._set_actual_muted(True)
         if path is None:
             self.player.setSource(QUrl())
@@ -343,6 +346,7 @@ class SourcePreviewPane(QFrame):
     @Slot(QMediaPlayer.Error, str)
     def _preview_error(self, _error: QMediaPlayer.Error, _error_string: str) -> None:
         message = "Preview unavailable; preflight can still inspect this clip."
+        self.preview_label.setText(message)
         self.preview_error.emit(message)
 
     def shutdown(self) -> None:

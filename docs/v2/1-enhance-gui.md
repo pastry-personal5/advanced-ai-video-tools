@@ -210,13 +210,13 @@ message actions.
 - [x] Start muted on first launch, persist only mute/volume preferences, stop and asynchronously reload on selection changes, and preserve concat order independently from preview selection.
 - [x] Pause preview at processing start, avoid automatic resume, and release the player during window shutdown.
 - [x] Reject URL/remote preview sources and accept only local files already in the editor.
-- [ ] Ensure player metadata, rendering, duration, errors, and playback success cannot influence rotation, HDR, color, timing, stream, compatibility, or processing decisions.
+- [x] Ensure player metadata, rendering, duration, errors, and playback success cannot influence rotation, HDR, color, timing, stream, compatibility, or processing decisions.
 - [x] Map native player load, decode, and unsupported-format errors to the inline message “Preview unavailable; preflight can still inspect this clip.”
-- [ ] Keep a preview-unavailable source clip in the ordered input list and allow authoritative preflight and queue submission to proceed.
-- [ ] Do not generate proxy media or launch FFmpeg as a preview fallback.
-- [ ] Keep native preview playback as-is for v2; do not add a preview rotation gate or custom rotation renderer, while retaining authoritative preflight rotation policy.
-- [ ] Keep preview state isolated from processing intent and expose no editing, filtering, trimming, frame-export, or concat-boundary controls.
-- [ ] Keep FFmpeg, FFprobe, Real-ESRGAN, command builders, and processing services out of the preview presentation layer.
+- [x] Keep a preview-unavailable source clip in the ordered input list and allow authoritative preflight and queue submission to proceed.
+- [x] Do not generate proxy media or launch FFmpeg as a preview fallback.
+- [x] Keep native preview playback as-is for v2; do not add a preview rotation gate or custom rotation renderer, while retaining authoritative preflight rotation policy.
+- [x] Keep preview state isolated from processing intent and expose no editing, filtering, trimming, frame-export, or concat-boundary controls.
+- [x] Keep FFmpeg, FFprobe, Real-ESRGAN, command builders, and processing services out of the preview presentation layer.
 - [ ] Implement the separately approved controls, audio, error, and cleanup policies around the fixed playback backend.
 - [ ] Keep custom target-height input without adding output-height presets.
 - [x] Route job-editor validation and status messages to `Global Messages`; do not show inline editor error or warning widgets.
@@ -446,6 +446,42 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - The timeline resets while a source loads, stays disabled until native duration is available, and is released with the existing preview player lifecycle.
 - Added headless regression coverage for duration/position synchronization, user seeking, timestamp formatting, and disabled no-source state.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 15 passed; `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 200 passed; Black, Pylint, and pycodestyle passed.
+
+### Preview failure isolation slice — completed
+
+- Native preview errors now replace the preview status text with “Preview unavailable; preflight can still inspect this clip.” while retaining the source clip and emitting the existing global message.
+- Source changes reset the status text, and preview failure does not disable editor submission or enter the frozen job request.
+- Added regression coverage for the inline error state and source-list retention.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 15 passed; `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 201 passed; Black, Pylint, and pycodestyle passed.
+
+### Preview processing-decision isolation slice — completed
+
+- Confirmed that player duration, position, and native error state remain presentation-only and cannot alter the editor's frozen inputs or output intent.
+- Added regression coverage that applies those player events before rebuilding the request and verifies the processing fields remain unchanged.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 15 passed; `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 201 passed; Black, Pylint, and pycodestyle passed.
+
+### Preview fallback exclusion slice — completed
+
+- Native preview failure keeps the original `QMediaPlayer` source and stops at the inline status message; no proxy media or FFmpeg fallback path is present.
+- Added regression coverage for source retention and unchanged local files after a preview error.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 16 passed; `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 202 passed; Black, Pylint, and pycodestyle passed.
+
+### Native rotation behavior slice — completed
+
+- Confirmed that `QMediaPlayer` renders directly through `QVideoWidget` with native rotation behavior and `KeepAspectRatio`; no application rotation control or custom renderer was added.
+- Added headless regression coverage for the direct native video-output boundary.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 17 passed; `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 203 passed; Black, Pylint, and pycodestyle passed.
+
+### Playback-only preview boundary slice — completed
+
+- Confirmed that the preview exposes playback, clip navigation, seeking, and audio controls only; no trim, filtering, frame-export, or concat-boundary controls are present.
+- Added a control-inventory regression test for the presentation boundary.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 18 passed; `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 204 passed; Black, Pylint, and pycodestyle passed.
+
+### Preview processing-boundary slice — completed
+
+- Verified that `SourcePreviewPane` depends only on Qt media/presentation types and local `Path` values; FFmpeg, FFprobe, Real-ESRGAN, command builders, and processing services remain outside the module.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 204 passed; Black, Pylint, and pycodestyle passed.
 
 ### Local file drop slice — completed
 
