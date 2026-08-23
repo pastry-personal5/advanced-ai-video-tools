@@ -9,34 +9,65 @@ from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QFileDialog, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtCore import QFile, QSize, Qt, Signal, Slot
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QShowEvent
+from PySide6.QtWidgets import QFileDialog, QGroupBox, QHBoxLayout, QLabel, QListWidget, QLineEdit, QListWidgetItem, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QStyle, QToolButton, QVBoxLayout, QWidget
 
 from ai_video_tools.core.models import JobRequest
 from ai_video_tools.storage.naming import automatic_output_basename
 from ai_video_tools.system.settings import ApplicationSettings
 
 _VIDEO_SUFFIXES = frozenset({".mov", ".mp4", ".mkv", ".m4v"})
-SOURCE_CLIP_LIST_WIDTH = 623
+SOURCE_CLIP_LIST_WIDTH = 673
+SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH = 320
 
 
 def _local_now() -> datetime:
     return datetime.now().astimezone()
 
 
+class _ElidedFilenameLabel(QLabel):
+    """Show a filename compactly while retaining its full tooltip."""
+
+    def __init__(self, filename: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full_text = " ".join(filename.splitlines())
+        self.setWordWrap(False)
+        self.setText(self._full_text)
+
+    def resizeEvent(self, event: object) -> None:  # pylint: disable=invalid-name
+        """Recalculate middle elision when the row width changes."""
+
+        super().resizeEvent(event)  # type: ignore[arg-type]
+        self.refresh_elision()
+
+    def showEvent(self, event: QShowEvent) -> None:  # pylint: disable=invalid-name
+        """Calculate the initial elision after the row receives its layout width."""
+
+        super().showEvent(event)
+        self.refresh_elision()
+
+    def refresh_elision(self) -> None:
+        """Recalculate the displayed filename for the current label width."""
+
+        display_width = min(self.contentsRect().width(), SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH)
+        self.setText(self.fontMetrics().elidedText(self._full_text, Qt.TextElideMode.ElideMiddle, max(0, display_width)))
+
+
 class JobEditor(QWidget):
     """Collect supported v1 job intent without performing media inspection."""
 
     request_ready = Signal(object)
+    message = Signal(str)
 
-    def __init__(self, settings: ApplicationSettings, *, clock: Callable[[], datetime] = _local_now, parent: QWidget | None = None) -> None:
+    def __init__(self, settings: ApplicationSettings, *, clock: Callable[[], datetime] = _local_now, trash_mover: Callable[[str], bool] | None = None, parent: QWidget | None = None) -> None:
         # Declarative widget construction is intentionally kept together.
         # pylint: disable=too-many-statements
         super().__init__(parent)
         self.setAcceptDrops(True)
         self._settings = settings
         self._clock = clock
+        self._trash_mover = trash_mover or QFile.moveToTrash
         self._paths: list[Path] = []
 
         self.inputs = QListWidget()
@@ -45,6 +76,7 @@ class JobEditor(QWidget):
         self.inputs.setAccessibleDescription("Clips are processed in the order shown.")
         self.inputs.setMinimumHeight(100)
         self.inputs.setMaximumWidth(SOURCE_CLIP_LIST_WIDTH)
+        self.inputs.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.inputs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.add_button = QPushButton("Add Clips…")
@@ -66,12 +98,15 @@ class JobEditor(QWidget):
         self.output_directory = QLineEdit(str(settings.recent_output_directory or ""))
         self.output_directory.setObjectName("outputDirectory")
         self.output_directory.setPlaceholderText("Choose an output directory")
-        self.output_button = QPushButton("Choose…")
+        self.output_button = QToolButton()
         self.output_button.setObjectName("chooseOutputButton")
-        output_row = QHBoxLayout()
-        output_row.addWidget(self.output_directory, 1)
-        output_row.addWidget(self.output_button)
-        self.output_error = self._error_label("Output directory error")
+        self.output_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
+        self.output_button.setAccessibleName("Choose output directory")
+        self.output_button.setToolTip("Choose output directory")
+        self.output_button.setFixedSize(32, 32)
+        output_button_row = QHBoxLayout()
+        output_button_row.addStretch(1)
+        output_button_row.addWidget(self.output_button)
 
         self.target_height = QSpinBox()
         self.target_height.setObjectName("targetHeight")
@@ -86,23 +121,40 @@ class JobEditor(QWidget):
 
         output_group = QGroupBox("Output Directory")
         output_group.setObjectName("outputDirectoryGroup")
+        self._emphasize_group_title(output_group)
         output_group_layout = QVBoxLayout(output_group)
-        output_group_layout.addLayout(output_row)
-        output_group_layout.addWidget(self.output_error)
+        output_explanation = QLabel("Choose where completed videos are saved.")
+        output_explanation.setObjectName("outputDirectoryExplanation")
+        output_explanation.setWordWrap(True)
+        output_explanation.setStyleSheet("font-size: 10px; color: #a8aaad;")
+        output_group_layout.addWidget(output_explanation)
+        output_group_layout.addLayout(output_button_row)
+        output_group_layout.addWidget(self.output_directory)
         target_group = QGroupBox("Target Height")
         target_group.setObjectName("targetHeightGroup")
+        self._emphasize_group_title(target_group)
         target_group_layout = QVBoxLayout(target_group)
+        target_explanation = QLabel("Sets the final video height; width is calculated to preserve aspect ratio.")
+        target_explanation.setObjectName("targetHeightExplanation")
+        target_explanation.setWordWrap(True)
+        target_explanation.setStyleSheet("font-size: 10px; color: #a8aaad;")
+        target_group_layout.addWidget(target_explanation)
         target_group_layout.addWidget(self.target_height)
-        self.target_error = self._error_label("Target height error")
-        target_group_layout.addWidget(self.target_error)
-        model_group = QGroupBox("AI Model")
-        model_group.setObjectName("aiModelGroup")
+        model_group = QGroupBox("AI Upscaler")
+        model_group.setObjectName("aiUpscalerGroup")
+        self._emphasize_group_title(model_group)
         model_group_layout = QVBoxLayout(model_group)
+        upscaler_explanation = QLabel("Enhances video detail after clips are prepared and combined.")
+        upscaler_explanation.setObjectName("aiUpscalerExplanation")
+        upscaler_explanation.setWordWrap(True)
+        upscaler_explanation.setStyleSheet("font-size: 10px; color: #a8aaad;")
+        model_group_layout.addWidget(upscaler_explanation)
         model_group_layout.addWidget(model_label)
 
         basic_settings = QGroupBox("Basic Settings")
         basic_settings.setObjectName("basicSettings")
-        basic_settings.setFixedWidth(240)
+        self._emphasize_group_title(basic_settings, 4)
+        basic_settings.setFixedWidth(290)
         basic_settings_layout = QVBoxLayout(basic_settings)
         settings_scroll = QScrollArea()
         settings_scroll.setObjectName("basicSettingsScroll")
@@ -121,20 +173,13 @@ class JobEditor(QWidget):
         self.submit_button = QPushButton("Preflight & Queue")
         self.submit_button.setObjectName("submitJobButton")
         self.submit_button.setDefault(True)
-        self.editor_status = QLabel()
-        self.editor_status.setObjectName("editorStatus")
-        self.editor_status.setWordWrap(True)
-
         source_group = QGroupBox()
         source_group.setObjectName("sourceClipListGroup")
         group_layout = QVBoxLayout(source_group)
         group_layout.setContentsMargins(2, 9, 9, 9)
         group_layout.addWidget(self.inputs)
         group_layout.addLayout(input_controls)
-        self.input_error = self._error_label("Input clips error")
-        group_layout.addWidget(self.input_error)
         submit_row = QHBoxLayout()
-        submit_row.addWidget(self.editor_status, 1)
         submit_row.addWidget(self.submit_button)
         group_layout.addLayout(submit_row)
         outer = QVBoxLayout()
@@ -152,31 +197,15 @@ class JobEditor(QWidget):
         self.input_down_button.clicked.connect(lambda: self.move_selected(1))
         self.output_button.clicked.connect(self._choose_output_directory)
         self.submit_button.clicked.connect(self._request_submission)
-        self.output_directory.textChanged.connect(lambda _text: self.output_error.clear())
-        self.target_height.valueChanged.connect(lambda _value: self.target_error.clear())
         self.inputs.currentRowChanged.connect(self._update_input_controls)
-        self.inputs.currentRowChanged.connect(lambda _row: self.input_error.clear())
         self._update_input_controls()
 
     @staticmethod
-    def _error_label(accessible_name: str) -> QLabel:
-        """Create a hidden, text-bearing inline validation message."""
+    def _emphasize_group_title(group: QGroupBox, extra_points: int = 0) -> None:
+        """Emphasize a group-box title without changing its child controls."""
 
-        label = QLabel()
-        label.setObjectName(f"{accessible_name.replace(' ', '').lower()}Label")
-        label.setAccessibleName(accessible_name)
-        label.setWordWrap(True)
-        label.setStyleSheet("color: #ffb4ab;")
-        label.setVisible(False)
-        return label
-
-    @staticmethod
-    def _show_error(label: QLabel, message: str) -> None:
-        """Show one validation message and expose it to assistive technology."""
-
-        label.setText(message)
-        label.setVisible(bool(message))
-        label.setAccessibleDescription(message)
+        title_size = max(1, group.font().pointSize() + extra_points)
+        group.setStyleSheet(f"QGroupBox::title {{ font-size: {title_size}pt; font-weight: 700; }}")
 
     def input_paths(self) -> tuple[Path, ...]:
         """Return clip paths in their visible concat order."""
@@ -187,13 +216,61 @@ class JobEditor(QWidget):
         """Append selected paths without silently sorting or deduplicating them."""
 
         new_paths = tuple(paths)
-        first_added_row = len(self._paths)
         for path in new_paths:
             self._paths.append(path)
-            self.inputs.addItem(path.name)
         if new_paths:
-            self.inputs.setCurrentRow(first_added_row + len(new_paths) - 1)
+            self._rebuild_input_rows(len(self._paths) - 1)
         self._update_input_controls()
+
+    def _rebuild_input_rows(self, selected_row: int) -> None:
+        """Render filename rows with a right-aligned per-row Trash action."""
+
+        self.inputs.clear()
+        for path in self._paths:
+            item = QListWidgetItem()
+            item.setSizeHint(QSize(0, 28))
+            self.inputs.addItem(item)
+            row = QWidget()
+            row.setMinimumWidth(0)
+            row.setFixedHeight(28)
+            row.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(8, 0, 4, 0)
+            filename = _ElidedFilenameLabel(path.name)
+            filename.setObjectName("sourceClipFilename")
+            filename.setMinimumWidth(0)
+            filename.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            filename.setToolTip(str(path))
+            row_layout.addWidget(filename, 1)
+            trash_button = QToolButton()
+            trash_button.setObjectName("sourceClipTrashButton")
+            trash_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
+            trash_button.setAccessibleName(f"Move {path.name} to Trash")
+            trash_button.setToolTip(f"Move {path.name} to Trash")
+            trash_button.setIconSize(QSize(10, 10))
+            trash_button.setFixedSize(20, 20)
+            trash_button.setStyleSheet("QToolButton { padding: 0px; margin: 0px; }")
+            trash_button.clicked.connect(lambda _checked=False, current_item=item: self._move_item_to_trash(current_item))
+            row_layout.addWidget(trash_button)
+            self.inputs.setItemWidget(item, row)
+        if self._paths:
+            self.inputs.setCurrentRow(max(0, min(selected_row, len(self._paths) - 1)))
+
+    @Slot()
+    def _move_item_to_trash(self, item: QListWidgetItem) -> None:
+        """Move one source file to the OS Trash before removing its row."""
+
+        row = self.inputs.row(item)
+        if row < 0 or row >= len(self._paths):
+            return
+        path = self._paths[row]
+        if not self._trash_mover(str(path)):
+            self.message.emit(f"Could not move source clip to Trash: {path.name}")
+            return
+        self._paths.pop(row)
+        self._rebuild_input_rows(min(row, len(self._paths) - 1))
+        self._update_input_controls()
+        self.message.emit(f"Moved source clip to Trash: {path.name}")
 
     @staticmethod
     def _local_drop_paths(event: QDragEnterEvent | QDropEvent) -> tuple[Path, ...]:
@@ -232,9 +309,8 @@ class JobEditor(QWidget):
 
         row = self.inputs.currentRow()
         if row >= 0:
-            self.inputs.takeItem(row)
             self._paths.pop(row)
-            self.inputs.setCurrentRow(min(row, self.inputs.count() - 1))
+            self._rebuild_input_rows(min(row, len(self._paths) - 1))
         self._update_input_controls()
 
     def move_selected(self, offset: int) -> bool:
@@ -244,11 +320,9 @@ class JobEditor(QWidget):
         destination = row + offset
         if row < 0 or destination < 0 or destination >= self.inputs.count():
             return False
-        item = self.inputs.takeItem(row)
-        self.inputs.insertItem(destination, item)
         path = self._paths.pop(row)
         self._paths.insert(destination, path)
-        self.inputs.setCurrentRow(destination)
+        self._rebuild_input_rows(destination)
         return True
 
     def build_request(self) -> JobRequest:
@@ -286,11 +360,6 @@ class JobEditor(QWidget):
             self._update_input_controls()
 
     @Slot(str)
-    def set_status(self, message: str) -> None:
-        """Present concise submission status beside the action button."""
-
-        self.editor_status.setText(message)
-
     @Slot(object)
     def apply_settings(self, value: object) -> None:
         """Adopt newly persisted non-safety preferences for later drafts."""
@@ -324,15 +393,8 @@ class JobEditor(QWidget):
         try:
             request = self.build_request()
         except ValueError as error:
-            message = str(error)
-            self._show_error(self.input_error, message if message.startswith("Add at least one") else "")
-            self._show_error(self.output_error, message if message.startswith("Choose an output") else "")
-            self._show_error(self.target_error, message if message.startswith("Target height") else "")
-            self.set_status(message)
+            self.message.emit(str(error))
             return
-        self._show_error(self.input_error, "")
-        self._show_error(self.output_error, "")
-        self._show_error(self.target_error, "")
         self.request_ready.emit(request)
 
     @Slot()

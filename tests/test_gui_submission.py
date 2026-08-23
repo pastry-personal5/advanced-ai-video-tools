@@ -18,10 +18,10 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QThread, QUrl, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QListWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QListWidget, QToolButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.editor import JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
+from ai_video_tools.gui.editor import SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH, JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.preflight import GuiPreflightController  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.submission import JobSubmissionController, PreflightDecision, PreflightDialog  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
@@ -142,7 +142,7 @@ def test_editor_preserves_concat_order_and_builds_frozen_supported_request(qt_ap
     editor = JobEditor(settings, clock=lambda: _CREATED)
     paths = (tmp_path / "one.mov", tmp_path / "two.mov", tmp_path / "three.mov")
     editor.add_inputs(paths)
-    assert [editor.inputs.item(row).text() for row in range(editor.inputs.count())] == [path.name for path in paths]
+    assert [editor.inputs.item(row).text() for row in range(editor.inputs.count())] == [""] * len(paths)
     editor.inputs.setCurrentRow(2)
 
     assert editor.move_selected(-1)
@@ -163,22 +163,119 @@ def test_editor_preserves_concat_order_and_builds_frozen_supported_request(qt_ap
 
 
 def test_editor_shows_inline_accessible_validation_errors(qt_app: QApplication) -> None:
-    """Basic field errors are visible beside their fields before preflight."""
+    """Basic field errors are routed to the global message stream before preflight."""
 
     del qt_app
     editor = JobEditor(ApplicationSettings())
+    messages: list[str] = []
+    editor.message.connect(messages.append)
     editor.submit_button.click()
 
-    assert not editor.input_error.isHidden()
-    assert editor.input_error.text() == "Add at least one input clip."
-    assert editor.input_error.accessibleName() == "Input clips error"
-    assert editor.output_error.isHidden()
-    assert editor.target_error.isHidden()
+    assert messages == ["Add at least one input clip."]
+    assert editor.findChild(QLabel, "editorStatus") is None
 
     editor.add_inputs((Path("clip.mov"),))
     editor.output_directory.setText("/tmp/output")
     editor.submit_button.click()
-    assert editor.input_error.isHidden()
+    assert messages == ["Add at least one input clip."]
+
+
+def test_basic_settings_width_and_target_height_guidance(qt_app: QApplication) -> None:
+    """Basic settings provide room for compact target-height guidance."""
+
+    del qt_app
+    editor = JobEditor(ApplicationSettings())
+    basic_settings = editor.findChild(QGroupBox, "basicSettings")
+    explanation = editor.findChild(QLabel, "targetHeightExplanation")
+
+    assert basic_settings is not None
+    assert basic_settings.width() == 290
+    assert explanation is not None
+    assert "preserve aspect ratio" in explanation.text()
+    assert explanation.font().pointSize() <= 10
+
+    output_explanation = editor.findChild(QLabel, "outputDirectoryExplanation")
+    output_button = editor.findChild(QToolButton, "chooseOutputButton")
+    assert output_explanation is not None
+    assert output_explanation.font().pointSize() <= 10
+    assert "completed videos" in output_explanation.text()
+    assert output_button is not None
+    assert output_button.text() == ""
+    assert output_button.accessibleName() == "Choose output directory"
+
+    upscaler_group = editor.findChild(QGroupBox, "aiUpscalerGroup")
+    upscaler_explanation = editor.findChild(QLabel, "aiUpscalerExplanation")
+    assert upscaler_group is not None
+    assert upscaler_group.title() == "AI Upscaler"
+    assert upscaler_explanation is not None
+    assert upscaler_explanation.font().pointSize() <= 10
+    assert "Enhances video detail" in upscaler_explanation.text()
+    assert "font-weight: 700" in basic_settings.styleSheet()
+    assert f"font-size: {basic_settings.font().pointSize() + 4}pt" in basic_settings.styleSheet()
+    assert "font-weight: 700" in editor.findChild(QGroupBox, "outputDirectoryGroup").styleSheet()
+    assert "font-weight: 700" in editor.findChild(QGroupBox, "targetHeightGroup").styleSheet()
+    assert "font-weight: 700" in upscaler_group.styleSheet()
+
+
+def test_source_rows_offer_os_trash_action(qt_app: QApplication, tmp_path: Path) -> None:
+    """A row Trash action moves the source file before removing its row."""
+
+    del qt_app
+    first = tmp_path / "first.mov"
+    second = tmp_path / "second.mov"
+    first.touch()
+    second.touch()
+    moved: list[str] = []
+
+    def move_to_trash(path: str) -> bool:
+        moved.append(path)
+        return True
+
+    editor = JobEditor(ApplicationSettings(), trash_mover=move_to_trash)
+    editor.add_inputs((first, second))
+    buttons = editor.findChildren(QToolButton, "sourceClipTrashButton")
+    assert len(buttons) == 2
+    assert buttons[1].accessibleName() == "Move second.mov to Trash"
+
+    messages: list[str] = []
+    editor.message.connect(messages.append)
+    buttons[1].click()
+
+    assert moved == [str(second)]
+    assert editor.input_paths() == (first,)
+    assert editor.inputs.item(0).text() == ""
+    assert messages == ["Moved source clip to Trash: second.mov"]
+
+
+def test_long_source_filename_is_elided_and_trash_control_is_compact(qt_app: QApplication, tmp_path: Path) -> None:
+    """Long names elide in the row and the Trash control stays compact."""
+
+    path = tmp_path / "a-very-long-source-clip-filename\nthat-needs-elision-in-the-row.mov"
+    editor = JobEditor(ApplicationSettings(), trash_mover=lambda _path: True)
+    editor.resize(1200, 500)
+    editor.add_inputs((path,))
+    editor.show()
+    qt_app.processEvents()
+    filename = editor.findChild(QLabel, "sourceClipFilename")
+    trash_button = editor.findChild(QToolButton, "sourceClipTrashButton")
+
+    assert filename is not None
+    assert editor.inputs.item(0).text() == ""
+    assert len(editor.findChildren(QLabel, "sourceClipFilename")) == 1
+    assert "…" in filename.text()
+    assert filename.text() != path.name
+    assert "\n" not in filename.text()
+    assert filename.wordWrap() is False
+    assert filename.contentsRect().width() > SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH
+    assert filename.fontMetrics().horizontalAdvance(filename.text()) <= SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH
+    assert filename.parentWidget().width() <= editor.inputs.viewport().width()
+    assert filename.parentWidget().height() == editor.inputs.sizeHintForRow(0)
+    assert filename.toolTip() == str(path)
+    assert editor.input_paths() == (path,)
+    assert trash_button is not None
+    assert trash_button.width() == 20
+    assert trash_button.iconSize().width() == 10
+    editor.close()
 
 
 def test_editor_drop_boundary_accepts_local_files_and_rejects_remote_urls(qt_app: QApplication, tmp_path: Path) -> None:

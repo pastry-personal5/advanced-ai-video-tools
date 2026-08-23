@@ -186,12 +186,12 @@ class MainWindow(QMainWindow):
         self.source_preview.first_frame_requested.connect(self.source_preview.go_to_first_frame)
         self.source_preview.last_frame_requested.connect(self.source_preview.go_to_last_frame)
         self.source_preview.preview_error.connect(self._append_global)
+        self.editor.message.connect(self._append_global)
         self._append_global("Application started.")
         self._append_global("Add clips in order they should be concatenated.")
         if submission is not None:
             self.editor.request_ready.connect(submission.start)
             submission.busy_changed.connect(self.editor.set_busy)
-            submission.status_changed.connect(self.editor.set_status)
             submission.status_changed.connect(self._append_global)
             submission.queued.connect(lambda job_id: self._append_job(job_id, "Job queued."))
             submission.queued.connect(self.editor.job_queued)

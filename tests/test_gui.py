@@ -313,9 +313,8 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.queue_monitoring_button.isEnabled()
     window.editor.add_inputs((tmp_path / "first.mov",))
     assert window.findChild(QLabel, "sourcePreviewSource") is None
-    assert window.findChild(QLabel, "sourcePreviewDisclaimer") is None
     assert window.source_preview.minimumWidth() == 600
-    assert window.editor.inputs.width() <= 623
+    assert window.editor.inputs.width() <= 673
     window.source_preview.preview_error.emit("Preview unavailable; preflight can still inspect this clip.")
     assert "Preview unavailable; preflight can still inspect this clip." in window.global_messages.toPlainText()
     assert window.source_preview.heightForWidth(300) == 400

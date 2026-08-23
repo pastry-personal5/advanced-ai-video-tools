@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Defined the Phase 1 video-preview scope as the currently selected source clip only.
 - Defined the Phase 1 source preview as playback-only, without timeline or media-editing features.
 - Selected PySide6 `QMediaPlayer` and `QVideoWidget` as the planned Phase 1 preview backend, isolated from FFmpeg and Real-ESRGAN processing.
-- Defined the Phase 1 widget as a non-color-accurate convenience preview while retaining FFprobe-backed preflight and the processing pipeline as the authoritative media contract.
+- Defined the Phase 1 widget as selected-source playback while retaining FFprobe-backed preflight and the processing pipeline as the media contract.
 - Defined unsupported native preview formats as a non-blocking state with no FFmpeg proxy fallback.
 - Defined full-width Phase 1 preview playback with exact unrotated aspect preservation and no crop, stretch, or rotation.
 

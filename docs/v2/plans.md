@@ -67,7 +67,7 @@ The complete decision checklist and migration plan are maintained in [Phase 2 â€
 Unless explicitly superseded, v2 retains these v1 guarantees:
 
 - Concat first and run AI upscaling at most once.
-- Processing preserves aspect ratio and never rotates, crops, or stretches implicitly; the convenience preview may follow native rotation behavior.
+- Processing preserves aspect ratio and never rotates, crops, or stretches implicitly; preview playback may follow native rotation behavior.
 - Preserve accepted BT.709 or SMPTE 170M matrices and reject unsupported HDR.
 - Preserve exact rational timing using time-base-derived verification tolerance.
 - Maintain the first-audio, silence, pad, trim, and explicit stream-drop acknowledgement policy.

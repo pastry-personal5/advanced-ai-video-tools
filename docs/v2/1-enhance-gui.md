@@ -22,10 +22,10 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 - The preview is playback-only.
 - The playback backend is PySide6 `QMediaPlayer` with `QVideoWidget`.
 - FFmpeg, FFprobe, Real-ESRGAN, media command construction, and processing services remain outside the preview presentation layer.
-- The widget is explicitly a convenience preview, not a color-accurate or processing-authoritative representation.
+- The preview displays the selected source clip only; processing decisions remain governed by FFprobe-backed preflight and the processing pipeline.
 - FFprobe-backed preflight and the processing pipeline remain authoritative for rotation, HDR, color metadata and interpretation, timing, stream inventory, compatibility, and every processing decision.
 - `QMediaPlayer` rendering, metadata, duration, errors, or playback success must not be promoted into job validation or execution-plan input.
-- macOS native playback may reject a format that FFmpeg and FFprobe can process; this is a preview limitation, not a processing rejection.
+- macOS native playback may reject a format that FFmpeg and FFprobe can process; this does not affect processing eligibility.
 - Preview load, decode, or format failure is non-blocking and displays: “Preview unavailable; preflight can still inspect this clip.”
 - Phase 1 does not generate FFmpeg proxy videos or invoke another playback fallback when native preview is unavailable.
 - The video presentation fills the available preview width, and its height is derived from the clip's exact display aspect ratio.
@@ -35,7 +35,7 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 - Queue selection, active jobs, merged intermediates, completed outputs, and retained failed-workspace media do not become preview sources in Phase 1.
 - The preview does not simulate normalized, concatenated, upscaled, color-converted, encoded, or final published output.
 - The preview provides no trim points, timeline editing, filters, frame export, or concat-boundary editing.
-- Preview availability or playback success is not an authoritative media validation result and cannot replace preflight.
+- Preview availability or playback success does not participate in media validation; preflight remains required.
 
 ### Source-preview playback controls
 
@@ -45,7 +45,7 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 - Disable previous-clip at the first source clip and next-clip at the last source clip; navigation does not wrap around.
 - “Go to the first frame” seeks to the start of the selected clip; “go to the last frame” seeks to its last frame without changing the ordered input list or job intent.
 - Do not provide loop, repeat, A/B, trim, timeline-editing, filtering, frame-export, or concat-boundary controls in v2.
-- Autoplay, seeking, and control state remain convenience-preview behavior and never become authoritative preflight or processing input.
+- Autoplay, seeking, and control state affect playback only and never become preflight or processing input.
 - Render the five controls as icon-only buttons in this order: play/pause uses the conventional play triangle and pause bars; go-to-first-frame uses a leading vertical bar with one left-pointing triangle; go-to-last-frame uses one right-pointing triangle with a trailing vertical bar; previous clip uses double left-pointing triangles; next clip uses double right-pointing triangles. The double- versus single-triangle treatment distinguishes clip navigation from seeking within the selected clip.
 - Use Qt-native icon construction or small app-owned vector glyphs for these controls rather than relying on undocumented platform theme names or third-party icon assets. Keep one consistent monochrome visual treatment at the supported display scale.
 - Every icon-only button has a programmatic accessible name, a tooltip, and a non-color state indication. The play/pause accessible name reflects the action that will occur next (for example, “Pause preview” while playing and “Play preview” while paused).
@@ -73,7 +73,7 @@ This phase enhances the GUI; it does not redesign the media pipeline.
 - Selecting a job activates the `Job Messages` tab. When no job is selected, that tab displays `No job is selected.`
 - When a job reaches `COMPLETED`, append a concise completion line to `Global Messages`.
 - Message rendering is presentation-only. It must consume typed application/queue events and must not move probing, processing, logging configuration, or other long-running work onto the GUI thread.
-- A preview failure remains a non-blocking message for the relevant source clip and does not become a processing or job-validation message unless authoritative preflight reports the same issue.
+- A preview failure remains a playback message for the relevant source clip; job validation continues to use authoritative preflight.
 
 ### View navigation
 
@@ -204,7 +204,6 @@ message actions.
 - [x] Implement playback with PySide6 `QMediaPlayer` and `QVideoWidget` behind a small, testable presentation boundary.
 - [x] Use `Qt.AspectRatioMode.KeepAspectRatio` and a width-driven container whose height follows the exact display aspect ratio without adding application-level rotation handling.
 - [ ] Verify that preview resizing never crops, stretches, or substitutes a rounded aspect ratio.
-- [ ] Label and describe the widget visibly and accessibly as a convenience preview that is not color-accurate or processing-authoritative.
 - [ ] Ensure selection-driven preview changes cannot reorder clips, mutate frozen job intent, or influence authoritative preflight results.
 - [ ] Start muted on first launch, persist only mute/volume preferences, stop and asynchronously reload on selection changes, and preserve concat order independently from preview selection.
 - [ ] Pause preview at processing start, avoid automatic resume, and release the player during window shutdown.
@@ -218,7 +217,7 @@ message actions.
 - [ ] Keep FFmpeg, FFprobe, Real-ESRGAN, command builders, and processing services out of the preview presentation layer.
 - [ ] Implement the separately approved controls, audio, error, and cleanup policies around the fixed playback backend.
 - [ ] Keep custom target-height input without adding output-height presets.
-- [x] Provide inline, accessible field errors while preserving authoritative preflight.
+- [x] Route job-editor validation and status messages to `Global Messages`; do not show inline editor error or warning widgets.
 
 ### 4. Queue and job details
 
@@ -292,7 +291,6 @@ record each completed slice in Implementation evidence with its exact checks.
 - Source rows show filenames only, duplicate clips are accepted, and the generated output name appears in the selected job's `Job Messages` tab immediately after job start.
 - Advanced options are available through `Edit` → `Preferences`, and the temporary v2 display identity is `Advanced AI Video Tools`.
 - Playback uses PySide6 `QMediaPlayer` and `QVideoWidget`; the preview presentation layer contains no FFmpeg, FFprobe, Real-ESRGAN, or processing-command integration.
-- The GUI visibly and accessibly identifies the widget as a convenience preview that is neither color-accurate nor authoritative for processing.
 - Rotation, HDR, color, timing, stream inventory, compatibility, and processing decisions come only from FFprobe-backed preflight and the processing pipeline, never from player state or appearance.
 - Native preview failure shows “Preview unavailable; preflight can still inspect this clip.” and does not remove the clip or prevent authoritative preflight or queue submission when the media otherwise satisfies processing policy.
 - No FFmpeg proxy video or alternative preview media is created after native playback failure.
@@ -370,7 +368,7 @@ Record subsequent completed slices here with links to the relevant modules/tests
 
 ### Source preview boundary slice — completed
 
-- Added the far-right `SourcePreviewPane` presentation boundary with width-driven 3:4 geometry, selected-source filename binding, and an explicit convenience-preview disclaimer.
+- Added the far-right `SourcePreviewPane` presentation boundary with width-driven 3:4 geometry and selected-source filename binding.
 - Kept the pane independent of FFmpeg, FFprobe, Real-ESRGAN, preflight, and processing intent; native playback and controls remain subsequent slices.
 - Added headless coverage for source selection and aspect-ratio geometry in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 182 passed; Black, Pylint, and pycodestyle passed.
@@ -481,14 +479,33 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Added regression coverage for grouped blocking findings in `tests/test_gui_submission.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 184 passed; Black, Pylint, and pycodestyle passed.
 
+### Basic settings sizing and guidance — implemented
+
+- Widened the `Basic Settings` panel from 240 px to 290 px.
+- Added compact target-height guidance above the 2160 px control, explaining that output width preserves the source aspect ratio.
+- Changed Output Directory to a full-width edit control with compact guidance above it and an icon-only directory chooser above the edit control.
+- Renamed the `AI Model` group to `AI Upscaler` and added compact guidance above the existing model label.
+- Made the `Basic Settings` title bold and 4 pt larger, with bold child section labels for Output Directory, Target Height, and AI Upscaler.
+- Added headless regression coverage in `tests/test_gui_submission.py`.
+
+### Source-row Trash action — implemented
+
+- Added a right-aligned icon-only Trash action to every populated source row.
+- The action moves the corresponding source file through Qt's OS Trash API before removing it from the editor list; failed moves leave the row intact and report the problem through `Global Messages`.
+- Existing text-labeled `Remove` behavior remains list-only.
+- Added regression coverage with an injected Trash mover in `tests/test_gui_submission.py`.
+- Long source filenames now use middle ellipsis in the row, with the full path retained as a tooltip; each row is constrained to the list viewport, and the Trash control uses a compact 20 px hit area and 10 px icon.
+- Widened the source clip list maximum from 623 px to 673 px, adding 25 px of room on each side for filenames and row actions.
+
 ### Always-dark theme decision — implemented
 
 - The GUI bootstrap applies an application-owned dark palette and Fusion style before constructing windows, so the GUI does not follow the macOS light/dark appearance setting.
 - Added a headless regression test for the forced style and key palette colors.
 
-### Inline editor validation slice — completed
+### Global editor validation messages slice — completed
 
-- Added accessible, inline error labels for missing input clips, output directory, and invalid target-height submissions.
+- Removed inline job-editor error and status widgets.
+- Routed missing input, output-directory, and target-height validation messages to the integrated `Global Messages` tab.
 - Validation remains a local submission check; authoritative FFprobe-backed preflight remains required before queueing.
 - Added regression coverage in `tests/test_gui_submission.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 188 passed; Black, Pylint, and pycodestyle passed.
@@ -500,5 +517,5 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Custom styling can reduce native accessibility, dark-mode correctness, and maintainability.
 - A bottom message area can consume vertical space needed by the editor and preview; splitter proportions and spacing must be explicit before implementation.
 - Mixing application-wide and job-scoped events can make message ownership ambiguous; typed event sources and a clear selected-job policy are required.
-- Native preview rotation behavior may differ from the authoritative processing interpretation; this is accepted in v2 because preview playback is explicitly convenience-only.
+- Native preview rotation behavior may differ from the authoritative processing interpretation; processing continues to use the established media policy.
 - Offscreen Qt tests cannot prove VoiceOver behavior or complete native macOS appearance.
