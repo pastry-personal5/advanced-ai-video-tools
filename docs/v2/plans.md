@@ -42,7 +42,7 @@ The new project name, rename compatibility policy, and exact scope of later phas
 | 4 | Refactoring | Proposed | Improve code readability and maintainability without weakening approved behavior |
 | 5 | Stabilization and release | Proposed | Re-verify behavior after refactoring and produce the v2 release artifacts |
 
-Phase 2 is established and may be planned while Phase 1 remains active, but implementation follows Phase 1 unless the user explicitly changes the execution order. Phases 3–5 remain provisional; create their phase files only after each phase's entry criteria and scope are approved.
+Phase 2 is complete after Phase 1. Phases 3–5 remain provisional; create their phase files only after each phase's entry criteria and scope are approved.
 
 ## Cross-phase decisions still required
 
