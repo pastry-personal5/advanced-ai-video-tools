@@ -222,7 +222,17 @@ make lint       # Run Pylint and pycodestyle
 make test       # Run the automated test suite
 make check      # Run formatting checks, linters, and tests
 make run        # Launch the PySide6 desktop shell
+make performance-test  # Opt-in Apple Silicon Metal native presentation benchmark
+make gui-capture-test  # Opt-in native-window macOS screen-capture check
 ```
+
+The two native acceptance targets require an interactive Apple Silicon macOS
+desktop. They confirm Metal support through `system_profiler`, run outside the
+default test suite, and skip when the current terminal cannot use the required
+native capability. `gui-capture-test` also requires Screen Recording permission
+for the invoking terminal or test runner. The presentation benchmark records
+three warm window-exposure samples and enforces the v2 proposed 3-second warm
+start budget; it is not a Real-ESRGAN throughput benchmark.
 
 Use the `Makefile` as the canonical developer interface. Run an underlying tool directly through `uv run` only when diagnosing or configuring it, for example `uv run pylint src tests`.
 

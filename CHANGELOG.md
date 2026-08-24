@@ -4,6 +4,10 @@ All notable changes to Advanced AI Video Tools are documented in this file.
 
 ## [Unreleased] — v2 rename
 
+- Added opt-in Apple Silicon Metal-gated native GUI presentation measurements
+  and a macOS `screencapture` acceptance check; neither expands the default
+  hardware-independent test suite.
+
 - Renamed the Python distribution to `advanced-ai-video-tools` and the import package to `advanced_ai_video_tools`.
 - Added `advanced-ai-video-tools` as the primary CLI and retained `ai-video-tools` as a stderr-warning compatibility alias through v2.
 - Established the `Advanced AI Video Tools` GUI identity, new application-data location, macOS bundle identifier `com.pastrypersonal5.advancedaivideotools`, and v2 macOS `Info.plist` template.

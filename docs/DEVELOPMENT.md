@@ -20,7 +20,12 @@ Black is canonical formatting. Use the repository `Makefile` for routine work:
 `make install`, `make format`, `make lint`, `make test`, `make check`, and
 `make run`. Python commands in Make targets run through `uv run`; installation
 uses `uv sync`. The project uses Black width `9999`; line-length diagnostics are
-disabled in pycodestyle and Pylint.
+disabled in pycodestyle and Pylint. `make performance-test` and
+`make gui-capture-test` are opt-in native acceptance targets: the first gates
+three warm native-window presentation measurements on the supported Apple
+Silicon Metal capability, and the second proves a visible native window can be
+captured with `screencapture`. Neither belongs in `make check`; screen capture
+also requires the invoking terminal to have macOS Screen Recording permission.
 
 ## AI-assisted code review
 
@@ -75,3 +80,9 @@ transitions, and error mapping; integration tests for tiny FFmpeg fixtures; and
 fake external tools for Real-ESRGAN contracts. Default tests must not need a
 GPU, network, large model, or long video. Mark hardware-heavy checks separately.
 If a check cannot run, report the command, blocker, and next-best validation.
+
+The native acceptance tests skip unless their Make target explicitly enables
+them and Apple Silicon Metal support is reported by `system_profiler`. They
+never alter preflight or runtime tool discovery. Keep their measurements scoped
+to visible GUI presentation; use a separately approved workload and real
+user-managed tools for pipeline-throughput evidence.

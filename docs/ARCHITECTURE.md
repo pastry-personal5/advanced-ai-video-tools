@@ -94,6 +94,16 @@ directory-mode fake upscaler, proving stage order, one AI invocation, final medi
 verification, atomic publication, reservation release, and terminal cleanup
 without a GPU or model download.
 
+Opt-in native acceptance tests provide two macOS-only checks outside `make
+check`. Both first require the supported Apple Silicon platform and affirmative
+Metal capability from the read-only `system_profiler` display report. The
+presentation benchmark records three warm `MainWindow` exposure samples against
+the proposed 3-second warm-start budget. The screen-capture check exposes the
+same dark window, invokes `screencapture`, and verifies that the captured image
+contains its surface; it requires Screen Recording permission for the invoking
+terminal. These are GUI presentation checks, not a substitute for a real
+Real-ESRGAN/Vulkan pipeline-throughput benchmark.
+
 ## Design goals
 
 - Provide one reliable processing pipeline through both a CLI and desktop GUI.
@@ -410,5 +420,9 @@ Progress events include the job ID, stage, measured completed work, measured tot
 - Contract-test the Real-ESRGAN adapter with a fake executable that copies or transforms small image fixtures predictably.
 - Test orchestration without a GUI, GPU, network, or real model weights.
 - Reserve end-to-end Vulkan tests for an explicitly marked hardware-enabled suite.
+- Keep Apple Silicon Metal presentation and `screencapture` checks opt-in under
+  `make performance-test` and `make gui-capture-test`; record their measured
+  native results as acceptance evidence rather than making the default suite
+  depend on a desktop session or Screen Recording permission.
 
 The same pipeline contract must pass whether a job originates from the CLI or GUI.

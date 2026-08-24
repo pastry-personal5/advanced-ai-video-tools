@@ -1,4 +1,4 @@
-.PHONY: install format format-check lint test check run
+.PHONY: install format format-check lint test check run performance-test gui-capture-test
 
 install:
 	uv sync --dev
@@ -20,3 +20,9 @@ check: format-check lint test
 
 run:
 	uv run advanced-ai-video-tools gui
+
+performance-test:
+	QT_QPA_PLATFORM=cocoa ADVANCED_AI_VIDEO_TOOLS_RUN_NATIVE_ACCEPTANCE=1 uv run pytest -m performance tests/test_native_acceptance.py
+
+gui-capture-test:
+	QT_QPA_PLATFORM=cocoa ADVANCED_AI_VIDEO_TOOLS_RUN_NATIVE_ACCEPTANCE=1 uv run pytest -m gui_capture tests/test_native_acceptance.py
