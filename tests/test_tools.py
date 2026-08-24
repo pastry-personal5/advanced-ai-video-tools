@@ -71,6 +71,22 @@ def test_vulkan_smoke_test_failure_is_actionable(tmp_path: Path) -> None:
         ToolDiscovery(failing_runner).discover(ToolOverrides(executable, executable, executable, models))
 
 
+def test_tool_launch_permission_failure_is_actionable(tmp_path: Path) -> None:
+    """A denied prerequisite launch becomes a typed discovery error."""
+
+    executable = _executable(tmp_path / "tool")
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "realesrgan-x4plus.param").touch()
+    (models / "realesrgan-x4plus.bin").touch()
+
+    def denied_runner(_arguments: Sequence[str], _timeout: float) -> subprocess.CompletedProcess[str]:
+        raise PermissionError("operation not permitted")
+
+    with pytest.raises(ToolDiscoveryError, match="Real-ESRGAN Vulkan smoke test could not run: operation not permitted"):
+        ToolDiscovery(denied_runner).discover(ToolOverrides(executable, executable, executable, models))
+
+
 def test_realesrgan_help_usage_accepts_the_tools_nonzero_help_exit(tmp_path: Path) -> None:
     """The upstream binary's successful help text is usable despite exit 255."""
 

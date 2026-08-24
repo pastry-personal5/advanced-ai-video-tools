@@ -22,6 +22,7 @@ run:
 	uv run advanced-ai-video-tools gui
 
 performance-test:
+	# Native presentation benchmark only; never invokes media processing or upscaling.
 	QT_QPA_PLATFORM=cocoa ADVANCED_AI_VIDEO_TOOLS_RUN_NATIVE_ACCEPTANCE=1 uv run pytest -m performance tests/test_native_acceptance.py
 
 gui-capture-test:

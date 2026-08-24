@@ -7,12 +7,29 @@ from __future__ import annotations
 
 from enum import IntEnum
 from pathlib import Path
+from typing import Protocol
 
 from loguru import logger
 from PySide6.QtCore import QAbstractTableModel, QByteArray, QModelIndex, QObject, Qt, QThread, Signal, Slot
 
 from advanced_ai_video_tools.core.models import JobState
-from advanced_ai_video_tools.services.queue import JobQueue, QueueJobSnapshot
+from advanced_ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot
+
+
+class JobQueueView(Protocol):
+    """Minimal queue surface required by the presentation model."""
+
+    def snapshots(self) -> tuple[QueueJobSnapshot, ...]:
+        """Return the current queue snapshots."""
+
+    def cancel(self, job_id: str) -> bool:
+        """Request cancellation for one job."""
+
+    def move(self, job_id: str, position: int) -> None:
+        """Move one pending job."""
+
+    def wait(self, job_id: str, timeout: float | None = None) -> QueueJobOutcome | None:
+        """Return a terminal outcome when available."""
 
 
 class JobRole(IntEnum):
@@ -52,7 +69,7 @@ class JobListModel(QAbstractTableModel):
 
     snapshot_changed = Signal(object)
 
-    def __init__(self, queue: JobQueue, bridge: QueueSnapshotBridge, parent: QObject | None = None) -> None:
+    def __init__(self, queue: JobQueueView, bridge: QueueSnapshotBridge, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._queue = queue
         self._snapshots: dict[str, QueueJobSnapshot] = {}

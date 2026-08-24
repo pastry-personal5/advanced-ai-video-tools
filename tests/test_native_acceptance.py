@@ -11,7 +11,7 @@ permission for the invoking terminal or test runner.
 from __future__ import annotations
 
 import os
-import shutil
+import platform
 import statistics
 import subprocess
 import time
@@ -20,10 +20,12 @@ from pathlib import Path
 import pytest
 
 from PySide6.QtCore import QCoreApplication  # pylint: disable=no-name-in-module
+from PySide6.QtCore import qVersion  # pylint: disable=no-name-in-module
 from PySide6.QtGui import QImage  # pylint: disable=no-name-in-module
 from PySide6.QtWidgets import QApplication  # pylint: disable=no-name-in-module
 
-from advanced_ai_video_tools.gui.jobs import JobListModel, QueueSnapshotBridge
+from advanced_ai_video_tools.gui.jobs import JobListModel, JobQueueView, QueueSnapshotBridge
+from advanced_ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot
 from advanced_ai_video_tools.gui.theme import apply_dark_theme
 from advanced_ai_video_tools.gui.window import MainWindow
 from advanced_ai_video_tools.system.hardware import apple_silicon_metal_error
@@ -35,7 +37,7 @@ _ENABLE_NATIVE_TESTS = "ADVANCED_AI_VIDEO_TOOLS_RUN_NATIVE_ACCEPTANCE"
 class _EmptyQueue:
     """The minimal queue contract needed to display an empty native window."""
 
-    def snapshots(self) -> tuple[object, ...]:
+    def snapshots(self) -> tuple[QueueJobSnapshot, ...]:
         """Return an empty initial queue snapshot."""
 
         return ()
@@ -48,7 +50,7 @@ class _EmptyQueue:
     def move(self, _job_id: str, _position: int) -> None:
         """Ignore reordering because the acceptance shell has no jobs."""
 
-    def wait(self, _job_id: str, timeout: float | None = None) -> None:
+    def wait(self, _job_id: str, timeout: float | None = None) -> QueueJobOutcome | None:
         """Return no terminal outcome because the acceptance shell has no jobs."""
 
         del timeout
@@ -82,7 +84,8 @@ def native_qt_app() -> QApplication:
 def _visible_window(application: QApplication) -> tuple[MainWindow, float]:
     """Show an empty shell and return after its native surface is exposed."""
 
-    model = JobListModel(_EmptyQueue(), QueueSnapshotBridge())  # type: ignore[arg-type]
+    queue: JobQueueView = _EmptyQueue()
+    model = JobListModel(queue, QueueSnapshotBridge())
     window = MainWindow(model, ApplicationSettings())
     window.setGeometry(40, 40, 1400, 880)
     started = time.monotonic()
@@ -105,6 +108,9 @@ def test_native_window_presentation_meets_warm_start_budget(native_qt_app: QAppl
     """Record three Metal-gated native presentation samples against the 3 s budget."""
 
     samples: list[float] = []
+    warmup_window, _warmup_elapsed = _visible_window(native_qt_app)
+    warmup_window.close()
+    native_qt_app.processEvents()
     for _ in range(3):
         window, elapsed = _visible_window(native_qt_app)
         samples.append(elapsed)
@@ -112,6 +118,11 @@ def test_native_window_presentation_meets_warm_start_budget(native_qt_app: QAppl
         native_qt_app.processEvents()
     median = statistics.median(samples)
     p95 = statistics.quantiles(samples, n=100, method="inclusive")[94]
+    record_property("host_os", platform.platform())
+    record_property("host_architecture", platform.machine())
+    record_property("python_version", platform.python_version())
+    record_property("qt_version", qVersion())
+    record_property("measurement_kind", "warm repeated window presentation")
     record_property("native_window_presentation_median_seconds", f"{median:.3f}")
     record_property("native_window_presentation_p95_seconds", f"{p95:.3f}")
     assert p95 <= 3.0, f"native window presentation p95 was {p95:.3f}s (budget: 3.000s; samples: {samples!r})"
@@ -121,26 +132,23 @@ def test_native_window_presentation_meets_warm_start_budget(native_qt_app: QAppl
 def test_screencapture_contains_visible_native_window(native_qt_app: QApplication, tmp_path: Path) -> None:
     """Prove macOS can capture the exposed dark shell from the current desktop."""
 
-    if shutil.which("screencapture") is None:
-        pytest.skip("macOS screencapture is unavailable")
     window, _elapsed = _visible_window(native_qt_app)
     image_path = tmp_path / "advanced-ai-video-tools-native.png"
     try:
-        result = subprocess.run(["screencapture", "-x", str(image_path)], check=False, capture_output=True, text=True, timeout=15.0, shell=False)
+        frame = window.frameGeometry()
+        result = subprocess.run(
+            ["/usr/sbin/screencapture", "-x", "-R", f"{frame.x()},{frame.y()},{frame.width()},{frame.height()}", str(image_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15.0,
+            shell=False,
+        )
         assert result.returncode == 0, result.stderr.strip() or result.stdout.strip() or "screencapture failed"
         assert image_path.is_file() and image_path.stat().st_size > 1024
         image = QImage(str(image_path))
         assert not image.isNull()
-        screen = window.screen()
-        assert screen is not None
-        screen_geometry = screen.geometry()
-        scale = image.width() / screen_geometry.width()
-        frame = window.frameGeometry()
-        start_x = int((frame.x() - screen_geometry.x()) * scale)
-        start_y = int((frame.y() - screen_geometry.y()) * scale)
-        end_x = min(image.width(), int((frame.right() - screen_geometry.x()) * scale))
-        end_y = min(image.height(), int((frame.bottom() - screen_geometry.y()) * scale))
-        dark_surface_found = any(image.pixelColor(x, y).name().lower() == "#202124" for y in range(max(start_y, 0), max(end_y, 0), max(int(20 * scale), 1)) for x in range(max(start_x, 0), max(end_x, 0), max(int(20 * scale), 1)))
+        dark_surface_found = any(image.pixelColor(x, y).name().lower() == "#202124" for y in range(0, image.height(), 20) for x in range(0, image.width(), 20))
         assert dark_surface_found, "the screen capture did not contain the visible Advanced AI Video Tools dark surface"
     finally:
         window.close()

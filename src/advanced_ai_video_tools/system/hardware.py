@@ -10,7 +10,8 @@ from advanced_ai_video_tools.system.platform import PlatformInfo, platform_error
 
 CommandRunner = Callable[[Sequence[str], float], subprocess.CompletedProcess[str]]
 
-_METAL_PROFILE_COMMAND = ("system_profiler", "SPDisplaysDataType", "-json")
+_METAL_PROFILE_COMMAND = ("/usr/sbin/system_profiler", "SPDisplaysDataType", "-json")
+_METAL_CAPABILITY_KEYS = frozenset({"spdisplays_metal", "spdisplays_mtlgpufamilysupport"})
 
 
 def _default_runner(arguments: Sequence[str], timeout: float) -> subprocess.CompletedProcess[str]:
@@ -27,7 +28,9 @@ def _metal_value_is_supported(value: object) -> bool:
     if not isinstance(value, str):
         return False
     normalized = value.strip().lower()
-    return bool(normalized) and "not supported" not in normalized and "unsupported" not in normalized and normalized != "none"
+    if normalized in {"supported", "metal", "metal 1", "metal 2", "metal 3", "metal 4"}:
+        return True
+    return normalized.startswith("spdisplays_metal")
 
 
 def _reports_metal_support(value: object) -> bool:
@@ -36,8 +39,7 @@ def _reports_metal_support(value: object) -> bool:
     if isinstance(value, Mapping):
         for key, child in value.items():
             normalized_key = key.lower() if isinstance(key, str) else ""
-            is_metal_key = "metal" in normalized_key or ("mtl" in normalized_key and "gpu" in normalized_key)
-            if is_metal_key and _metal_value_is_supported(child):
+            if normalized_key in _METAL_CAPABILITY_KEYS and _metal_value_is_supported(child):
                 return True
             if _reports_metal_support(child):
                 return True

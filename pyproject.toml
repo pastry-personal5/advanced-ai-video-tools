@@ -59,7 +59,7 @@ addopts = "-ra --strict-markers"
 testpaths = ["tests"]
 markers = [
   "integration: exercises user-installed FFmpeg and FFprobe with tiny media",
-  "performance: opt-in Apple Silicon Metal native presentation measurement",
+  "performance: opt-in Apple Silicon native GUI presentation measurement only; no media or upscaling",
   "gui_capture: opt-in macOS desktop screenshot acceptance check",
 ]
 

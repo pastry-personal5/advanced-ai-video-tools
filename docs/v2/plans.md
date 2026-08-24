@@ -38,11 +38,11 @@ The new project name, rename compatibility policy, and exact scope of later phas
 | --- | --- | --- | --- |
 | 1 | [Enhance GUI](1-enhance-gui.md) | Complete | A clearer, more accessible, native macOS workflow over the existing backend |
 | 2 | [Rename Project](2-rename-project.md) | Complete | Apply the approved identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
-| 3 | Stabilization | Proposed | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
+| 3 | Stabilization | In progress | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
 | 4 | Refactoring | Proposed | Improve code readability and maintainability without weakening approved behavior |
 | 5 | Stabilization and release | Proposed | Re-verify behavior after refactoring and produce the v2 release artifacts |
 
-Phase 2 is complete after Phase 1. Phases 3–5 remain provisional; create their phase files only after each phase's entry criteria and scope are approved.
+Phase 2 is complete after Phase 1. Phase 3 is now in progress under [Phase 3 — Stabilization](3-stabilization.md); Phases 4–5 remain provisional.
 
 ## Cross-phase decisions still required
 
@@ -101,7 +101,7 @@ baseline rather than treating media throughput as an absolute promise.
 - **Queue submission:** measure Preflight activation to worker-start acknowledgement; target GUI return ≤100 ms and no long-running work on the presentation thread.
 - **Memory stability:** record RSS at startup, idle, preview playback, preflight, and each pipeline stage; after ten sequential jobs, allow no unexplained monotonic growth and no more than 10% growth over the first-job peak (with a 100 MB minimum tolerance).
 - **Resource ownership:** verify that every completed, failed, cancelled, and preview-failure path releases media outputs, worker threads, queue ownership, and temporary resources; repeated preview selection must not accumulate live players or outputs.
-- **Pipeline throughput:** benchmark fixed 30-second 1080p and 4K fixture jobs through the same concat/upscale stages; report stage durations, total duration, CPU/GPU utilization, and peak RSS, with regression alerts at >10% versus baseline.
+- **Pipeline throughput:** no performance benchmark may invoke AI upscaling. Any future fixed-media throughput measurement must explicitly skip Real-ESRGAN and document that policy; report stage durations, total duration, CPU utilization, and peak RSS, with regression alerts at >10% versus baseline.
 - **Disk usage:** measure peak workspace size and retained failed-workspace size; successful and cancelled jobs must release temporary data according to policy, and cleanup should complete within 5 seconds after terminal state where no external process remains.
 - **Cancellation:** measure cancellation request to terminal queue state for queued and active jobs; target queued cancellation ≤1 second and active cancellation ≤10 seconds after the current child process exits.
 - **Shutdown:** measure window-close to joined preview/validator/queue workers; target ≤5 seconds with no live worker or child process remaining.
@@ -183,3 +183,5 @@ A phase is complete only when:
 | 2026-08-24 | Approve `com.pastrypersonal5.advancedaivideotools` as the permanent v2 macOS bundle identifier. |
 | 2026-08-24 | Defer v2 signing/notarization and target-macOS upgrade verification to the human release checklist; record `https://github.com/pastry-personal5/advanced-ai-video-tools` as the canonical repository. |
 | 2026-08-24 | Approve distribution outside the Mac App Store using Developer ID distribution via `.dmg`; defer execution of signing/notarization to the human release checklist. |
+| 2026-08-25 | Begin Phase 3 stabilization, including the proposed performance and exception/error-handling charter, while retaining opt-in native and benchmark checks. |
+| 2026-08-25 | Disable performance benchmarks that include AI upscaling; performance measurements are limited to native GUI presentation or explicitly non-upscaling media work. |
