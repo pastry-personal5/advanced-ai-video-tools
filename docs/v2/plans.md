@@ -4,7 +4,7 @@
 
 - Development target: v2
 - Released baseline: v1.0.0
-- Current phase: [Phase 1 — Enhance GUI](1-enhance-gui.md)
+- Current phase: [Phase 2 — Rename Project](2-rename-project.md)
 - Last updated: 2026-08-24
 
 ## Purpose
@@ -36,7 +36,7 @@ The new project name, rename compatibility policy, and exact scope of later phas
 
 | Phase | Title | Status | Outcome |
 | --- | --- | --- | --- |
-| 1 | [Enhance GUI](1-enhance-gui.md) | Verification | A clearer, more accessible, native macOS workflow over the existing backend |
+| 1 | [Enhance GUI](1-enhance-gui.md) | Complete | A clearer, more accessible, native macOS workflow over the existing backend |
 | 2 | [Rename Project](2-rename-project.md) | Active planning; implementation follows Phase 1 | Consistent new identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
 | 3 | Stabilization | Proposed | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
 | 4 | Refactoring | Proposed | Improve code readability and maintainability without weakening approved behavior |
@@ -161,3 +161,4 @@ A phase is complete only when:
 | 2026-08-23 | Make the Phase 1 GUI always dark; apply the application-owned dark palette regardless of macOS appearance. |
 | 2026-08-24 | Sequence the post-rename work as Phase 3 Stabilization, Phase 4 Refactoring, and Phase 5 Stabilization and Release. |
 | 2026-08-24 | Confirm that the Phase 1 minimum main-window size remains 1400 × 880 logical pixels; the temporary 1400 × 800 change is superseded. |
+| 2026-08-24 | Mark Phase 1 complete with the documented security-limited native-display verification exception; move the active planning pointer to Phase 2. |

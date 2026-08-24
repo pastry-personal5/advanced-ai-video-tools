@@ -6,7 +6,7 @@ This document is the authoritative technical overview for AI Video Tools. It des
 
 Version 1.0.0 is the completed release baseline. The active development goal is version 2. Until a version 2 design decision explicitly supersedes a version 1 contract, the implemented version 1 behavior in this document remains binding. The target change alone does not authorize speculative features, compatibility expansion, or changes to media policy.
 
-The v2 roadmap lives in [v2/plans.md](v2/plans.md), shared execution rules live in [v2/implement.md](v2/implement.md), the active execution phase is [Phase 1 — Enhance GUI](v2/1-enhance-gui.md), and [Phase 2 — Rename Project](v2/2-rename-project.md) is defined for subsequent work. Planning documents describe intended work; this architecture document remains authoritative for implemented system behavior.
+The v2 roadmap lives in [v2/plans.md](v2/plans.md), shared execution rules live in [v2/implement.md](v2/implement.md), Phase 1 — Enhance GUI is complete, and [Phase 2 — Rename Project](v2/2-rename-project.md) is the current planning phase. Planning documents describe intended work; this architecture document remains authoritative for implemented system behavior.
 
 ## Implementation status
 

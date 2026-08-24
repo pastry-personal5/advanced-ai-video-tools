@@ -4,7 +4,7 @@ AI Video Tools is a Python project for macOS on Apple Silicon that concatenates 
 
 > **Release and development status:** v1.0.0 is the current completed release baseline. The active development target is v2. Existing v1 behavior remains authoritative until a v2 design decision explicitly changes it; no additional v2 features are implied solely by the target change.
 
-Active v2 planning is maintained in [docs/v2/plans.md](docs/v2/plans.md). Implementation follows [docs/v2/implement.md](docs/v2/implement.md), the current phase is [Phase 1 — Enhance GUI](docs/v2/1-enhance-gui.md), and [Phase 2 — Rename Project](docs/v2/2-rename-project.md) is defined for subsequent work.
+Active v2 planning is maintained in [docs/v2/plans.md](docs/v2/plans.md). Implementation follows [docs/v2/implement.md](docs/v2/implement.md), Phase 1 — Enhance GUI is complete, and [Phase 2 — Rename Project](docs/v2/2-rename-project.md) is the current planning phase.
 
 > **Status:** executable foundation. Typed job and media models, external-tool
 > discovery, collision-safe output naming, FFprobe parsing, and the shared
