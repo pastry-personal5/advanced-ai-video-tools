@@ -4,7 +4,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from ai_video_tools.system.diagnostics import configure_logging, current_log_path, shutdown_logging
+from advanced_ai_video_tools.system.diagnostics import configure_logging, current_log_path, shutdown_logging
 
 
 def test_logging_configuration_is_idempotent_and_writes_bound_context(tmp_path: Path) -> None:
@@ -19,7 +19,7 @@ def test_logging_configuration_is_idempotent_and_writes_bound_context(tmp_path: 
         logger.complete()
 
         assert first is second
-        assert current_log_path() == tmp_path / "ai-video-tools.log"
+        assert current_log_path() == tmp_path / "advanced-ai-video-tools.log"
         contents = first.log_path.read_text(encoding="utf-8")
         assert "job=job-123 stage=verify" in contents
         assert "Synthetic diagnostic" in contents

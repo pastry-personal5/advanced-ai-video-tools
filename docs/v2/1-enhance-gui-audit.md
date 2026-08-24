@@ -17,13 +17,13 @@ The audit inspected the current Qt hierarchy, signal/slot connections, queue
 model roles, asynchronous preflight path, settings dialog, and headless GUI
 tests in:
 
-- `src/ai_video_tools/gui/window.py`
-- `src/ai_video_tools/gui/editor.py`
-- `src/ai_video_tools/gui/jobs.py`
-- `src/ai_video_tools/gui/submission.py`
-- `src/ai_video_tools/gui/preflight.py`
-- `src/ai_video_tools/gui/tool_settings.py`
-- `src/ai_video_tools/gui/application.py`
+- `src/advanced_ai_video_tools/gui/window.py`
+- `src/advanced_ai_video_tools/gui/editor.py`
+- `src/advanced_ai_video_tools/gui/jobs.py`
+- `src/advanced_ai_video_tools/gui/submission.py`
+- `src/advanced_ai_video_tools/gui/preflight.py`
+- `src/advanced_ai_video_tools/gui/tool_settings.py`
+- `src/advanced_ai_video_tools/gui/application.py`
 - `tests/test_gui.py`
 - `tests/test_gui_submission.py`
 - `tests/test_gui_tool_settings.py`

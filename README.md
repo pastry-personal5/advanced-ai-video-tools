@@ -1,6 +1,6 @@
 # Advanced AI Video Tools
 
-AI Video Tools is a Python project for macOS on Apple Silicon that concatenates real-world video footage with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing service owns the complete pipeline; the PySide6 desktop shell observes and controls that same backend queue.
+Advanced AI Video Tools is a Python project for macOS on Apple Silicon that concatenates real-world video footage with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing service owns the complete pipeline; the PySide6 desktop shell observes and controls that same backend queue.
 
 > **Release and development status:** v1.0.0 is the current completed release baseline. The active development target is v2. Existing v1 behavior remains authoritative until a v2 design decision explicitly changes it; no additional v2 features are implied solely by the target change.
 
@@ -51,7 +51,7 @@ Active v2 planning is maintained in [docs/v2/plans.md](docs/v2/plans.md). Implem
 - A synchronous full-job pipeline service with explicit lifecycle transitions, measured validation/probe progress, one shared cancellation token and workspace, typed terminal results, reservation release, clean cancellation, and failed-workspace retention
 - Preflight gates for platform, paths, explicit matching SDR BT.709 or SMPTE 170M profiles, rotation, streams, timestamp-aware CFR/VFR timing,
   audio layout, dimensions, AI scale, concat strategy, and disk margin
-- Human-readable and JSON CLI results through `ai-video-tools preflight` and `ai-video-tools process`, with measured text progress on stderr
+- Human-readable and JSON CLI results through `advanced-ai-video-tools preflight` and `advanced-ai-video-tools process`, with measured text progress on stderr
 - One-time Loguru bootstrap with human-readable stderr output, a thread-safe rotating `10 MB` local file retained for five rotations, stable job/stage context, exact shell-quoted INFO records for every FFmpeg, FFprobe, and Real-ESRGAN launch, and CLI-visible log paths
 - Typed schema-versioned YAML settings for tool overrides, recent input/output directories, target height, overwrite preference, and non-safety preview mute/volume preferences, with private file permissions, atomic replacement, corruption quarantine, one-time migration from legacy JSON settings, and protection against silently destroying newer schemas
 - A frontend-independent single-worker FIFO with frozen creation identities and destination claims, typed snapshots and terminal outcomes, pending-job reorder/removal, active cooperative cancellation, progress forwarding, failure isolation, and shutdown that cancels and joins all unfinished work
@@ -129,13 +129,13 @@ Extra audio streams, subtitles, chapters, and attachments are unsupported in v1.
 - Run one active processing job and keep later jobs in an in-memory FIFO queue.
 - Overwrite an existing destination by default, but only by atomically replacing it after the new partial output passes verification. A failed or cancelled job leaves the existing file intact. Users may opt out with CLI or GUI no-overwrite mode.
 - Generate the default filename when the job is created using local time: `ai-video-YYYYMMDD-HHMMSS-<compact-UUIDv7>.mp4`. The compact UUID is the standard 32 lowercase hexadecimal characters without hyphens, and its embedded Unix-millisecond timestamp comes from the same timezone-aware creation instant. Place the file in the selected output directory and reserve a unique path so automatic naming never overwrites an earlier generated output.
-- Store job workspaces under `~/Library/Caches/AI Video Tools/jobs/` using Qt's application cache location.
+- Store job workspaces under `~/Library/Caches/Advanced AI Video Tools/jobs/` using Qt's application cache location.
 - Require a conservative peak-disk estimate plus a 20% free-space margin before starting.
 - Delete workspaces after success or cancellation; retain and report them after failure.
 - Do not resume partial jobs in v1.
 - Let Real-ESRGAN choose the GPU and worker threads, start with automatic tiling, and keep TTA disabled.
 - Retry recognized Vulkan memory failures only with bounded tile sizes of 512, 256, 128, 64, then 32.
-- Store settings and Loguru-managed local logs under `~/Library/Application Support/AI Video Tools/`.
+- Store settings and Loguru-managed local logs under `~/Library/Application Support/Advanced AI Video Tools/`.
 - Persist only non-secret, non-job-specific preferences. Preview mute and volume are presentation preferences; dropped-stream acknowledgement is deliberately per job and is never remembered across inputs. Settings writes use a private same-directory temporary file and atomic replacement; malformed documents are quarantined, while unknown newer schema versions are preserved and rejected explicitly.
 - Configure Loguru once at startup with stderr and queued file sinks, rotate at 10 MiB, retain five backups, and avoid production exception-value exposure. Perform no telemetry, analytics, crash uploads, update checks, or other application-initiated network requests.
 
@@ -164,10 +164,10 @@ Install the Python environment, launch the desktop shell, or inspect the CLI:
 
 ```bash
 uv sync --dev
-uv run ai-video-tools --help
-uv run ai-video-tools gui
-uv run ai-video-tools preflight --help
-uv run ai-video-tools process --help
+uv run advanced-ai-video-tools --help
+uv run advanced-ai-video-tools gui
+uv run advanced-ai-video-tools preflight --help
+uv run advanced-ai-video-tools process --help
 ```
 
 `uv sync` creates and manages the project virtual environment automatically. Activating it manually is optional. In the GUI, select **Edit → Preferences** to configure FFmpeg, FFprobe, Real-ESRGAN, or its model directory when automatic discovery is unsuitable. **Use PATH** clears an executable override, and **Automatic** derives the model directory from the resolved Real-ESRGAN installation. **Validate & Save** runs launch, model-pair, and Vulkan inference checks outside the GUI thread; failed values are not persisted.
@@ -179,7 +179,7 @@ The GUI always uses its approved dark theme; it does not follow the macOS light/
 Run preflight against one or more real clips:
 
 ```bash
-uv run ai-video-tools preflight \
+uv run advanced-ai-video-tools preflight \
   --input clip-01.mp4 \
   --input clip-02.mp4 \
   --output-dir ./output \
@@ -196,7 +196,7 @@ ready or 2 when a blocking issue remains. Missing matrix/range metadata and expl
 Run the complete pipeline with the same job arguments:
 
 ```bash
-uv run ai-video-tools process \
+uv run advanced-ai-video-tools process \
   --input clip-01.mp4 \
   --input clip-02.mp4 \
   --output-dir ./output \
@@ -230,7 +230,7 @@ Use the `Makefile` as the canonical developer interface. Run an underlying tool 
 
 ```text
 ai-videol-tools-v2/
-├── src/ai_video_tools/
+├── src/advanced_ai_video_tools/
 │   ├── core/           # Immutable domain and preflight result models
 │   ├── gui/            # PySide6 bootstrap, queue model, and native window
 │   ├── services/       # Shared preflight and composable processing-stage services

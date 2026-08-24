@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import AudioStream, ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, Rational, VideoStream
-from ai_video_tools.video.finalization import DEFAULT_VIDEO_CRF, FinalAudioMode, build_final_encoding_plan
+from advanced_ai_video_tools.core.models import AudioStream, ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, Rational, VideoStream
+from advanced_ai_video_tools.video.finalization import DEFAULT_VIDEO_CRF, FinalAudioMode, build_final_encoding_plan
 
 
 def _video(duration: Decimal = Decimal("1")) -> VideoStream:

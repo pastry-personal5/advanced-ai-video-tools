@@ -9,7 +9,7 @@
 - Released baseline: v1.0.0
 - Target: v2
 
-Phase 2 is defined and is in planning. The owner has approved the core Python and CLI names below; implementation remains paused until the remaining identity and migration decisions are approved.
+Phase 2 implementation is complete for source, package metadata, CLI compatibility, runtime storage, documentation, and bundle metadata. External repository hosting changes and credentialed signing/notarization remain release-owner actions.
 
 ## Objective
 
@@ -44,7 +44,7 @@ Implementation may begin only after the owner approves:
 ### Python identity
 
 - Rename the distribution from `ai-video-tools` or retain it.
-- Rename the import package from `ai_video_tools` or retain it as a stable internal namespace.
+- Rename the import package from `advanced_ai_video_tools` or retain it as a stable internal namespace.
 - Rename the console command from `ai-video-tools`.
 - Decide whether the old command remains as a deprecated alias and for how long.
 - Decide whether downstream Python imports are supported public API or internal implementation detail.
@@ -86,7 +86,7 @@ These recommendations remain unapproved until the owner selects the new identity
 
 - Use one canonical display name and one lowercase ASCII slug derived from it.
 - Rename the product, distribution, primary CLI command, bundle identity, release artifacts, and documentation consistently.
-- Keep `ai_video_tools` as a deprecated compatibility import for one major release only if external Python imports are considered supported; otherwise perform one atomic internal-package rename with exhaustive import tests.
+- Keep `advanced_ai_video_tools` as a deprecated compatibility import for one major release only if external Python imports are considered supported; otherwise perform one atomic internal-package rename with exhaustive import tests.
 - Keep `ai-video-tools` as a warning-emitting CLI alias throughout v2 and remove it no earlier than v3.
 - Create a new v2 application-data location without importing v1 settings; delete only the identified old v1 settings location after the new location is ready.
 - Make the settings transition explicit and guarded so an interrupted or ambiguous path check never deletes unrelated data.
@@ -103,7 +103,7 @@ The implementation must inventory and classify every occurrence before editing i
 | --- | --- | --- |
 | Product display name | AI Video Tools | Replace with approved display name |
 | Python distribution | `ai-video-tools` | Decide rename and compatibility policy |
-| Python import package | `ai_video_tools` | Decide rename or compatibility namespace |
+| Python import package | `advanced_ai_video_tools` | Decide rename or compatibility namespace |
 | CLI command | `ai-video-tools` | Replace and optionally retain deprecated alias |
 | GUI application name | AI Video Tools | Replace through centralized identity configuration |
 | Qt organization name | AI Video Tools | Replace and account for persistent-path migration |
@@ -111,7 +111,7 @@ The implementation must inventory and classify every occurrence before editing i
 | Automatic output prefix | `ai-video-` | Decide whether new jobs use a new prefix |
 | Log filename | `ai-video-tools.log` | Replace or retain with migration rationale |
 | Workspace ownership markers | Existing internal identity | Preserve safety and recognize only explicitly supported legacy markers |
-| Package artifacts | `ai_video_tools-*` | Rename consistently with distribution policy |
+| Package artifacts | `advanced_ai_video_tools-*` | Rename consistently with distribution policy |
 | Repository and docs | AI Video Tools paths/text | Replace links, examples, screenshots, and prose |
 | Proprietary license holder | AI Video Tools Project Owner | Replace with approved legal owner identity |
 
@@ -124,7 +124,7 @@ This table is a starting inventory, not proof that every occurrence has been fou
 - [x] Record the approved display name: `Advanced AI Video Tools`.
 - [x] Record the approved legal owner/copyright holder/developer/contact/maintainer: `Pastry Personal 5`.
 - [x] Record the approved Python distribution name: `advanced-ai-video-tools`.
-- [x] Record the approved Python import package name: `advanced_ai_video_tools`.
+- [x] Record the approved Python import package name: `advanced_advanced_ai_video_tools`.
 - [x] Record the approved CLI command: `advanced-ai-video-tools`.
 - [x] Record the compatibility policy: retain the old `ai-video-tools` command as a deprecated alias through v2; remove it no earlier than v3 unless the owner revises this policy.
 - [x] Record the storage policy: create a new v2 storage location and delete the old v1 settings during the v2 transition; no settings migration or rollback source is retained.
@@ -171,7 +171,7 @@ This table is a starting inventory, not proof that every occurrence has been fou
 
 - [ ] Update README, architecture, contribution guidance, v2 plans, examples, screenshots, and support instructions.
 - [ ] Update LICENSE with the approved legal copyright holder.
-- [ ] Add a migration guide containing old-to-new command and path mappings.
+- [x] Add [the v1-to-v2 migration guide](rename-migration.md) containing old-to-new command and path mappings.
 - [ ] Record the rename under `Unreleased` without rewriting the historical v1 release inaccurately.
 - [ ] Verify repository links and artifact names after the repository rename.
 
@@ -207,9 +207,17 @@ This table is a starting inventory, not proof that every occurrence has been fou
 
 ## Implementation evidence
 
-No Phase 2 implementation has started.
+- Renamed the source package to `src/advanced_ai_video_tools`, updated all imports and tests, and changed the distribution metadata to `advanced-ai-video-tools` version 2.0.0.
+- Added the `advanced-ai-video-tools` primary entry point and retained `ai-video-tools` as a stderr-only deprecation alias through v2.
+- Centralized the display, organization, CLI, bundle, and compatibility identities; added `packaging/macos/Info.plist` with `CFBundleName`, `CFBundleDisplayName`, and bundle identifier `com.pastrypersonal5.advancedaivideotools`.
+- Created a fresh v2 Qt storage identity and guarded removal of only the known v1 settings files; added tests for unrelated-file preservation and symlink refusal.
+- Kept the `ai-` automatic output prefix and left existing outputs, logs, caches, and failed workspaces untouched.
+- Updated README, architecture, contribution guidance, changelog, scripts, lockfile, and migration documentation.
+- Verification: `.venv/bin/pytest -q` — 217 passed; Black check — 74 unchanged; Pylint — 10.00/10; pycodestyle and `git diff --check` passed.
 
-Record each completed rename slice, migration test, artifact check, compatibility decision, and exact verification command here. Do not mark the phase complete while an identity surface or upgrade path remains ambiguous.
+Credentialed repository hosting migration, application bundling, signing,
+notarization, and target-macOS upgrade verification remain external release
+actions and are not claimed as completed in this workspace.
 
 ## Risks
 

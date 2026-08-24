@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceError, WorkspaceManager
+from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceError, WorkspaceManager
 
 
 def test_owned_workspace_is_private_marked_and_cleanable(tmp_path: Path) -> None:

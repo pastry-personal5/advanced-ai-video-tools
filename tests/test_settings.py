@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ai_video_tools.core.models import OverwriteMode, ToolOverrides
-from ai_video_tools.system.settings import (
+from advanced_ai_video_tools.core.models import OverwriteMode, ToolOverrides
+from advanced_ai_video_tools.system.settings import (
     ApplicationSettings,
     SettingsError,
     SettingsStore,
@@ -30,6 +30,41 @@ def test_default_settings_filename_is_yaml() -> None:
     """The application-data default uses the YAML persistence format."""
 
     assert SettingsStore().path.name == "settings.yaml"
+
+
+def test_default_v2_storage_removes_only_known_v1_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fresh v2 initialization removes the exact v1 settings files only."""
+
+    old_directory = tmp_path / "AI Video Tools"
+    new_directory = tmp_path / "Advanced AI Video Tools"
+    old_directory.mkdir()
+    new_directory.mkdir()
+    (old_directory / "settings.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+    (old_directory / "unrelated.txt").write_text("keep", encoding="utf-8")
+    monkeypatch.setattr("advanced_ai_video_tools.system.settings.application_data_directory", lambda: new_directory)
+    monkeypatch.setattr("advanced_ai_video_tools.system.settings.legacy_application_data_directory", lambda: old_directory)
+
+    assert SettingsStore().load() == ApplicationSettings()
+    assert not (old_directory / "settings.yaml").exists()
+    assert (old_directory / "unrelated.txt").exists()
+
+
+def test_default_v2_storage_refuses_legacy_settings_symlink(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The v1 cleanup guard never follows a symbolic link."""
+
+    old_directory = tmp_path / "AI Video Tools"
+    new_directory = tmp_path / "Advanced AI Video Tools"
+    old_directory.mkdir()
+    new_directory.mkdir()
+    target = tmp_path / "outside.yaml"
+    target.write_text("schema_version: 1\n", encoding="utf-8")
+    os.symlink(target, old_directory / "settings.yaml")
+    monkeypatch.setattr("advanced_ai_video_tools.system.settings.application_data_directory", lambda: new_directory)
+    monkeypatch.setattr("advanced_ai_video_tools.system.settings.legacy_application_data_directory", lambda: old_directory)
+
+    with pytest.raises(SettingsError, match="unsafe legacy settings path"):
+        SettingsStore().load()
+    assert target.exists()
 
 
 def test_legacy_json_settings_are_migrated_to_yaml(tmp_path: Path) -> None:
@@ -140,7 +175,7 @@ def test_atomic_replace_failure_preserves_previous_settings(tmp_path: Path, monk
     def fail_replace(_source: object, _destination: object) -> None:
         raise OSError("simulated replacement failure")
 
-    monkeypatch.setattr("ai_video_tools.system.settings.os.replace", fail_replace)
+    monkeypatch.setattr("advanced_ai_video_tools.system.settings.os.replace", fail_replace)
     with pytest.raises(SettingsError, match="atomically save"):
         store.save(ApplicationSettings(target_height=1080))
 

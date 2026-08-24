@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.storage.naming import OutputCollisionError
-from ai_video_tools.storage.publication import AtomicOutputPublisher, PartialOutput, PublicationError
+from advanced_ai_video_tools.storage.naming import OutputCollisionError
+from advanced_ai_video_tools.storage.publication import AtomicOutputPublisher, PartialOutput, PublicationError
 
 
 def test_replace_preserves_old_destination_until_atomic_publication(tmp_path: Path) -> None:

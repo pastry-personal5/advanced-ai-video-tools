@@ -9,15 +9,15 @@ from pathlib import Path
 import pytest
 from loguru import logger
 
-from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, JobState, MediaProbe, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolInfo, Toolchain, VideoStream
-from ai_video_tools.services.finalization import FinalizationCancelled, FinalizationResult
-from ai_video_tools.services.frame_extraction import FrameExtractionFailed, FrameExtractionResult
-from ai_video_tools.services.media_preparation import PreparationCancelled, PreparationResult
-from ai_video_tools.services.pipeline import InvalidJobStateTransition, JobLifecycle, PipelineCancelled, PipelineFailed, PipelineService
-from ai_video_tools.services.upscaling import UpscalingResult
-from ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceManager
-from ai_video_tools.system.processes import CancellationToken, ProcessResult
-from ai_video_tools.video.finalization import FinalAudioMode
+from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, JobState, MediaProbe, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolInfo, Toolchain, VideoStream
+from advanced_ai_video_tools.services.finalization import FinalizationCancelled, FinalizationResult
+from advanced_ai_video_tools.services.frame_extraction import FrameExtractionFailed, FrameExtractionResult
+from advanced_ai_video_tools.services.media_preparation import PreparationCancelled, PreparationResult
+from advanced_ai_video_tools.services.pipeline import InvalidJobStateTransition, JobLifecycle, PipelineCancelled, PipelineFailed, PipelineService
+from advanced_ai_video_tools.services.upscaling import UpscalingResult
+from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceManager
+from advanced_ai_video_tools.system.processes import CancellationToken, ProcessResult
+from advanced_ai_video_tools.video.finalization import FinalAudioMode
 
 
 def _video() -> VideoStream:

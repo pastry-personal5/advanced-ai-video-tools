@@ -11,20 +11,20 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, JobRequest, JobState, OverwriteMode, PipelineStage, ProgressEvent, Rational, ToolInfo, Toolchain
-from ai_video_tools.services.finalization import FinalOutputVerifier, FinalizationExecutor
-from ai_video_tools.services.frame_extraction import FrameExtractionExecutor
-from ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerifier
-from ai_video_tools.services.pipeline import PipelineService
-from ai_video_tools.services.preflight import PreflightService
-from ai_video_tools.services.upscaling import UpscalingResult
-from ai_video_tools.storage.workspaces import WorkspaceManager
-from ai_video_tools.system.platform import PlatformInfo
-from ai_video_tools.system.processes import SubprocessRunner
-from ai_video_tools.video.commands import NormalizationSpec, build_concat_command, build_normalization_command
-from ai_video_tools.video.compatibility import effective_frame_rate, frame_rates_equivalent
-from ai_video_tools.video.manifest import write_concat_manifest
-from ai_video_tools.video.probe import FFprobeClient
+from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, JobRequest, JobState, OverwriteMode, PipelineStage, ProgressEvent, Rational, ToolInfo, Toolchain
+from advanced_ai_video_tools.services.finalization import FinalOutputVerifier, FinalizationExecutor
+from advanced_ai_video_tools.services.frame_extraction import FrameExtractionExecutor
+from advanced_ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerifier
+from advanced_ai_video_tools.services.pipeline import PipelineService
+from advanced_ai_video_tools.services.preflight import PreflightService
+from advanced_ai_video_tools.services.upscaling import UpscalingResult
+from advanced_ai_video_tools.storage.workspaces import WorkspaceManager
+from advanced_ai_video_tools.system.platform import PlatformInfo
+from advanced_ai_video_tools.system.processes import SubprocessRunner
+from advanced_ai_video_tools.video.commands import NormalizationSpec, build_concat_command, build_normalization_command
+from advanced_ai_video_tools.video.compatibility import effective_frame_rate, frame_rates_equivalent
+from advanced_ai_video_tools.video.manifest import write_concat_manifest
+from advanced_ai_video_tools.video.probe import FFprobeClient
 
 BT709_PROFILE = ColorProfile(ColorMatrix.BT709, "bt709", "bt709")
 SMPTE170M_PROFILE = ColorProfile(ColorMatrix.SMPTE170M, None, None)

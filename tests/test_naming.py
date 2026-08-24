@@ -7,8 +7,8 @@ from uuid import UUID
 
 import pytest
 
-from ai_video_tools.core.models import OverwriteMode
-from ai_video_tools.storage.naming import (
+from advanced_ai_video_tools.core.models import OverwriteMode
+from advanced_ai_video_tools.storage.naming import (
     OutputCollisionError,
     OutputPathRegistry,
     automatic_output_basename,
@@ -66,7 +66,7 @@ def test_generated_reservations_avoid_disk_and_queue_collisions(
     registry = OutputPathRegistry()
     created = datetime(2026, 8, 21, tzinfo=timezone.utc)
     basename = "ai-video-20260821-000000-0198ca56c40070008000000000000000.mp4"
-    monkeypatch.setattr("ai_video_tools.storage.naming.automatic_output_basename", lambda _created_at: basename)
+    monkeypatch.setattr("advanced_ai_video_tools.storage.naming.automatic_output_basename", lambda _created_at: basename)
     base = tmp_path / basename
     base.touch()
 

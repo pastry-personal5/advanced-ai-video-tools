@@ -8,8 +8,8 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "ai-video-tools"
-version = "1.0.0"
+name = "advanced-ai-video-tools"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },

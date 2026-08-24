@@ -3,8 +3,8 @@
 from decimal import Decimal
 from pathlib import Path
 
-from ai_video_tools.core.models import AudioStream, ConcatStrategy, MediaProbe, Rational, VideoStream
-from ai_video_tools.video.compatibility import CompatibilityReason, analyze_clip_compatibility, assess_frame_timing, effective_frame_rate, frame_rates_equivalent
+from advanced_ai_video_tools.core.models import AudioStream, ConcatStrategy, MediaProbe, Rational, VideoStream
+from advanced_ai_video_tools.video.compatibility import CompatibilityReason, analyze_clip_compatibility, assess_frame_timing, effective_frame_rate, frame_rates_equivalent
 
 
 def _video(**changes: object) -> VideoStream:

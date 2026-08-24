@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, PipelineStage, ProgressEvent, Rational, ToolInfo, Toolchain
-from ai_video_tools.services.frame_extraction import FrameExtractionResult
-from ai_video_tools.services.upscaling import UpscalingCancelled, UpscalingExecutor, UpscalingFailed
-from ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceManager
-from ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult, SubprocessRunner
-from ai_video_tools.upscaling.realesrgan import MEMORY_RETRY_TILE_SIZES, REAL_IMAGE_MODEL
-from ai_video_tools.video.frames import FRAME_FILENAME_TEMPLATE
+from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, PipelineStage, ProgressEvent, Rational, ToolInfo, Toolchain
+from advanced_ai_video_tools.services.frame_extraction import FrameExtractionResult
+from advanced_ai_video_tools.services.upscaling import UpscalingCancelled, UpscalingExecutor, UpscalingFailed
+from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceManager
+from advanced_ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult, SubprocessRunner
+from advanced_ai_video_tools.upscaling.realesrgan import MEMORY_RETRY_TILE_SIZES, REAL_IMAGE_MODEL
+from advanced_ai_video_tools.video.frames import FRAME_FILENAME_TEMPLATE
 
 
 def _png_header(width: int, height: int) -> bytes:

@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import AudioStream, ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, Rational, VideoStream
-from ai_video_tools.services.frame_extraction import FrameExtractionCancelled, FrameExtractionExecutor, FrameExtractionFailed
-from ai_video_tools.services.media_preparation import PreparationResult
-from ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceManager
-from ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult
+from advanced_ai_video_tools.core.models import AudioStream, ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, Rational, VideoStream
+from advanced_ai_video_tools.services.frame_extraction import FrameExtractionCancelled, FrameExtractionExecutor, FrameExtractionFailed
+from advanced_ai_video_tools.services.media_preparation import PreparationResult
+from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceManager
+from advanced_ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult
 
 
 def _video() -> VideoStream:

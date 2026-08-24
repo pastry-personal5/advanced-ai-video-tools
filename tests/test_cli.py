@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools import cli
-from ai_video_tools.core.models import (
+from advanced_ai_video_tools import cli
+from advanced_ai_video_tools.core.models import (
     ColorMatrix,
     ColorProfile,
     ConcatStrategy,
@@ -21,10 +21,10 @@ from ai_video_tools.core.models import (
     PreflightReport,
     Rational,
 )
-from ai_video_tools.services.finalization import FinalizationResult
-from ai_video_tools.services.pipeline import PipelineCancelled, PipelineFailed, PipelineResult
-from ai_video_tools.system.processes import ProcessResult
-from ai_video_tools.video.finalization import FinalAudioMode
+from advanced_ai_video_tools.services.finalization import FinalizationResult
+from advanced_ai_video_tools.services.pipeline import PipelineCancelled, PipelineFailed, PipelineResult
+from advanced_ai_video_tools.system.processes import ProcessResult
+from advanced_ai_video_tools.video.finalization import FinalAudioMode
 
 
 @pytest.fixture(autouse=True)
@@ -32,7 +32,7 @@ def _isolated_logging(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep CLI bootstrap diagnostics inside the test boundary."""
 
     monkeypatch.setattr(cli, "configure_logging", lambda **_kwargs: None)
-    monkeypatch.setattr(cli, "current_log_path", lambda: tmp_path / "ai-video-tools.log")
+    monkeypatch.setattr(cli, "current_log_path", lambda: tmp_path / "advanced-ai-video-tools.log")
 
 
 class FakeRegistry:
@@ -183,7 +183,7 @@ def test_process_json_reports_completed_output_and_parsed_policy(tmp_path: Path,
     assert result == 0
     assert not captured.err
     assert payload["status"] == "completed"
-    assert payload["log_path"] == str(tmp_path / "ai-video-tools.log")
+    assert payload["log_path"] == str(tmp_path / "advanced-ai-video-tools.log")
     assert payload["output_path"] == str(output)
     assert payload["audio_mode"] == "none"
     assert service.request is not None
@@ -222,7 +222,7 @@ def test_process_runtime_failure_reports_stage_workspace_and_exit_one(tmp_path: 
     assert not captured.out
     assert "Processing failed during upscale" in captured.err
     assert "synthetic failure" in captured.err
-    assert f"Log: {tmp_path / 'ai-video-tools.log'}" in captured.err
+    assert f"Log: {tmp_path / 'advanced-ai-video-tools.log'}" in captured.err
 
 
 def test_process_cancellation_returns_shell_status_130(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -245,3 +245,13 @@ def test_gui_command_dispatches_desktop_entry_point(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(cli, "_run_gui", lambda: 17)
 
     assert cli.main(["gui"]) == 17
+
+
+def test_legacy_cli_alias_emits_deprecation_warning_on_stderr(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """The v1 command remains usable without contaminating stdout."""
+
+    monkeypatch.setattr(cli, "_run_gui", lambda: 17)
+    monkeypatch.setattr("sys.argv", ["/venv/bin/ai-video-tools"])
+
+    assert cli.main(["gui"]) == 17
+    assert "ai-video-tools is deprecated" in capsys.readouterr().err

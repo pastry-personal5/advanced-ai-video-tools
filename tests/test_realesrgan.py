@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, Rational, ToolInfo, Toolchain
-from ai_video_tools.upscaling.realesrgan import AUTOMATIC_TILE_SIZE, MEMORY_RETRY_TILE_SIZES, REAL_IMAGE_MODEL, build_realesrgan_command, build_upscale_plan, is_vulkan_memory_failure, select_ai_scale
+from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, Rational, ToolInfo, Toolchain
+from advanced_ai_video_tools.upscaling.realesrgan import AUTOMATIC_TILE_SIZE, MEMORY_RETRY_TILE_SIZES, REAL_IMAGE_MODEL, build_realesrgan_command, build_upscale_plan, is_vulkan_memory_failure, select_ai_scale
 
 
 def _toolchain(tmp_path: Path) -> Toolchain:

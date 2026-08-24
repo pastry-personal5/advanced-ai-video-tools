@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from loguru import logger
 
-from ai_video_tools.system.processes import CancellationToken, DIAGNOSTIC_LIMIT_BYTES, ProcessCancelled, ProcessExecutionError, ProcessTimeoutError, SubprocessRunner, command_line_for_log, redacted_command
+from advanced_ai_video_tools.system.processes import CancellationToken, DIAGNOSTIC_LIMIT_BYTES, ProcessCancelled, ProcessExecutionError, ProcessTimeoutError, SubprocessRunner, command_line_for_log, redacted_command
 
 
 def test_command_redaction_hides_absolute_paths_and_home_fragments() -> None:

@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import AudioStream, ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, Rational, VideoStream
-from ai_video_tools.video.commands import FRAME_FILENAME_TEMPLATE, NormalizationSpec, build_concat_command, build_frame_extraction_command, build_frame_extraction_plan, build_media_preparation_plan, build_normalization_command, expected_frame_count
-from ai_video_tools.video.manifest import concat_manifest_text
-from ai_video_tools.video.probe import build_ffprobe_command
+from advanced_ai_video_tools.core.models import AudioStream, ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, Rational, VideoStream
+from advanced_ai_video_tools.video.commands import FRAME_FILENAME_TEMPLATE, NormalizationSpec, build_concat_command, build_frame_extraction_command, build_frame_extraction_plan, build_media_preparation_plan, build_normalization_command, expected_frame_count
+from advanced_ai_video_tools.video.manifest import concat_manifest_text
+from advanced_ai_video_tools.video.probe import build_ffprobe_command
 
 
 def _video(**changes: object) -> VideoStream:

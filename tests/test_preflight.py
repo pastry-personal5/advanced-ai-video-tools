@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import (
+from advanced_ai_video_tools.core.models import (
     AudioStream,
     ColorMatrix,
     ColorProfile,
@@ -25,11 +25,11 @@ from ai_video_tools.core.models import (
     Toolchain,
     VideoStream,
 )
-from ai_video_tools.services.preflight import PreflightService, aspect_width
-from ai_video_tools.storage.naming import automatic_output_basename
-from ai_video_tools.system.platform import PlatformInfo
-from ai_video_tools.system.tools import ToolDiscovery
-from ai_video_tools.video.probe import MediaProber
+from advanced_ai_video_tools.services.preflight import PreflightService, aspect_width
+from advanced_ai_video_tools.storage.naming import automatic_output_basename
+from advanced_ai_video_tools.system.platform import PlatformInfo
+from advanced_ai_video_tools.system.tools import ToolDiscovery
+from advanced_ai_video_tools.video.probe import MediaProber
 
 
 class FakeDiscovery(ToolDiscovery):

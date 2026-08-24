@@ -2,7 +2,7 @@
 
 import pytest
 
-from ai_video_tools.core.models import Rational
+from advanced_ai_video_tools.core.models import Rational
 
 
 def test_rational_normalizes_sign_and_common_divisor() -> None:

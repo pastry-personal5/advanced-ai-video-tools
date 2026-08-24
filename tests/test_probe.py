@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import Rational
-from ai_video_tools.video.probe import FFprobeClient, build_ffprobe_command, parse_probe_document
+from advanced_ai_video_tools.core.models import Rational
+from advanced_ai_video_tools.video.probe import FFprobeClient, build_ffprobe_command, parse_probe_document
 
 
 def test_probe_parser_preserves_exact_rates_and_stream_inventory() -> None:
@@ -141,8 +141,8 @@ def test_ffprobe_client_logs_the_complete_argument_vector_before_launch(tmp_path
     def completed(arguments: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(arguments, 0, json.dumps({"streams": []}), "")  # type: ignore[arg-type]
 
-    monkeypatch.setattr("ai_video_tools.video.probe.log_subprocess_launch", lambda command: logged.append(tuple(command)))
-    monkeypatch.setattr("ai_video_tools.video.probe.subprocess.run", completed)
+    monkeypatch.setattr("advanced_ai_video_tools.video.probe.log_subprocess_launch", lambda command: logged.append(tuple(command)))
+    monkeypatch.setattr("advanced_ai_video_tools.video.probe.subprocess.run", completed)
 
     FFprobeClient(executable).probe(media)
 

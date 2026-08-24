@@ -18,10 +18,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QCoreApplication, QThread  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication, QDialog, QPushButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
-from ai_video_tools.core.models import ToolInfo, ToolOverrides, Toolchain  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.tool_settings import ToolSettingsDialog, ToolSettingsValidator  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.system.tools import ToolDiscoveryError  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.core.models import ToolInfo, ToolOverrides, Toolchain  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.tool_settings import ToolSettingsDialog, ToolSettingsValidator  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.system.tools import ToolDiscoveryError  # noqa: E402  # pylint: disable=wrong-import-position
 
 
 @pytest.fixture(scope="module")

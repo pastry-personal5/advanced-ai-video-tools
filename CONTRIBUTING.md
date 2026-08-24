@@ -1,8 +1,8 @@
 # Contributing
 
-AI Video Tools welcomes focused, reviewable improvements. Most code is expected to be AI-generated or AI-assisted, but the person accepting a change remains responsible for understanding and validating it.
+Advanced AI Video Tools welcomes focused, reviewable improvements. Most code is expected to be AI-generated or AI-assisted, but the person accepting a change remains responsible for understanding and validating it.
 
-The project is proprietary and all rights are reserved by the AI Video Tools Project Owner. Do not accept outside contributions unless the owner has confirmed in writing that the contribution's copyright and licensing terms are compatible with [LICENSE](LICENSE).
+The project is proprietary and all rights are reserved by Pastry Personal 5. Do not accept outside contributions unless the owner has confirmed in writing that the contribution's copyright and licensing terms are compatible with [LICENSE](LICENSE).
 
 Version 1 targets photographic and live-action footage. Anime, animation, illustration, synthetic line art, and their specialized Real-ESRGAN models are out of scope.
 

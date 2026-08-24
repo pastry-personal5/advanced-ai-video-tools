@@ -10,12 +10,12 @@ from queue import Queue
 
 import pytest
 
-from ai_video_tools.core.models import JobRequest, JobState, MediaProbe, PipelineStage, PreflightReport, ProgressEvent
-from ai_video_tools.services.finalization import FinalizationResult
-from ai_video_tools.services.pipeline import PipelineCancelled, PipelineResult
-from ai_video_tools.services.queue import JobQueue, QueueClosedError, QueueConflictError, QueueError, QueueWorkerFailed
-from ai_video_tools.system.processes import CancellationToken, ProcessResult
-from ai_video_tools.video.finalization import FinalAudioMode
+from advanced_ai_video_tools.core.models import JobRequest, JobState, MediaProbe, PipelineStage, PreflightReport, ProgressEvent
+from advanced_ai_video_tools.services.finalization import FinalizationResult
+from advanced_ai_video_tools.services.pipeline import PipelineCancelled, PipelineResult
+from advanced_ai_video_tools.services.queue import JobQueue, QueueClosedError, QueueConflictError, QueueError, QueueWorkerFailed
+from advanced_ai_video_tools.system.processes import CancellationToken, ProcessResult
+from advanced_ai_video_tools.video.finalization import FinalAudioMode
 
 _CREATED_AT = datetime(2026, 8, 21, 14, 30, 52, 123456, tzinfo=timezone.utc)
 

@@ -1,6 +1,6 @@
 """Tests for the deliberately narrow version 1 platform contract."""
 
-from ai_video_tools.system.platform import PlatformInfo, parse_version, platform_error
+from advanced_ai_video_tools.system.platform import PlatformInfo, parse_version, platform_error
 
 
 def test_supported_platform_requires_minimum_macos_and_apple_silicon() -> None:

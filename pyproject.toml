@@ -3,8 +3,8 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ai-video-tools"
-version = "1.0.0"
+name = "advanced-ai-video-tools"
+version = "2.0.0"
 description = "Quality-first FFmpeg and Real-ESRGAN video preparation tools"
 authors = [{ name = "Pastry Personal 5" }]
 maintainers = [{ name = "Pastry Personal 5" }]
@@ -18,7 +18,8 @@ dependencies = [
 ]
 
 [project.scripts]
-ai-video-tools = "ai_video_tools.cli:main"
+advanced-ai-video-tools = "advanced_ai_video_tools.cli:main"
+ai-video-tools = "advanced_ai_video_tools.cli:main"
 
 [dependency-groups]
 dev = [
@@ -30,7 +31,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ai_video_tools"]
+packages = ["src/advanced_ai_video_tools"]
 
 [tool.black]
 # Black requires a finite value even though this project imposes no line limit.
@@ -62,4 +63,4 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = ["ai_video_tools"]
+source = ["advanced_ai_video_tools"]

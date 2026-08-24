@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import ToolOverrides
-from ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
+from advanced_ai_video_tools.core.models import ToolOverrides
+from advanced_ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
 
 
 def _executable(path: Path) -> Path:
@@ -120,7 +120,7 @@ def test_discovery_logs_every_version_help_and_vulkan_launch(tmp_path: Path, mon
     (models / "realesrgan-x4plus.param").touch()
     (models / "realesrgan-x4plus.bin").touch()
     logged: list[tuple[str, ...]] = []
-    monkeypatch.setattr("ai_video_tools.system.tools.log_subprocess_launch", lambda command: logged.append(tuple(command)))
+    monkeypatch.setattr("advanced_ai_video_tools.system.tools.log_subprocess_launch", lambda command: logged.append(tuple(command)))
 
     ToolDiscovery(_successful_runner).discover(ToolOverrides(executable, executable, executable, models))
 

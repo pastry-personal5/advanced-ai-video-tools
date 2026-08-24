@@ -346,7 +346,7 @@ record each completed slice in Implementation evidence with its exact checks.
 
 ### Header simplification slice — completed
 
-- Removed the `Video processing jobs` and `One job runs at a time • Default output height: {settings.target_height}p` labels from `src/ai_video_tools/gui/window.py`.
+- Removed the `Video processing jobs` and `One job runs at a time • Default output height: {settings.target_height}p` labels from `src/advanced_ai_video_tools/gui/window.py`.
 - Preserved the External Tools action and existing settings synchronization behavior.
 - Updated `tests/test_gui.py` to assert both removed labels are absent.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py` — 4 passed.
@@ -355,7 +355,7 @@ Record subsequent completed slices here with links to the relevant modules/tests
 
 ### Integrated message widget slice — completed
 
-- Added [the typed session message presenter](../../src/ai_video_tools/gui/messages.py) with local timestamps, complete in-memory global/job history, selection-driven tab activation, and no persistence or message actions.
+- Added [the typed session message presenter](../../src/advanced_ai_video_tools/gui/messages.py) with local timestamps, complete in-memory global/job history, selection-driven tab activation, and no persistence or message actions.
 - Connected immutable queue snapshots through `JobListModel.snapshot_changed`; global notices consume startup, settings, preflight, tool-validation, shutdown, and completion events while job notices consume queue, stage/progress, lifecycle, and cancellation events.
 - Added a vertical splitter so message height is user-resizable while the existing 1400 × 880 minimum window remains the layout lower bound.
 - Added GUI regression coverage in `tests/test_gui.py`.
@@ -363,7 +363,7 @@ Record subsequent completed slices here with links to the relevant modules/tests
 
 ### Navigation shell slice — completed
 
-- Added the accessible two-control navigation rail and stacked Job Creation / Queue Monitoring surfaces in `src/ai_video_tools/gui/window.py`.
+- Added the accessible two-control navigation rail and stacked Job Creation / Queue Monitoring surfaces in `src/advanced_ai_video_tools/gui/window.py`.
 - Kept both surfaces session-owned and preserved the persistent message splitter outside the view stack.
 - Added switching coverage in `tests/test_gui.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 182 passed; Black, Pylint, and pycodestyle passed.
@@ -647,7 +647,7 @@ Record subsequent completed slices here with links to the relevant modules/tests
 
 ### Visual consistency slice — completed
 
-- Centralized the dark-theme's approved 4/8/16/24 px spacing scale, 32 px control metric, and 6/8 px corner radii in `src/ai_video_tools/gui/theme.py` so panels, fields, buttons, lists, progress bars, tabs, and scrollbars share one visual system.
+- Centralized the dark-theme's approved 4/8/16/24 px spacing scale, 32 px control metric, and 6/8 px corner radii in `src/advanced_ai_video_tools/gui/theme.py` so panels, fields, buttons, lists, progress bars, tabs, and scrollbars share one visual system.
 - Rebuilt Job Creation's visual hierarchy around evenly padded titled groups, readable secondary guidance, consistent source-row sizing, a clear primary submission action, symmetric navigation-rail spacing, and matching editor/preview/monitoring margins.
 - Added headless coverage for the shared metrics, panel titles, source-row action geometry, control dimensions, and theme radius tokens in `tests/test_gui.py` and `tests/test_gui_submission.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 207 passed; Black, Pylint, and pycodestyle passed.
@@ -687,7 +687,7 @@ Record subsequent completed slices here with links to the relevant modules/tests
 ### Native macOS acceptance attempt — environment-limited
 
 - Confirmed the supported host reports macOS 26.5.2, arm64, and Apple M5 Max.
-- Launched `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run ai-video-tools gui`; Qt multimedia initialized successfully and the process entered the native event loop.
+- Launched `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run advanced-ai-video-tools gui`; Qt multimedia initialized successfully and the process entered the native event loop.
 - The current execution shell could not expose the application window to macOS window capture (`screencapture` reported that no display image was available), so minimum-size, native-dialog, high-DPI, and VoiceOver observations remain unverified and the manual-acceptance checkboxes stay open.
 - Repeated the native launch on 2026-08-24; Qt multimedia initialized and the GUI event loop stayed active, but System Events and `screencapture` still could not access a display window. No screenshot was generated.
 

@@ -9,12 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, OverwriteMode, PipelineStage, ProgressEvent, Rational, ToolInfo, Toolchain, VideoStream
-from ai_video_tools.services.finalization import FinalOutputVerifier, FinalizationCancelled, FinalizationExecutor, FinalizationFailed
-from ai_video_tools.services.media_preparation import PreparationResult
-from ai_video_tools.services.upscaling import UpscalingResult
-from ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceManager
-from ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult
+from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, OverwriteMode, PipelineStage, ProgressEvent, Rational, ToolInfo, Toolchain, VideoStream
+from advanced_ai_video_tools.services.finalization import FinalOutputVerifier, FinalizationCancelled, FinalizationExecutor, FinalizationFailed
+from advanced_ai_video_tools.services.media_preparation import PreparationResult
+from advanced_ai_video_tools.services.upscaling import UpscalingResult
+from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceManager
+from advanced_ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult
 
 
 def _png_header(width: int = 64, height: int = 36) -> bytes:

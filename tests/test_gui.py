@@ -21,16 +21,16 @@ from PySide6.QtGui import QPalette  # noqa: E402  # pylint: disable=wrong-import
 from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QPushButton, QSplitter, QToolButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
-from ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.preview import VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, SourcePreviewPane  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.preview import VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, SourcePreviewPane  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
 
 
 @pytest.fixture(scope="module")

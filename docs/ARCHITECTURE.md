@@ -1,6 +1,6 @@
 # Architecture
 
-This document is the authoritative technical overview for AI Video Tools. It describes both the implemented foundation and the intended processing architecture. Update it when an implementation decision changes the pipeline, component boundaries, job states, or media policies.
+This document is the authoritative technical overview for Advanced AI Video Tools. It describes both the implemented foundation and the intended processing architecture. Update it when an implementation decision changes the pipeline, component boundaries, job states, or media policies.
 
 ## Development target
 
@@ -228,7 +228,7 @@ For example: `ai-video-20260821-143052-01a022ccf35b7a1e8b0bf554b4c36db2.mp4`.
 
 ### Workspace and disk safety
 
-Resolve the cache root with `QStandardPaths.StandardLocation.CacheLocation`; on macOS the intended job root is `~/Library/Caches/AI Video Tools/jobs/`. Create one randomly identified, ownership-marked directory per job.
+Resolve the cache root with `QStandardPaths.StandardLocation.CacheLocation`; on macOS the v2 job root is `~/Library/Caches/Advanced AI Video Tools/jobs/`. Create one randomly identified, ownership-marked directory per job.
 
 Before starting, calculate a conservative peak-disk estimate covering normalized clips, the merged intermediate, input and output PNG sequences, partial output, and process overhead. Require available space of at least `estimated_peak × 1.20`. Refuse to start when the estimate cannot be computed or the margin is unavailable.
 
@@ -249,7 +249,7 @@ Before starting, calculate a conservative peak-disk estimate covering normalized
 
 ### Configuration, logs, and networking
 
-Resolve persistent configuration with `QStandardPaths.StandardLocation.AppDataLocation`, corresponding to `~/Library/Application Support/AI Video Tools/` on macOS. Store executable paths, recent locations, and user preferences there; do not store credentials or model binaries.
+Resolve persistent configuration with `QStandardPaths.StandardLocation.AppDataLocation`, corresponding to `~/Library/Application Support/Advanced AI Video Tools/` on macOS. Store executable paths, recent locations, and user preferences there; do not store credentials or model binaries. The v2 first launch does not import v1 settings and removes only the guarded legacy settings files.
 
 The settings document is typed, YAML-encoded, and explicitly schema-versioned. Version 1 persists FFmpeg, FFprobe, Real-ESRGAN, and model-directory overrides; recent input and output directories; target height; overwrite preference; and non-safety preview mute/volume preferences. It uses mode `0600`, a same-directory temporary file, file synchronization, and atomic replacement so readers never observe a partial write. Malformed documents are quarantined and safe defaults are restored. Unsupported newer schema versions remain untouched and produce an explicit error rather than being mistaken for corruption. Unknown fields within the current schema are ignored for minor forward compatibility. A valid legacy `settings.json` is migrated once to `settings.yaml`; all subsequent writes use YAML.
 

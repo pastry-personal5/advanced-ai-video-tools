@@ -3,4 +3,4 @@ set -x
 
 INPUT_DIR=${HOME}/c-work/8005-output
 
-uv run ai-video-tools gui
+uv run advanced-ai-video-tools gui

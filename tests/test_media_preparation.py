@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, Rational, VideoStream
-from ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerificationError, MergedOutputVerifier, PreparationCancelled, PreparationFailed
-from ai_video_tools.storage.workspaces import WorkspaceManager
-from ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult
+from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, Rational, VideoStream
+from advanced_ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerificationError, MergedOutputVerifier, PreparationCancelled, PreparationFailed
+from advanced_ai_video_tools.storage.workspaces import WorkspaceManager
+from advanced_ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult
 
 
 def _video(*, width: int = 64, duration: Decimal = Decimal("1"), codec: str = "h264", rate: Rational = Rational(10, 1), average_rate: Rational | None = None, time_base: Rational = Rational(1, 10240)) -> VideoStream:

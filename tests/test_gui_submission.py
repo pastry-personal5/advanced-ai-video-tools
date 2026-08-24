@@ -20,13 +20,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QSize, QThread, QUrl, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QLabel, QListWidget, QPushButton, QScrollArea, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
-from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.editor import EDITOR_SETTINGS_WIDTH, OUTPUT_DIRECTORY_ICON_COLOR, OUTPUT_DIRECTORY_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH, SOURCE_CLIP_ROW_HEIGHT, JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.preflight import GuiPreflightController  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.source_clip_actions import SourceClipTrashService  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.submission import JobSubmissionController, PreflightDecision, PreflightDialog  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.theme import CONTROL_HEIGHT, MAJOR_REGION_GAP, SPACE_2, SPACE_3, SPACE_4, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.editor import EDITOR_SETTINGS_WIDTH, OUTPUT_DIRECTORY_ICON_COLOR, OUTPUT_DIRECTORY_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH, SOURCE_CLIP_ROW_HEIGHT, JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.preflight import GuiPreflightController  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.source_clip_actions import SourceClipTrashService  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.submission import JobSubmissionController, PreflightDecision, PreflightDialog  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, MAJOR_REGION_GAP, SPACE_2, SPACE_3, SPACE_4, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
 
 _CREATED = datetime(2026, 8, 21, 14, 30, 52, 123456, tzinfo=timezone.utc)
 
