@@ -91,4 +91,4 @@ Tests must remain independent of a GPU, network, large model files, and long vid
 
 ## Current execution pointer
 
-Proceed from the current phase in [plans.md](plans.md). Phase 1 — Enhance GUI is complete with a documented security-limited native-display verification exception. Phase 2 — Rename Project is now the active planning phase; do not implement it until its owner entry criteria are approved.
+Proceed from the current phase in [plans.md](plans.md). Phase 1 — Enhance GUI and Phase 2 — Rename Project are complete, with deferred manual release checks documented in the Phase 2 file. The next phases remain provisional until their entry criteria and scope are approved.

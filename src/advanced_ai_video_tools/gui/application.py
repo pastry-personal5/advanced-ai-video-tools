@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from advanced_ai_video_tools.gui.jobs import JobListModel, QueueSnapshotBridge
 from advanced_ai_video_tools.gui.identity import GUI_DISPLAY_NAME, GUI_MENU_NAME, GUI_ORGANIZATION_NAME
+from advanced_ai_video_tools.identity import IDENTITY
 from advanced_ai_video_tools.gui.preflight import GuiPreflightController
 from advanced_ai_video_tools.gui.submission import JobSubmissionController
 from advanced_ai_video_tools.gui.theme import apply_dark_theme
@@ -30,7 +31,7 @@ def _single_instance_lock() -> QLockFile:
     """Return the process lock used to enforce one GUI instance."""
 
     directory = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.TempLocation))
-    lock = QLockFile(str(directory / "advanced-ai-video-tools-gui.lock"))
+    lock = QLockFile(str(directory / IDENTITY.gui_lock_filename))
     lock.setStaleLockTime(30_000)
     return lock
 

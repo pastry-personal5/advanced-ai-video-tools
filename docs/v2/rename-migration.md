@@ -25,6 +25,9 @@ Existing output videos, logs, caches, and failed workspaces are not renamed or
 deleted by this identity change. v1 and v2 are not supported as side-by-side
 runtime installations.
 
-The repository is intended to move to `advanced-ai-video-tool` separately from
-this source migration. Signing, notarization, and publication of the macOS
-bundle require the release owner's Apple Developer credentials.
+The canonical repository is
+`https://github.com/pastry-personal5/advanced-ai-video-tools`. Signing,
+notarization, publication of the macOS bundle, and supported-hardware upgrade
+verification are deferred to the human release checklist for v2.
+The approved v2 distribution channel is outside the Mac App Store, using
+Developer ID distribution via `.dmg`.

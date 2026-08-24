@@ -10,13 +10,14 @@ from secrets import randbits
 from uuid import UUID
 
 from advanced_ai_video_tools.core.models import OverwriteMode
+from advanced_ai_video_tools.identity import IDENTITY
 
 
 class OutputCollisionError(FileExistsError):
     """Raised when no-overwrite publication targets an occupied path."""
 
 
-_AUTOMATIC_BASENAME = re.compile(r"ai-video-(\d{8})-(\d{6})-([0-9a-f]{32})(?:-\d{2,})?\.mp4")
+_AUTOMATIC_BASENAME = re.compile(rf"{re.escape(IDENTITY.output_prefix)}video-(\d{{8}})-(\d{{6}})-([0-9a-f]{{32}})(?:-\d{{2,}})?\.mp4")
 
 
 def automatic_output_basename(created_at: datetime) -> str:
@@ -25,7 +26,7 @@ def automatic_output_basename(created_at: datetime) -> str:
     if created_at.tzinfo is None or created_at.utcoffset() is None:
         raise ValueError("created_at must be timezone-aware")
     identifier = _uuid7(created_at)
-    return f"{created_at.strftime('ai-video-%Y%m%d-%H%M%S')}-{identifier.hex}.mp4"
+    return f"{created_at.strftime(f'{IDENTITY.output_prefix}video-%Y%m%d-%H%M%S')}-{identifier.hex}.mp4"
 
 
 def automatic_output_basename_matches(basename: str, created_at: datetime) -> bool:

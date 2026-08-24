@@ -4,7 +4,7 @@
 
 - Development target: v2
 - Released baseline: v1.0.0
-- Current phase: [Phase 2 — Rename Project](2-rename-project.md)
+- Current phase: [Phase 2 — Rename Project](2-rename-project.md) (complete)
 - Last updated: 2026-08-24
 
 ## Purpose
@@ -37,7 +37,7 @@ The new project name, rename compatibility policy, and exact scope of later phas
 | Phase | Title | Status | Outcome |
 | --- | --- | --- | --- |
 | 1 | [Enhance GUI](1-enhance-gui.md) | Complete | A clearer, more accessible, native macOS workflow over the existing backend |
-| 2 | [Rename Project](2-rename-project.md) | Active planning; implementation follows Phase 1 | Apply the approved identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
+| 2 | [Rename Project](2-rename-project.md) | Complete | Apply the approved identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
 | 3 | Stabilization | Proposed | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
 | 4 | Refactoring | Proposed | Improve code readability and maintainability without weakening approved behavior |
 | 5 | Stabilization and release | Proposed | Re-verify behavior after refactoring and produce the v2 release artifacts |
@@ -72,17 +72,17 @@ Approved Phase 2 identity decisions:
 - Persistent storage: create a new v2 storage location; do not migrate v1 settings, and remove the old settings location as part of the v2 transition.
 - Runtime compatibility: only v2 is supported for execution after the transition; v1 and v2 are not a supported side-by-side installation.
 - Automatic output filenames retain the existing `ai-` prefix.
-- Repository: move the repository to an `advanced-ai-video-tool` name when the repository migration occurs; timing is not yet fixed.
-- Signing/notarization policy remains open pending the release-format recommendation below.
-- Other artifact and compatibility policies remain open until the Phase 2 identity and migration specification is approved.
+- Repository: use the canonical repository `https://github.com/pastry-personal5/advanced-ai-video-tools`.
+- Signing/notarization execution: deferred for v2; the approved distribution channel is outside the Mac App Store via Developer ID `.dmg`.
+- Artifact and compatibility policies are resolved for the approved Phase 2 scope; deferred manual release checks are recorded in the phase file.
 
 ### Version 2 release policy
 
 - Whether v1 receives critical fixes after v2 development begins.
 - Whether v2 requires a settings-schema increment.
 - Supported migration and rollback behavior.
-- Signed/notarized application and distribution format.
-- Target-hardware acceptance criteria.
+- Distribution channel: outside the Mac App Store using Developer ID distribution via `.dmg`; signing/notarization execution remains a manual release action.
+- Target-hardware acceptance criteria (human release checklist; deferred for v2).
 
 ### Phase 3 stabilization scope
 
@@ -181,3 +181,5 @@ A phase is complete only when:
 | 2026-08-24 | Approve `Advanced AI Video Tools` as the Phase 2 project name and `Pastry Personal 5` as owner, copyright holder, developer, primary contact, and maintainer. |
 | 2026-08-24 | Approve `advanced-ai-video-tools` as the Python distribution and primary CLI command, `advanced_ai_video_tools` as the import package, and retain `ai-video-tools` as a deprecated CLI alias through v2. |
 | 2026-08-24 | Approve `com.pastrypersonal5.advancedaivideotools` as the permanent v2 macOS bundle identifier. |
+| 2026-08-24 | Defer v2 signing/notarization and target-macOS upgrade verification to the human release checklist; record `https://github.com/pastry-personal5/advanced-ai-video-tools` as the canonical repository. |
+| 2026-08-24 | Approve distribution outside the Mac App Store using Developer ID distribution via `.dmg`; defer execution of signing/notarization to the human release checklist. |

@@ -9,6 +9,8 @@ All notable changes to Advanced AI Video Tools are documented in this file.
 - Established the `Advanced AI Video Tools` GUI identity, new application-data location, macOS bundle identifier `com.pastrypersonal5.advancedaivideotools`, and v2 macOS `Info.plist` template.
 - Removed only the guarded v1 settings files on first v2 storage initialization; unrelated files and symlink targets are preserved.
 - Retained the existing `ai-` automatic output filename prefix.
+- Recorded the canonical repository URL and deferred signing, notarization, and supported-hardware upgrade validation to the v2 human release checklist.
+- Approved distribution outside the Mac App Store using Developer ID distribution via `.dmg`.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 

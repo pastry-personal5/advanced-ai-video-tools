@@ -8,7 +8,9 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-_MARKER_NAME = ".ai-video-tools-owned"
+from advanced_ai_video_tools.identity import IDENTITY
+
+_MARKER_NAME = IDENTITY.workspace_marker
 
 
 class WorkspaceError(RuntimeError):

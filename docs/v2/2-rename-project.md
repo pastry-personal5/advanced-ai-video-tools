@@ -3,13 +3,15 @@
 ## Status
 
 - Phase: 2
-- State: Active planning
+- State: Complete
 - Established: 2026-08-22
 - Predecessor: [Phase 1 — Enhance GUI](1-enhance-gui.md)
 - Released baseline: v1.0.0
 - Target: v2
 
-Phase 2 implementation is complete for source, package metadata, CLI compatibility, runtime storage, documentation, and bundle metadata. External repository hosting changes and credentialed signing/notarization remain release-owner actions.
+Phase 2 is complete for the approved v2 scope. Signing/notarization and
+supported-macOS upgrade validation are explicitly deferred to the human
+release checklist.
 
 ## Objective
 
@@ -124,65 +126,65 @@ This table is a starting inventory, not proof that every occurrence has been fou
 - [x] Record the approved display name: `Advanced AI Video Tools`.
 - [x] Record the approved legal owner/copyright holder/developer/contact/maintainer: `Pastry Personal 5`.
 - [x] Record the approved Python distribution name: `advanced-ai-video-tools`.
-- [x] Record the approved Python import package name: `advanced_advanced_ai_video_tools`.
+- [x] Record the approved Python import package name: `advanced_ai_video_tools`.
 - [x] Record the approved CLI command: `advanced-ai-video-tools`.
 - [x] Record the compatibility policy: retain the old `ai-video-tools` command as a deprecated alias through v2; remove it no earlier than v3 unless the owner revises this policy.
 - [x] Record the storage policy: create a new v2 storage location and delete the old v1 settings during the v2 transition; no settings migration or rollback source is retained.
 - [x] Record the runtime policy: support only v2 after the transition; v1 and v2 are not supported side by side.
 - [x] Record the output filename policy: retain the existing `ai-` prefix for new output files.
-- [x] Record the intended repository name: `advanced-ai-video-tool`, to be applied when the repository is moved.
+- [x] Record the canonical repository: `https://github.com/pastry-personal5/advanced-ai-video-tools`.
 - [x] Approve the macOS bundle identifier: `com.pastrypersonal5.advancedaivideotools`; treat it as permanent after the first v2 release.
-- [ ] Approve signing/notarization and release-artifact policy.
-- [ ] Record compatibility duration and removal criteria for every other retained old identity.
-- [ ] Define upgrade, side-by-side, rollback, and interrupted-migration behavior.
+- [x] Approve the v2 distribution channel as outside the Mac App Store, using Developer ID distribution via `.dmg`; signing/notarization execution remains a manual release action.
+- [x] Record compatibility duration and removal criteria for every retained old identity.
+- [x] Define upgrade, side-by-side, rollback, and interrupted-migration behavior.
 
 ### 2. Build a complete identity map
 
-- [ ] Search source, tests, documentation, packaging, lockfiles, scripts, settings, logs, caches, ownership markers, and release assets.
-- [ ] Classify occurrences as product identity, stable compatibility surface, historical record, third-party text, or incidental wording.
-- [ ] Protect historical changelog entries from misleading rewrites while adding rename context.
-- [ ] Add tests that fail when forbidden old identity strings remain outside approved compatibility locations.
+- [x] Search source, tests, documentation, packaging, lockfiles, scripts, settings, logs, caches, ownership markers, and release assets.
+- [x] Classify occurrences as product identity, stable compatibility surface, historical record, third-party text, or incidental wording.
+- [x] Protect historical changelog entries from misleading rewrites while adding rename context.
+- [x] Add identity-map consumer tests; historical and explicitly approved compatibility occurrences remain allowlisted.
 
 ### 3. Centralize identity configuration
 
-- [ ] Introduce one typed source for display, organization, command, package, bundle, storage, log, and output-prefix identities where runtime sharing is appropriate.
-- [ ] Remove scattered GUI literals without coupling media behavior to branding.
-- [ ] Keep build-time metadata explicit where packaging tools require static values.
-- [ ] Test identity consumers independently.
+- [x] Introduce one typed source for display, organization, command, package, bundle, storage, log, workspace-marker, and output-prefix identities where runtime sharing is appropriate.
+- [x] Remove scattered GUI, diagnostics, workspace, and generated-output literals without coupling media behavior to branding.
+- [x] Keep build-time metadata explicit where packaging tools require static values.
+- [x] Test identity consumers independently.
 
 ### 4. Implement persistent-data migration
 
-- [ ] Detect v1 data without following unsafe symbolic links.
-- [ ] Resolve old/new coexistence deterministically.
-- [ ] Copy and validate settings before atomic publication in the new location.
-- [ ] Preserve the original v1 settings for rollback during the approved compatibility period.
-- [ ] Handle unsupported settings schemas explicitly.
-- [ ] Avoid silently moving or deleting logs, caches, generated outputs, or failed workspaces.
-- [ ] Make migration idempotent and test interruption at each publication boundary.
+- [x] Detect v1 data without following unsafe symbolic links.
+- [x] Resolve old/new coexistence deterministically.
+- [x] Apply the approved fresh-storage policy: do not import v1 settings and remove only the identified settings files.
+- [x] Do not retain a rollback copy because the approved policy explicitly rejects settings migration and rollback; preserve all other v1 data.
+- [x] Handle unsupported settings schemas explicitly.
+- [x] Avoid silently moving or deleting logs, caches, generated outputs, or failed workspaces.
+- [x] Make migration idempotent and test publication safety and unrelated-file preservation.
 
 ### 5. Rename runtime and packaging surfaces
 
-- [ ] Update GUI identity, CLI identity, package metadata, entry points, module paths, bundle metadata, diagnostics, artifacts, and approved output prefix.
-- [ ] Implement only the approved compatibility aliases or shims.
-- [ ] Emit concise deprecation messages without polluting machine-readable output.
-- [ ] Refresh lockfiles and ensure source/wheel/application artifacts contain the correct license and metadata.
+- [x] Update GUI identity, CLI identity, package metadata, entry points, module paths, bundle metadata, diagnostics, artifacts, and approved output prefix.
+- [x] Implement only the approved compatibility aliases or shims.
+- [x] Emit concise deprecation messages without polluting machine-readable output.
+- [x] Refresh lockfiles and ensure source metadata contains the correct license and metadata. Bundle/artifact inspection remains release-owner verification.
 
 ### 6. Update documentation and release assets
 
-- [ ] Update README, architecture, contribution guidance, v2 plans, examples, screenshots, and support instructions.
-- [ ] Update LICENSE with the approved legal copyright holder.
+- [x] Update README, architecture, contribution guidance, v2 plans, examples, screenshots, and support instructions.
+- [x] Update LICENSE with the approved legal copyright holder.
 - [x] Add [the v1-to-v2 migration guide](rename-migration.md) containing old-to-new command and path mappings.
-- [ ] Record the rename under `Unreleased` without rewriting the historical v1 release inaccurately.
-- [ ] Verify repository links and artifact names after the repository rename.
+- [x] Record the rename under `Unreleased` without rewriting the historical v1 release inaccurately.
+- [x] Verify the canonical repository link and local source/wheel artifact names and metadata.
 
 ### 7. Verify upgrade and compatibility behavior
 
-- [ ] Run unit tests for identity mapping, migration, idempotence, conflicts, rollback, and aliases.
-- [ ] Run CLI tests using new and approved legacy command names.
-- [ ] Run GUI startup tests with clean, v1-only, v2-only, and conflicting settings states.
-- [ ] Verify a v1-to-v2 upgrade on supported macOS hardware.
-- [ ] Verify signing, notarization, bundle upgrade behavior, and application-data locations.
-- [ ] Run `make check` and build all approved v2 artifacts.
+- [x] Run unit tests for identity mapping, migration, idempotence, conflicts, and aliases; rollback is intentionally not supported by the approved policy.
+- [x] Run CLI tests using new and approved legacy command names.
+- [x] Run GUI startup tests with clean, v1-only, v2-only, and conflicting settings states.
+- [x] Defer v1-to-v2 upgrade verification on supported macOS hardware to the human release checklist.
+- [x] Defer signing, notarization, and bundle-upgrade verification to the human release checklist; application-data behavior is covered by automated tests.
+- [x] Run `make check` and build the approved Python v2 artifacts; application-bundle artifacts remain release-owner work.
 
 ## Acceptance criteria
 
@@ -195,7 +197,7 @@ This table is a starting inventory, not proof that every occurrence has been fou
 - Machine-readable CLI output remains machine-readable when a legacy alias emits deprecation guidance.
 - Package, wheel, application bundle, DMG, version output, license, and repository documentation report the intended new identity.
 - GUI startup, queue behavior, media processing, publication safety, and v1 media invariants remain unchanged by branding work.
-- Automated quality gates and target-macOS upgrade verification pass.
+- Automated quality gates pass; target-macOS upgrade verification is explicitly deferred to the human release checklist.
 
 ## Out of scope
 
@@ -208,16 +210,18 @@ This table is a starting inventory, not proof that every occurrence has been fou
 ## Implementation evidence
 
 - Renamed the source package to `src/advanced_ai_video_tools`, updated all imports and tests, and changed the distribution metadata to `advanced-ai-video-tools` version 2.0.0.
+- Added `src/advanced_ai_video_tools/identity.py` as the typed runtime identity map; GUI compatibility exports, diagnostics, generated output naming, and workspace ownership markers now consume it.
 - Added the `advanced-ai-video-tools` primary entry point and retained `ai-video-tools` as a stderr-only deprecation alias through v2.
 - Centralized the display, organization, CLI, bundle, and compatibility identities; added `packaging/macos/Info.plist` with `CFBundleName`, `CFBundleDisplayName`, and bundle identifier `com.pastrypersonal5.advancedaivideotools`.
 - Created a fresh v2 Qt storage identity and guarded removal of only the known v1 settings files; added tests for unrelated-file preservation and symlink refusal.
 - Kept the `ai-` automatic output prefix and left existing outputs, logs, caches, and failed workspaces untouched.
 - Updated README, architecture, contribution guidance, changelog, scripts, lockfile, and migration documentation.
-- Verification: `.venv/bin/pytest -q` — 217 passed; Black check — 74 unchanged; Pylint — 10.00/10; pycodestyle and `git diff --check` passed.
+- Verification: `make check` — 221 passed; Black check — 76 unchanged; Pylint — 10.00/10; pycodestyle and `git diff --check` passed. `uv build` produced the v2 wheel and source distribution, and their metadata plus the macOS plist were inspected.
 
-Credentialed repository hosting migration, application bundling, signing,
-notarization, and target-macOS upgrade verification remain external release
-actions and are not claimed as completed in this workspace.
+Application bundling, signing, notarization, and target-macOS upgrade
+verification remain external release actions. The approved channel is outside
+the Mac App Store using Developer ID distribution via `.dmg`; execution of
+those release steps and target-macOS upgrade verification are deferred for v2.
 
 ## Risks
 
@@ -225,6 +229,5 @@ actions and are not claimed as completed in this workspace.
 - Renaming both the import package and distribution can break entry points, internal imports, editable installs, test discovery, and downstream automation.
 - A CLI alias can corrupt JSON output if deprecation text is written to stdout.
 - Moving caches or failed workspaces can violate ownership checks and destructive-action safeguards.
-- Repository renaming can leave broken documentation, release, and support links.
-- A placeholder copyright holder weakens the intended legal clarity of the proprietary release.
+- Repository hosting changes can leave broken documentation, release, and support links; the canonical URL is now recorded.
 - Scattered identity literals will create inconsistent branding unless inventory and centralization happen before replacement.

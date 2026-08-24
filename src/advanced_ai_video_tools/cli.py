@@ -20,6 +20,7 @@ from advanced_ai_video_tools.core.models import (
 from advanced_ai_video_tools.services.pipeline import PipelineCancelled, PipelineFailed, PipelineResult, PipelineService
 from advanced_ai_video_tools.services.preflight import PreflightService
 from advanced_ai_video_tools.gui.identity import GUI_DISPLAY_NAME, GUI_ORGANIZATION_NAME, LEGACY_CLI_COMMAND
+from advanced_ai_video_tools.identity import IDENTITY
 from advanced_ai_video_tools.system.diagnostics import configure_logging, current_log_path
 from advanced_ai_video_tools.system.processes import CancellationToken
 
@@ -43,7 +44,7 @@ def _add_job_arguments(command: argparse.ArgumentParser) -> None:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="advanced-ai-video-tools",
+        prog=IDENTITY.primary_command,
         description="Validate or run concat-first, real-image video upscale jobs.",
     )
     parser.add_argument("--version", action="version", version=__version__)
@@ -277,7 +278,7 @@ def main(arguments: list[str] | None = None) -> int:
     else:
         QCoreApplication.setApplicationName(GUI_DISPLAY_NAME)
     if Path(sys.argv[0]).name == LEGACY_CLI_COMMAND:
-        sys.stderr.write(f"warning: {LEGACY_CLI_COMMAND} is deprecated; use advanced-ai-video-tools instead.\n")
+        sys.stderr.write(f"warning: {LEGACY_CLI_COMMAND} is deprecated; use {IDENTITY.primary_command} instead.\n")
     configure_logging(stderr=not getattr(parsed, "as_json", False))
     if parsed.command == "gui":
         return _run_gui()

@@ -9,6 +9,7 @@ from threading import Lock
 
 from loguru import logger
 
+from advanced_ai_video_tools.identity import IDENTITY
 from advanced_ai_video_tools.storage.paths import application_data_directory
 
 _LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS Z} | {level:<8} | job={extra[job_id]} stage={extra[stage]} | {message}"
@@ -33,7 +34,7 @@ def configure_logging(log_directory: Path | None = None, *, stderr: bool = True)
             return _CONFIGURATION
         directory = (log_directory or application_data_directory() / "logs").expanduser().resolve(strict=False)
         directory.mkdir(parents=True, exist_ok=True)
-        log_path = directory / "advanced-ai-video-tools.log"
+        log_path = directory / IDENTITY.log_filename
         logger.remove()
         logger.configure(extra={"job_id": "-", "stage": "-"})
         sinks: list[int] = []
@@ -42,7 +43,7 @@ def configure_logging(log_directory: Path | None = None, *, stderr: bool = True)
         sinks.append(logger.add(log_path, level="DEBUG", format=_LOG_FORMAT, rotation="10 MB", retention=5, encoding="utf-8", enqueue=True, backtrace=False, diagnose=False))
         _SINK_IDS = tuple(sinks)
         _CONFIGURATION = LoggingConfiguration(log_path)
-        logger.info("Local diagnostics configured at <application-data>/logs/advanced-ai-video-tools.log")
+        logger.info("Local diagnostics configured at <application-data>/logs/{}", IDENTITY.log_filename)
         return _CONFIGURATION
 
 

@@ -1,8 +1,10 @@
-"""Presentation identity for the v2 GUI shell."""
+"""Compatibility exports for presentation code."""
 
-GUI_DISPLAY_NAME = "Advanced AI Video Tools"
-GUI_MENU_NAME = GUI_DISPLAY_NAME
-GUI_ORGANIZATION_NAME = GUI_DISPLAY_NAME
-PRIMARY_CLI_COMMAND = "advanced-ai-video-tools"
-LEGACY_CLI_COMMAND = "ai-video-tools"
-MACOS_BUNDLE_IDENTIFIER = "com.pastrypersonal5.advancedaivideotools"
+from advanced_ai_video_tools.identity import IDENTITY
+
+GUI_DISPLAY_NAME = IDENTITY.display_name
+GUI_MENU_NAME = IDENTITY.display_name
+GUI_ORGANIZATION_NAME = IDENTITY.organization_name
+PRIMARY_CLI_COMMAND = IDENTITY.primary_command
+LEGACY_CLI_COMMAND = IDENTITY.legacy_command
+MACOS_BUNDLE_IDENTIFIER = IDENTITY.bundle_identifier
