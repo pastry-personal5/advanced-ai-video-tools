@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added `SourceClipTrashService` to guard Trash operations; clips referenced by queued, validating, running, or cancelling jobs cannot be moved and emit a Global Messages notice.
 - Hardened Trash guards to fail closed on queue-state lookup failures, path-resolution errors, missing files, and OS Trash-provider exceptions.
 - Marked Phase 1 GUI enhancement complete; native screen inspection remains explicitly security-limited and documented.
+- Approved `Advanced AI Video Tools` as the Phase 2 project name and `Pastry Personal 5` as owner, copyright holder, developer, primary contact, and maintainer.
 - Unified the dark GUI's surface, field, button, list, progress, tab, and scrollbar treatment around the approved 8 px spacing grid, 32 px controls, and shared corner radii.
 - Unified the horizontal major-region gap between Basic Settings→Source Clips and Source Clips→Preview at 32 px.
 - Rebalanced Job Creation columns by widening the source-clip list allowance by 100 px and narrowing the preview minimum width by 100 px.

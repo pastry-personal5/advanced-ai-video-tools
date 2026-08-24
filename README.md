@@ -1,4 +1,4 @@
-# AI Video Tools
+# Advanced AI Video Tools
 
 AI Video Tools is a Python project for macOS on Apple Silicon that concatenates real-world video footage with FFmpeg and upscales it with `realesrgan-ncnn-vulkan`. A single Python processing service owns the complete pipeline; the PySide6 desktop shell observes and controls that same backend queue.
 
@@ -172,7 +172,7 @@ uv run ai-video-tools process --help
 
 `uv sync` creates and manages the project virtual environment automatically. Activating it manually is optional. In the GUI, select **Edit → Preferences** to configure FFmpeg, FFprobe, Real-ESRGAN, or its model directory when automatic discovery is unsuitable. **Use PATH** clears an executable override, and **Automatic** derives the model directory from the resolved Real-ESRGAN installation. **Validate & Save** runs launch, model-pair, and Vulkan inference checks outside the GUI thread; failed values are not persisted.
 
-In the desktop application, add clips in top-to-bottom concat order, choose an output directory, set the target height, and select **Preflight**. Diagnostic preflight runs outside the GUI thread and shows every warning or blocking issue before submission. Unsupported secondary streams require the dedicated acknowledgement checkbox; that acknowledgement is bound to the exact reviewed per-clip dropped-item inventory, applies only to that job, and is never saved as a preference. Accepted jobs enter the single-worker FIFO and perform authoritative preflight again immediately before processing. If the inventory changed while waiting, authoritative preflight rejects the job for another review. The GUI uses the temporary v2 display identity **Advanced AI Video Tools**, a persistent dark theme, selected-source playback preview, queue monitoring view, and session-only Global Messages/Job Messages tabs.
+In the desktop application, add clips in top-to-bottom concat order, choose an output directory, set the target height, and select **Preflight**. Diagnostic preflight runs outside the GUI thread and shows every warning or blocking issue before submission. Unsupported secondary streams require the dedicated acknowledgement checkbox; that acknowledgement is bound to the exact reviewed per-clip dropped-item inventory, applies only to that job, and is never saved as a preference. Accepted jobs enter the single-worker FIFO and perform authoritative preflight again immediately before processing. If the inventory changed while waiting, authoritative preflight rejects the job for another review. The GUI uses the **Advanced AI Video Tools** display identity, a persistent dark theme, selected-source playback preview, queue monitoring view, and session-only Global Messages/Job Messages tabs.
 
 The GUI always uses its approved dark theme; it does not follow the macOS light/dark appearance setting.
 
@@ -288,4 +288,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete workflow and [docs/ARCHI
 
 ## License
 
-This project is proprietary. Copyright © 2026 AI Video Tools Project Owner. All rights are reserved, and no permission to use, copy, modify, or distribute the project is granted without the owner's prior written permission. Third-party components remain under their respective licenses. See [LICENSE](LICENSE) for the complete terms.
+This project is proprietary. Copyright © 2026 Pastry Personal 5. All rights are reserved. Pastry Personal 5 is the owner, developer, primary contact, and maintainer. No permission to use, copy, modify, or distribute the project is granted without the owner's prior written permission. Third-party components remain under their respective licenses. See [LICENSE](LICENSE) for the complete terms.

@@ -37,7 +37,7 @@ The new project name, rename compatibility policy, and exact scope of later phas
 | Phase | Title | Status | Outcome |
 | --- | --- | --- | --- |
 | 1 | [Enhance GUI](1-enhance-gui.md) | Complete | A clearer, more accessible, native macOS workflow over the existing backend |
-| 2 | [Rename Project](2-rename-project.md) | Active planning; implementation follows Phase 1 | Consistent new identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
+| 2 | [Rename Project](2-rename-project.md) | Active planning; implementation follows Phase 1 | Apply the approved identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
 | 3 | Stabilization | Proposed | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
 | 4 | Refactoring | Proposed | Improve code readability and maintainability without weakening approved behavior |
 | 5 | Stabilization and release | Proposed | Re-verify behavior after refactoring and produce the v2 release artifacts |
@@ -59,6 +59,22 @@ The complete decision checklist and migration plan are maintained in [Phase 2 �
 - Output filename prefix: retain `ai-video-` or replace it.
 - Copyright-holder name in the proprietary license.
 - Compatibility duration for old settings, commands, and generated project files.
+
+Approved Phase 2 identity decisions:
+
+- Project/product display name: `Advanced AI Video Tools`.
+- Owner, copyright holder, developer, primary contact, and maintainer: `Pastry Personal 5`.
+- Python distribution name: `advanced-ai-video-tools`.
+- Python import package name: `advanced_ai_video_tools`.
+- Primary CLI command: `advanced-ai-video-tools`.
+- Legacy CLI policy: retain `ai-video-tools` as a deprecated alias through v2; remove it no earlier than v3 unless the owner revises this policy.
+- macOS bundle identifier: `com.pastrypersonal5.advancedaivideotools`; treat it as permanent after the first v2 release.
+- Persistent storage: create a new v2 storage location; do not migrate v1 settings, and remove the old settings location as part of the v2 transition.
+- Runtime compatibility: only v2 is supported for execution after the transition; v1 and v2 are not a supported side-by-side installation.
+- Automatic output filenames retain the existing `ai-` prefix.
+- Repository: move the repository to an `advanced-ai-video-tool` name when the repository migration occurs; timing is not yet fixed.
+- Signing/notarization policy remains open pending the release-format recommendation below.
+- Other artifact and compatibility policies remain open until the Phase 2 identity and migration specification is approved.
 
 ### Version 2 release policy
 
@@ -162,3 +178,6 @@ A phase is complete only when:
 | 2026-08-24 | Sequence the post-rename work as Phase 3 Stabilization, Phase 4 Refactoring, and Phase 5 Stabilization and Release. |
 | 2026-08-24 | Confirm that the Phase 1 minimum main-window size remains 1400 × 880 logical pixels; the temporary 1400 × 800 change is superseded. |
 | 2026-08-24 | Mark Phase 1 complete with the documented security-limited native-display verification exception; move the active planning pointer to Phase 2. |
+| 2026-08-24 | Approve `Advanced AI Video Tools` as the Phase 2 project name and `Pastry Personal 5` as owner, copyright holder, developer, primary contact, and maintainer. |
+| 2026-08-24 | Approve `advanced-ai-video-tools` as the Python distribution and primary CLI command, `advanced_ai_video_tools` as the import package, and retain `ai-video-tools` as a deprecated CLI alias through v2. |
+| 2026-08-24 | Approve `com.pastrypersonal5.advancedaivideotools` as the permanent v2 macOS bundle identifier. |

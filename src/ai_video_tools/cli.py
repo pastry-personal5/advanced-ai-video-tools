@@ -268,7 +268,14 @@ def main(arguments: list[str] | None = None) -> int:
     from PySide6.QtCore import QCoreApplication
 
     QCoreApplication.setOrganizationName("AI Video Tools")
-    QCoreApplication.setApplicationName("AI Video Tools")
+    from ai_video_tools.gui.identity import GUI_DISPLAY_NAME  # pylint: disable=import-outside-toplevel
+
+    if getattr(parsed, "command", None) == "gui":
+        # Set the identity before QApplication exists so macOS does not use
+        # the interpreter executable (for example, "python3") as the menu title.
+        QCoreApplication.setApplicationName(GUI_DISPLAY_NAME)
+    else:
+        QCoreApplication.setApplicationName(GUI_DISPLAY_NAME)
     configure_logging(stderr=not getattr(parsed, "as_json", False))
     if parsed.command == "gui":
         return _run_gui()

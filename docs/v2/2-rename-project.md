@@ -9,7 +9,7 @@
 - Released baseline: v1.0.0
 - Target: v2
 
-Phase 2 is defined but is not the current implementation phase. Do not execute the rename until Phase 1 is complete or the user explicitly redirects active work to Phase 2.
+Phase 2 is defined and is in planning. The owner has approved the core Python and CLI names below; implementation remains paused until the remaining identity and migration decisions are approved.
 
 ## Objective
 
@@ -88,8 +88,8 @@ These recommendations remain unapproved until the owner selects the new identity
 - Rename the product, distribution, primary CLI command, bundle identity, release artifacts, and documentation consistently.
 - Keep `ai_video_tools` as a deprecated compatibility import for one major release only if external Python imports are considered supported; otherwise perform one atomic internal-package rename with exhaustive import tests.
 - Keep `ai-video-tools` as a warning-emitting CLI alias throughout v2 and remove it no earlier than v3.
-- Treat the new macOS application as an upgrade and migrate settings once, atomically and idempotently.
-- Copy validated settings into the new location before retiring the old location; never delete old settings automatically during the first v2 release.
+- Create a new v2 application-data location without importing v1 settings; delete only the identified old v1 settings location after the new location is ready.
+- Make the settings transition explicit and guarded so an interrupted or ambiguous path check never deletes unrelated data.
 - Leave existing logs, caches, failed workspaces, and generated videos in place. Provide explicit discovery or migration where useful rather than moving large or sensitive data silently.
 - Adopt a new output prefix for new v2 jobs only if the owner wants filenames to carry the new brand; never rename existing outputs.
 - Centralize identity constants and keep media-policy constants independent from branding.
@@ -121,9 +121,19 @@ This table is a starting inventory, not proof that every occurrence has been fou
 
 ### 1. Approve identity and compatibility specification
 
-- [ ] Record the approved display name, ASCII slug, and canonical capitalization.
-- [ ] Record package, import, CLI, bundle, storage, output-prefix, repository, artifact, and legal names.
-- [ ] Record compatibility duration and removal criteria for every retained old identity.
+- [x] Record the approved display name: `Advanced AI Video Tools`.
+- [x] Record the approved legal owner/copyright holder/developer/contact/maintainer: `Pastry Personal 5`.
+- [x] Record the approved Python distribution name: `advanced-ai-video-tools`.
+- [x] Record the approved Python import package name: `advanced_ai_video_tools`.
+- [x] Record the approved CLI command: `advanced-ai-video-tools`.
+- [x] Record the compatibility policy: retain the old `ai-video-tools` command as a deprecated alias through v2; remove it no earlier than v3 unless the owner revises this policy.
+- [x] Record the storage policy: create a new v2 storage location and delete the old v1 settings during the v2 transition; no settings migration or rollback source is retained.
+- [x] Record the runtime policy: support only v2 after the transition; v1 and v2 are not supported side by side.
+- [x] Record the output filename policy: retain the existing `ai-` prefix for new output files.
+- [x] Record the intended repository name: `advanced-ai-video-tool`, to be applied when the repository is moved.
+- [x] Approve the macOS bundle identifier: `com.pastrypersonal5.advancedaivideotools`; treat it as permanent after the first v2 release.
+- [ ] Approve signing/notarization and release-artifact policy.
+- [ ] Record compatibility duration and removal criteria for every other retained old identity.
 - [ ] Define upgrade, side-by-side, rollback, and interrupted-migration behavior.
 
 ### 2. Build a complete identity map
@@ -178,8 +188,8 @@ This table is a starting inventory, not proof that every occurrence has been fou
 
 - The approved new name is consistent across every current user-facing and release surface.
 - The old identity appears only in historical records, migration code, compatibility aliases, and documentation where explicitly approved.
-- Existing v1 settings are migrated safely, idempotently, and without deleting the rollback source.
-- A failed or interrupted migration cannot corrupt either the v1 or v2 settings document.
+- A new v2 settings location is created without importing v1 settings, and only the identified old v1 settings location is deleted.
+- A failed or interrupted transition cannot delete unrelated data or leave a partially written v2 settings document.
 - Existing videos, logs, caches, and retained failed workspaces are not silently renamed or deleted.
 - New and approved legacy CLI commands behave according to the compatibility specification.
 - Machine-readable CLI output remains machine-readable when a legacy alias emits deprecation guidance.

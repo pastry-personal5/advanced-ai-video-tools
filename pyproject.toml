@@ -6,6 +6,8 @@ build-backend = "hatchling.build"
 name = "ai-video-tools"
 version = "1.0.0"
 description = "Quality-first FFmpeg and Real-ESRGAN video preparation tools"
+authors = [{ name = "Pastry Personal 5" }]
+maintainers = [{ name = "Pastry Personal 5" }]
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"

@@ -14,7 +14,7 @@ from PySide6.QtCore import QCoreApplication, QLockFile, QStandardPaths
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from ai_video_tools.gui.jobs import JobListModel, QueueSnapshotBridge
-from ai_video_tools.gui.identity import GUI_DISPLAY_NAME, GUI_ORGANIZATION_NAME
+from ai_video_tools.gui.identity import GUI_DISPLAY_NAME, GUI_MENU_NAME, GUI_ORGANIZATION_NAME
 from ai_video_tools.gui.preflight import GuiPreflightController
 from ai_video_tools.gui.submission import JobSubmissionController
 from ai_video_tools.gui.theme import apply_dark_theme
@@ -87,17 +87,17 @@ def run_gui(arguments: list[str] | None = None) -> int:
     existing = QCoreApplication.instance()
     if existing is not None:
         raise RuntimeError("the GUI entry point requires ownership of the Qt application")
-    application = QApplication(["ai-video-tools", *(arguments or [])])
+    application = QApplication([GUI_MENU_NAME, *(arguments or [])])
     apply_dark_theme(application)
     instance_lock = _single_instance_lock()
     if not instance_lock.tryLock(0):
         QMessageBox.warning(None, GUI_DISPLAY_NAME, f"{GUI_DISPLAY_NAME} is already running.")
         return 1
     application.setOrganizationName(GUI_ORGANIZATION_NAME)
-    # Keep the existing application name so settings/cache locations remain
-    # stable until the explicit Phase 2 migration decision.
-    application.setApplicationName(GUI_ORGANIZATION_NAME)
-    application.setApplicationDisplayName(GUI_DISPLAY_NAME)
+    # Set the application name explicitly so macOS does not derive the menu
+    # title from the Python interpreter executable (for example, "python3").
+    application.setApplicationName(GUI_MENU_NAME)
+    application.setApplicationDisplayName(GUI_MENU_NAME)
     try:
         runtime = create_gui_runtime()
     except SettingsError as error:
