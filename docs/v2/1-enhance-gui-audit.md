@@ -41,7 +41,7 @@ QMainWindow
     │   ├── Add, Remove, Move Up, Move Down
     │   ├── Output directory and target-height fields
     │   ├── Fixed model and automatic-name labels
-    │   └── Inline status and Preflight & Queue
+    │   └── Inline status and Preflight
     ├── Processing jobs QListView
     ├── Selected-job status label
     ├── Output-path label
@@ -64,7 +64,7 @@ Qt construction order and must be made deliberate during implementation.
 | Scenario | Current v1 path | Finding carried into Phase 1 |
 | --- | --- | --- |
 | First launch | Main window opens to the editor, queue, status, progress, and diagnostics in one stack. | Creation and monitoring compete for space; there is no clear mode boundary or persistent message surface. |
-| Valid job | Add files, set output directory/height, choose Preflight & Queue, review, then queue. | There is no source preview, file-manager drop target, or clear selected-clip context. |
+| Valid job | Add files, set output directory/height, choose Preflight, review, then queue. | There is no source preview, file-manager drop target, or clear selected-clip context. |
 | Blocked preflight | Worker reports progress; modal review or critical message blocks submission. | Safety gating is correct, but ordinary validation and diagnostic feedback are mixed across labels, dialogs, and message boxes. |
 | Dropped-stream acknowledgement | Review dialog exposes a checkbox before Queue Job becomes available. | The safety gate must remain modal and explicit while surrounding status becomes inline and log-like. |
 | Queued job | Job appears in one-column `QListView`; selection updates status, output, progress, and queue movement controls. | Status and name are combined in one display string; there is no status column, removal action, selected-job message tab, or whole/stage progress presentation. |

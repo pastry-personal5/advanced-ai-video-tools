@@ -19,14 +19,14 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QCoreApplication, QLockFile, QModelIndex, QObject, Qt, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtGui import QPalette  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QSplitter, QToolButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QPushButton, QSplitter, QToolButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.preview import VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, SourcePreviewPane  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.theme import apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
+from ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot  # noqa: E402  # pylint: disable=wrong-import-position
@@ -59,9 +59,10 @@ def test_gui_theme_is_always_dark(qt_app: QApplication) -> None:
 
     apply_dark_theme(qt_app)
 
-    assert qt_app.style().objectName().lower() == "fusion"
     assert qt_app.palette().color(QPalette.ColorRole.Window).name() == "#202124"
     assert qt_app.palette().color(QPalette.ColorRole.Text).name() == "#f1f3f4"
+    assert f"border-radius: {CONTROL_RADIUS}px" in qt_app.styleSheet()
+    assert f"min-height: {CONTROL_HEIGHT - 2}px" in qt_app.styleSheet()
 
 
 def _snapshot(tmp_path: Path, job_id: str, state: JobState, position: int | None, *, revision: int, progress: ProgressEvent | None = None) -> QueueJobSnapshot:
@@ -326,16 +327,16 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.job_creation_button.minimumHeight() == 64
     assert window.job_creation_button.width() == 64
     assert window.job_creation_button.height() == 64
-    assert "border: none" in window.job_creation_button.styleSheet()
-    assert "#ff3b30" in window.job_creation_button.styleSheet()
+    assert f"border-radius: {CONTROL_RADIUS}px" in window.job_creation_button.styleSheet()
+    assert "#39485f" in window.job_creation_button.styleSheet()
     assert "QToolButton:checked" in window.job_creation_button.styleSheet()
-    assert "background: transparent" in window.job_creation_button.styleSheet()
+    assert "background: #303134" in window.job_creation_button.styleSheet()
     assert window.queue_monitoring_button.minimumWidth() == 64
     assert window.queue_monitoring_button.minimumHeight() == 64
     left_gap = window.job_creation_button.geometry().left()
     right_gap = window.navigation_rail.width() - window.job_creation_button.geometry().right() - 1
     assert left_gap == 8
-    assert right_gap == 9
+    assert right_gap == 8
     assert window.view_stack.geometry().left() - window.navigation_rail.geometry().right() - 1 == 0
     assert window.view_stack.geometry().left() - window.job_creation_button.geometry().right() - 1 == right_gap
     window.queue_monitoring_button.click()
@@ -344,8 +345,9 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     window.job_creation_button.click()
     assert window.view_stack.currentIndex() == 0
     assert window.queue_monitoring_button.isEnabled()
-    assert window.editor.findChild(QLabel, "sourceClipsLabel").text() == "Source Clips"
-    assert window.source_preview.preview_label.text() == "Preview"
+    assert window.editor.findChild(QGroupBox, "sourceClipListGroup").title() == "Source Clips"
+    assert window.source_preview.title() == "Preview"
+    assert not window.source_preview.preview_label.isVisible()
     assert window.source_preview.progress_slider.accessibleName() == "Preview progress"
     assert window.source_preview.progress_slider.toolTip() == "Seek preview"
     assert not window.source_preview.progress_slider.isEnabled()
@@ -375,17 +377,18 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert [mute_group.itemAt(index).widget() for index in range(2)] == [window.source_preview.mute_toggle, window.source_preview.mute_label]
     window.editor.add_inputs((tmp_path / "first.mov",))
     assert window.findChild(QLabel, "sourcePreviewSource") is None
-    assert window.source_preview.minimumWidth() == 600
-    assert window.editor.inputs.width() <= 673
+    assert window.source_preview.minimumWidth() == 450
+    assert window.editor.inputs.width() <= 823
     window.source_preview._preview_error(QMediaPlayer.Error.ResourceError, "Unsupported preview media")  # pylint: disable=protected-access
     assert "Preview unavailable; preflight can still inspect this clip." in window.global_messages.toPlainText()
     assert window.source_preview.preview_label.text() == "Preview unavailable; preflight can still inspect this clip."
+    assert window.source_preview.preview_label.isVisible()
     window.editor.output_directory.setText(str(tmp_path))
     assert window.editor.build_request().inputs == (tmp_path / "first.mov",)
     assert window.source_preview.heightForWidth(300) == 400
     assert window.source_preview.play_pause_button.isEnabled()
-    assert window.source_preview.previous_button.text() == "⏪"
-    assert window.source_preview.next_button.text() == "⏩"
+    assert window.source_preview.previous_button.text() == "←"
+    assert window.source_preview.next_button.text() == "→"
     assert window.source_preview.play_pause_button.text() == "▶"
     controls = window.source_preview.layout().itemAt(3).layout()
     assert controls.itemAt(0).layout() is not None
@@ -398,8 +401,11 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
         assert button.size().height() == 32
         assert button.font().pointSizeF() == pytest.approx(QApplication.font().pointSizeF() * 2)
         assert button.toolTip() == button.accessibleName()
-        assert "background: transparent" in button.styleSheet()
-        assert "border: none" in button.styleSheet()
+        assert "padding: 0px" in button.styleSheet()
+    assert "color: #b8bcc2" in window.source_preview.previous_button.styleSheet()
+    assert "color: #b8bcc2" in window.source_preview.next_button.styleSheet()
+    assert "background:" not in window.source_preview.previous_button.styleSheet()
+    assert "border:" not in window.source_preview.previous_button.styleSheet()
     for icon in (window.source_preview.minimum_volume_icon, window.source_preview.maximum_volume_icon):
         image = icon.pixmap().toImage()
         assert any(image.pixelColor(x, y).name() == VOLUME_ICON_COLOR for x in range(image.width()) for y in range(image.height()))
@@ -423,7 +429,39 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert not window.source_preview.next_button.isEnabled()
     window.source_preview.previous_button.click()
     assert window.editor.inputs.currentRow() == 0
-    assert window.source_preview.preview_label.text() == "Preview"
+    assert window.source_preview.title() == "Preview"
+    assert not window.source_preview.preview_label.isVisible()
+    window.close()
+
+
+def test_job_creation_major_region_gaps_are_equal(qt_app: QApplication) -> None:
+    """Basic Settings→Source Clips and Source Clips→Preview use one gap token."""
+
+    window = MainWindow(JobListModel(FakeQueue(), QueueSnapshotBridge()), ApplicationSettings(target_height=2160))  # type: ignore[arg-type]
+    window.resize(1400, 880)
+    window.show()
+    qt_app.processEvents()
+
+    editor_columns = window.editor.layout().itemAt(0).layout()
+    creation_content = window.view_stack.widget(0).layout().itemAt(0).layout()
+    assert editor_columns.spacing() == MAJOR_REGION_GAP
+    assert creation_content.spacing() == MAJOR_REGION_GAP
+
+    basic_settings = window.editor.findChild(QGroupBox, "basicSettings")
+    source_group = window.editor.findChild(QGroupBox, "sourceClipListGroup")
+    assert basic_settings is not None
+    assert source_group is not None
+    editor_origin = window.editor.mapTo(window, window.editor.rect().topLeft())
+    source_origin = source_group.mapTo(window, source_group.rect().topLeft())
+    basic_origin = basic_settings.mapTo(window, basic_settings.rect().topLeft())
+    preview_origin = window.source_preview.mapTo(window, window.source_preview.rect().topLeft())
+    basic_right = basic_origin.x() + basic_settings.width()
+    source_right = source_origin.x() + source_group.width()
+    assert source_origin.x() - basic_right == preview_origin.x() - source_right == MAJOR_REGION_GAP
+    assert editor_origin.x() <= basic_origin.x()
+    inputs_origin = window.editor.inputs.mapTo(window, window.editor.inputs.rect().topLeft())
+    video_origin = window.source_preview.video.mapTo(window, window.source_preview.video.rect().topLeft())
+    assert video_origin.y() == inputs_origin.y()
     window.close()
 
 

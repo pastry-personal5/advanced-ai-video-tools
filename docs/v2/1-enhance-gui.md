@@ -630,6 +630,51 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Added regression coverage in `tests/test_gui_submission.py`.
 - Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 188 passed; Black, Pylint, and pycodestyle passed.
 
+### Visual consistency slice — completed
+
+- Centralized the dark-theme's approved 4/8/16/24 px spacing scale, 32 px control metric, and 6/8 px corner radii in `src/ai_video_tools/gui/theme.py` so panels, fields, buttons, lists, progress bars, tabs, and scrollbars share one visual system.
+- Rebuilt Job Creation's visual hierarchy around evenly padded titled groups, readable secondary guidance, consistent source-row sizing, a clear primary submission action, symmetric navigation-rail spacing, and matching editor/preview/monitoring margins.
+- Added headless coverage for the shared metrics, panel titles, source-row action geometry, control dimensions, and theme radius tokens in `tests/test_gui.py` and `tests/test_gui_submission.py`.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 207 passed; Black, Pylint, and pycodestyle passed.
+
+### Major-region gap consistency slice — completed
+
+- Added the shared `MAJOR_REGION_GAP` metric and applied it to both horizontal boundaries in Job Creation: Basic Settings→Source Clips and Source Clips→Preview.
+- Added geometry coverage proving both rendered gaps remain equal at the 1400 × 880 minimum window size.
+- Focused validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py tests/test_gui_submission.py -q` — 33 passed.
+
+### Job Creation column balance slice — completed
+
+- Increased the source-clip list maximum width from 673 px to 773 px and reduced the preview pane minimum width from 600 px to 500 px, preserving the same major-region gap and preview aspect-ratio behavior.
+- Updated headless geometry assertions for the revised 100 px allocation shift.
+
+### Preview heading placement slice — completed
+
+- Converted the preview surface to a titled group box so `Preview` sits on the outer border like `Source Clips`.
+- Kept the inline status label reserved for native preview errors, preventing duplicate headings during normal playback.
+- GUI regression coverage verifies the outer title and error-status visibility states.
+
+### Job Creation column balance refinement — completed
+
+- Increased the source-clip list maximum width from 773 px to 823 px and reduced the preview pane minimum width from 500 px to 450 px.
+- Updated the live geometry assertions for the revised 50 px allocation shift.
+
+### Preview playback alignment slice — completed
+
+- Added the matching vertical inset so the playable video region starts exactly at the Source Clips list widget's top coordinate, below the titled group-box chrome.
+- Added a live geometry regression asserting equal window-relative top coordinates.
+
+### Volume-row optical alignment slice — completed
+
+- Removed the extra vertical optical offset from the native volume glyphs so their visible marks align with the slider track and handle centerline.
+- Existing volume-row geometry and preference behavior are unchanged.
+
+### Native macOS acceptance attempt — environment-limited
+
+- Confirmed the supported host reports macOS 26.5.2, arm64, and Apple M5 Max.
+- Launched `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run ai-video-tools gui`; Qt multimedia initialized successfully and the process entered the native event loop.
+- The current execution shell could not expose the application window to macOS window capture (`screencapture` reported that no display image was available), so minimum-size, native-dialog, high-DPI, and VoiceOver observations remain unverified and the manual-acceptance checkboxes stay open.
+
 ## Risks
 
 - The later project rename may cause rework if application identity remains scattered through widgets, settings paths, logs, and packaging metadata.

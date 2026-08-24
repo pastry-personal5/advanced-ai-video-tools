@@ -8,26 +8,27 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSignalBlocker, QSize, QUrl, Qt, Signal, Slot
-from PySide6.QtGui import QColor, QPainter, QPixmap
+from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
-from PySide6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QSlider, QSizePolicy, QStyle, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QGroupBox, QHBoxLayout, QLabel, QSlider, QSizePolicy, QStyle, QToolButton, QVBoxLayout, QWidget
+
+from ai_video_tools.gui.theme import SPACE_2, SPACE_3
 
 VOLUME_ICON_COLOR = "#b8bcc2"
-VOLUME_ICON_OPTICAL_OFFSET = 2
+VOLUME_ICON_OPTICAL_OFFSET = 0
 
 
-class SourcePreviewPane(QFrame):
+class SourcePreviewPane(QGroupBox):
     """Display the selected local source identity without affecting processing."""
 
     def __init__(self, parent: QWidget | None = None, *, muted: bool = True, volume: int = 100) -> None:
         # Declarative widget construction is intentionally kept together.
         # pylint: disable=too-many-statements
-        super().__init__(parent)
+        super().__init__("Preview", parent)
         self.setObjectName("sourcePreviewPane")
-        self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        self.setMinimumWidth(600)
+        self.setMinimumWidth(450)
         self.video = QVideoWidget()
         self.video.setObjectName("sourcePreviewVideo")
         self.video.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -65,15 +66,20 @@ class SourcePreviewPane(QFrame):
         self._preferred_muted = bool(muted)
         self._duration_ms = 0
         self._apply_audio_preferences(muted, volume)
-        self.previous_button = self._control("⏪", "Previous clip", "previewPreviousButton")
+        self.previous_button = self._control("←", "Previous clip", "previewPreviousButton", muted=True)
         self.play_pause_button = self._control("▶", "Play preview", "previewPlayPauseButton")
         self.first_frame_button = self._control("⏮", "Go to first frame", "previewFirstFrameButton")
         self.last_frame_button = self._control("⏭", "Go to last frame", "previewLastFrameButton")
-        self.next_button = self._control("⏩", "Next clip", "previewNextButton")
+        self.next_button = self._control("→", "Next clip", "previewNextButton", muted=True)
         self.preview_label = QLabel("Preview")
         self.preview_label.setObjectName("previewLabel")
         self.preview_label.setAccessibleName("Preview status")
         self.preview_label.setWordWrap(True)
+        preview_font = QFont(self.preview_label.font())
+        preview_font.setPointSize(13)
+        preview_font.setWeight(QFont.Weight.DemiBold)
+        self.preview_label.setFont(preview_font)
+        self.preview_label.setVisible(False)
         self.volume_label = QLabel("Output volume")
         self.volume_label.setObjectName("outputVolumeLabel")
         self.volume_label.setFixedHeight(24)
@@ -84,12 +90,17 @@ class SourcePreviewPane(QFrame):
         self.mute_label.setObjectName("muteLabel")
         self.mute_label.setBuddy(self.mute_toggle)
         playback_controls = QHBoxLayout()
+        playback_controls.setContentsMargins(0, 0, 0, 0)
+        playback_controls.setSpacing(SPACE_2)
         for button in (self.play_pause_button, self.first_frame_button, self.last_frame_button):
             playback_controls.addWidget(button)
         navigation_controls = QHBoxLayout()
+        navigation_controls.setContentsMargins(0, 0, 0, 0)
+        navigation_controls.setSpacing(SPACE_2)
         for button in (self.previous_button, self.next_button):
             navigation_controls.addWidget(button)
         controls = QHBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
         controls.addLayout(playback_controls)
         controls.addStretch(1)
         controls.addLayout(navigation_controls)
@@ -100,24 +111,35 @@ class SourcePreviewPane(QFrame):
         self.volume_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         volume_controls = QHBoxLayout(self.volume_row)
         volume_controls.setContentsMargins(0, 0, 0, 0)
+        volume_controls.setSpacing(SPACE_2)
         volume_controls.addWidget(self.volume_label, alignment=Qt.AlignmentFlag.AlignVCenter)
         volume_controls.addWidget(self.minimum_volume_icon, alignment=Qt.AlignmentFlag.AlignVCenter)
         volume_controls.addWidget(self.volume_slider, 1, alignment=Qt.AlignmentFlag.AlignVCenter)
         volume_controls.addWidget(self.maximum_volume_icon, alignment=Qt.AlignmentFlag.AlignVCenter)
         mute_controls = QHBoxLayout()
+        mute_controls.setContentsMargins(0, 0, 0, 0)
         mute_controls.addStretch(1)
         mute_group = QHBoxLayout()
+        mute_group.setContentsMargins(0, 0, 0, 0)
+        mute_group.setSpacing(SPACE_2)
         mute_group.addWidget(self.mute_toggle)
         mute_group.addWidget(self.mute_label)
         mute_controls.addLayout(mute_group)
         audio_controls = QVBoxLayout()
+        audio_controls.setContentsMargins(0, 0, 0, 0)
+        audio_controls.setSpacing(SPACE_2)
         audio_controls.addWidget(self.volume_row)
         audio_controls.addLayout(mute_controls)
         progress_row = QHBoxLayout()
         progress_row.setContentsMargins(0, 0, 0, 0)
+        progress_row.setSpacing(SPACE_2)
         progress_row.addWidget(self.progress_slider, 1)
         progress_row.addWidget(self.preview_time_label)
         layout = QVBoxLayout(self)
+        # Keep the playback canvas aligned with the actual source-list widget,
+        # which sits below the Source Clips group title and content inset.
+        layout.setContentsMargins(SPACE_3, SPACE_3 + SPACE_2, SPACE_3, SPACE_3)
+        layout.setSpacing(SPACE_2)
         layout.addWidget(self.preview_label)
         layout.addWidget(self.video, 1)
         layout.addLayout(progress_row)
@@ -141,7 +163,7 @@ class SourcePreviewPane(QFrame):
         self.player.errorOccurred.connect(self._preview_error)
 
     @staticmethod
-    def _control(glyph: str, label: str, object_name: str) -> QToolButton:
+    def _control(glyph: str, label: str, object_name: str, *, muted: bool = False) -> QToolButton:
         """Create an icon-only preview control with native accessibility text."""
 
         button = QToolButton()
@@ -149,12 +171,18 @@ class SourcePreviewPane(QFrame):
         button.setObjectName(object_name)
         button.setAccessibleName(label)
         button.setToolTip(label)
-        button.setAutoRaise(True)
         button.setFixedSize(32, 32)
+        # The application-wide text-button padding would otherwise consume the
+        # fixed 32 px icon hit area and clip the glyph.
+        style = "QToolButton { padding: 0px; }"
+        if muted:
+            # Keep the same border, radius, background, and hit-area treatment
+            # as the other preview controls; only soften the navigation glyphs.
+            style = "QToolButton { padding: 0px; color: #b8bcc2; } QToolButton:hover { color: #d4d7dc; } QToolButton:pressed { color: #f1f3f4; }"
+        button.setStyleSheet(style)
         glyph_font = button.font()
         glyph_font.setPointSizeF(max(1.0, glyph_font.pointSizeF() * 2))
         button.setFont(glyph_font)
-        button.setStyleSheet("QToolButton { border: none; background: transparent; padding: 0px; }")
         return button
 
     def _volume_icon(self, pixmap: QStyle.StandardPixmap, label: str, object_name: str) -> QLabel:
@@ -182,7 +210,8 @@ class SourcePreviewPane(QFrame):
 
         self.player.stop()
         self._reset_progress()
-        self.preview_label.setText("Preview")
+        self.preview_label.clear()
+        self.preview_label.setVisible(False)
         self._set_actual_muted(True)
         if path is None:
             self.player.setSource(QUrl())
@@ -347,6 +376,7 @@ class SourcePreviewPane(QFrame):
     def _preview_error(self, _error: QMediaPlayer.Error, _error_string: str) -> None:
         message = "Preview unavailable; preflight can still inspect this clip."
         self.preview_label.setText(message)
+        self.preview_label.setVisible(True)
         self.preview_error.emit(message)
 
     def shutdown(self) -> None:

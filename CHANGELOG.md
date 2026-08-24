@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Unified the dark GUI's surface, field, button, list, progress, tab, and scrollbar treatment around the approved 8 px spacing grid, 32 px controls, and shared corner radii.
+- Unified the horizontal major-region gap between Basic Settings→Source Clips and Source Clips→Preview at 32 px.
+- Rebalanced Job Creation columns by widening the source-clip list allowance by 100 px and narrowing the preview minimum width by 100 px.
+- Renamed the primary Job Creation action from “Preflight & Queue” to “Preflight”; its review and queue behavior is unchanged.
+- Matched the Preview caption to the Source Clips section-heading typography and spacing.
+- Moved the Preview heading onto the outer preview group-box border, matching the Source Clips title placement; inline preview errors remain inside the pane.
+- Enlarged the target-height up/down arrow glyphs while preserving the existing spinner dimensions and step behavior.
+- Refined the target-height arrows to normal-sized, softer glyphs for a less bright visual weight.
+- Corrected the volume icon optical offset so minimum volume, slider, and maximum volume align on one visual centerline.
+- Fixed preview-control glyph clipping by removing text-button padding from the fixed 32×32 icon hit areas.
+- Kept the reliable native double-triangle previous/next glyphs and put those navigation controls on a neutral grey visual treatment.
+- Changed previous/next clip navigation glyphs to simple `<` and `>` marks as requested.
+- Changed previous/next clip navigation glyphs to directional arrows `←` and `→` as requested.
+- Matched previous/next clip controls to the playback buttons' shared border, radius, background, and hit-area treatment while retaining softer grey glyphs.
+- Rebalanced Job Creation columns again by widening the source-clip list allowance by 50 px and narrowing the preview minimum width by 50 px.
+- Aligned the preview playback region's top edge with the actual Source Clips list widget.
+- Refined Job Creation into evenly padded titled panels, standardized source-row action sizing, aligned the editor/preview/monitoring regions, and made navigation controls use the same selected-state surface treatment.
 - Set preview controls to 32 × 32 glyph-only buttons with 2× glyphs and grouped playback/seek controls at the left with clip navigation controls at the right.
 - Added the labeled `Output volume` row with native volume indicators and a right-aligned checkbox/`Mute` label group.
 - Tinted the minimum and maximum volume indicators light gray for consistent dark-theme contrast.

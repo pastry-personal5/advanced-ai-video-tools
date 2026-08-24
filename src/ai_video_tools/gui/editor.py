@@ -14,12 +14,16 @@ from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QIcon, QPainter, 
 from PySide6.QtWidgets import QFileDialog, QGroupBox, QHBoxLayout, QLabel, QListWidget, QLineEdit, QListWidgetItem, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QStyle, QToolButton, QVBoxLayout, QWidget
 
 from ai_video_tools.core.models import JobRequest
+from ai_video_tools.gui.theme import CONTROL_HEIGHT, MAJOR_REGION_GAP, SPACE_1, SPACE_2, SPACE_3, SPACE_4
 from ai_video_tools.storage.naming import automatic_output_basename
 from ai_video_tools.system.settings import ApplicationSettings
 
 _VIDEO_SUFFIXES = frozenset({".mov", ".mp4", ".mkv", ".m4v"})
-SOURCE_CLIP_LIST_WIDTH = 673
+EDITOR_SETTINGS_WIDTH = 304
+SOURCE_CLIP_LIST_WIDTH = 823
 SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH = 320
+SOURCE_CLIP_ROW_HEIGHT = 40
+SOURCE_CLIP_ACTION_ICON_SIZE = 16
 OUTPUT_DIRECTORY_ICON_COLOR = "#b8bcc2"
 # Keep the chooser glyph half the size of its 32 px button.
 OUTPUT_DIRECTORY_ICON_SIZE = 16
@@ -66,6 +70,18 @@ def _vertically_center_pixmap_ink(source: QPixmap) -> QPixmap:
     painter.drawPixmap(0, vertical_offset, source)
     painter.end()
     return centered
+
+
+def _secondary_label(text: str, object_name: str) -> QLabel:
+    """Create the shared secondary-text treatment for editor guidance."""
+
+    label = QLabel(text)
+    label.setObjectName(object_name)
+    label.setWordWrap(True)
+    font = label.font()
+    font.setPointSize(12)
+    label.setFont(font)
+    return label
 
 
 class _ElidedFilenameLabel(QLabel):
@@ -116,7 +132,7 @@ class JobEditor(QWidget):
         self.inputs.setObjectName("inputClips")
         self.inputs.setAccessibleName("Ordered input clips")
         self.inputs.setAccessibleDescription("Clips are processed in the order shown.")
-        self.inputs.setMinimumHeight(100)
+        self.inputs.setMinimumHeight(CONTROL_HEIGHT * 5)
         self.inputs.setMaximumWidth(SOURCE_CLIP_LIST_WIDTH)
         self.inputs.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.inputs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -129,6 +145,8 @@ class JobEditor(QWidget):
         self.input_up_button.setObjectName("inputUpButton")
         self.input_down_button = QPushButton("Move Down")
         self.input_down_button.setObjectName("inputDownButton")
+        for button in (self.add_button, self.remove_button, self.input_up_button, self.input_down_button):
+            button.setFixedHeight(CONTROL_HEIGHT)
 
         self.source_clip_move_controls = QWidget()
         self.source_clip_move_controls.setObjectName("sourceClipMoveControls")
@@ -136,10 +154,13 @@ class JobEditor(QWidget):
         self.source_clip_move_controls.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         move_controls_layout = QHBoxLayout(self.source_clip_move_controls)
         move_controls_layout.setContentsMargins(0, 0, 0, 0)
+        move_controls_layout.setSpacing(SPACE_2)
         move_controls_layout.addWidget(self.input_up_button)
         move_controls_layout.addWidget(self.input_down_button)
 
         input_controls = QHBoxLayout()
+        input_controls.setContentsMargins(0, 0, 0, 0)
+        input_controls.setSpacing(SPACE_2)
         input_controls.addWidget(self.add_button)
         input_controls.addWidget(self.remove_button)
         input_controls.addStretch(1)
@@ -156,10 +177,9 @@ class JobEditor(QWidget):
         self.output_button.setAccessibleName("Choose output directory")
         self.output_button.setToolTip("Choose output directory")
         self.output_button.setFixedSize(32, 32)
-        self.output_button.setAutoRaise(True)
-        self.output_button.setStyleSheet("QToolButton { border: none; background: transparent; padding: 0px; }")
         output_row = QHBoxLayout()
         output_row.setContentsMargins(0, 0, 0, 0)
+        output_row.setSpacing(SPACE_2)
         output_row.addWidget(self.output_directory, 1, alignment=Qt.AlignmentFlag.AlignVCenter)
         output_row.addWidget(self.output_button, alignment=Qt.AlignmentFlag.AlignVCenter)
 
@@ -169,6 +189,7 @@ class JobEditor(QWidget):
         self.target_height.setSingleStep(2)
         self.target_height.setSuffix(" px")
         self.target_height.setValue(settings.target_height)
+        self.target_height.setFixedHeight(CONTROL_HEIGHT)
 
         model_label = QLabel("realesrgan-x4plus — photographic and live-action images")
         model_label.setObjectName("modelLabel")
@@ -176,40 +197,35 @@ class JobEditor(QWidget):
 
         output_group = QGroupBox("Output Directory")
         output_group.setObjectName("outputDirectoryGroup")
-        self._emphasize_group_title(output_group)
         output_group_layout = QVBoxLayout(output_group)
-        output_explanation = QLabel("Choose where completed videos are saved.")
-        output_explanation.setObjectName("outputDirectoryExplanation")
-        output_explanation.setWordWrap(True)
-        output_explanation.setStyleSheet("font-size: 10px; color: #a8aaad;")
+        output_group_layout.setContentsMargins(SPACE_3, SPACE_4, SPACE_3, SPACE_3)
+        output_group_layout.setSpacing(SPACE_2)
+        output_explanation = _secondary_label("Choose where completed videos are saved.", "outputDirectoryExplanation")
         output_group_layout.addWidget(output_explanation)
         output_group_layout.addLayout(output_row)
         target_group = QGroupBox("Target Height")
         target_group.setObjectName("targetHeightGroup")
-        self._emphasize_group_title(target_group)
         target_group_layout = QVBoxLayout(target_group)
-        target_explanation = QLabel("Sets the final video height; width is calculated to preserve aspect ratio.")
-        target_explanation.setObjectName("targetHeightExplanation")
-        target_explanation.setWordWrap(True)
-        target_explanation.setStyleSheet("font-size: 10px; color: #a8aaad;")
+        target_group_layout.setContentsMargins(SPACE_3, SPACE_4, SPACE_3, SPACE_3)
+        target_group_layout.setSpacing(SPACE_2)
+        target_explanation = _secondary_label("Sets the final video height; width is calculated to preserve aspect ratio.", "targetHeightExplanation")
         target_group_layout.addWidget(target_explanation)
         target_group_layout.addWidget(self.target_height)
         model_group = QGroupBox("AI Upscaler")
         model_group.setObjectName("aiUpscalerGroup")
-        self._emphasize_group_title(model_group)
         model_group_layout = QVBoxLayout(model_group)
-        upscaler_explanation = QLabel("Enhances video detail after clips are prepared and combined.")
-        upscaler_explanation.setObjectName("aiUpscalerExplanation")
-        upscaler_explanation.setWordWrap(True)
-        upscaler_explanation.setStyleSheet("font-size: 10px; color: #a8aaad;")
+        model_group_layout.setContentsMargins(SPACE_3, SPACE_4, SPACE_3, SPACE_3)
+        model_group_layout.setSpacing(SPACE_2)
+        upscaler_explanation = _secondary_label("Enhances video detail after clips are prepared and combined.", "aiUpscalerExplanation")
         model_group_layout.addWidget(upscaler_explanation)
         model_group_layout.addWidget(model_label)
 
         basic_settings = QGroupBox("Basic Settings")
         basic_settings.setObjectName("basicSettings")
-        self._emphasize_group_title(basic_settings, 4)
-        basic_settings.setFixedWidth(290)
+        basic_settings.setFixedWidth(EDITOR_SETTINGS_WIDTH)
         basic_settings_layout = QVBoxLayout(basic_settings)
+        basic_settings_layout.setContentsMargins(SPACE_3, SPACE_4, SPACE_3, SPACE_3)
+        basic_settings_layout.setSpacing(0)
         settings_scroll = QScrollArea()
         settings_scroll.setObjectName("basicSettingsScroll")
         settings_scroll.setWidgetResizable(True)
@@ -217,6 +233,8 @@ class JobEditor(QWidget):
         settings_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         settings_content = QWidget()
         settings_content_layout = QVBoxLayout(settings_content)
+        settings_content_layout.setContentsMargins(0, 0, 0, 0)
+        settings_content_layout.setSpacing(SPACE_3)
         settings_content_layout.addWidget(output_group)
         settings_content_layout.addWidget(target_group)
         settings_content_layout.addWidget(model_group)
@@ -224,25 +242,28 @@ class JobEditor(QWidget):
         settings_scroll.setWidget(settings_content)
         basic_settings_layout.addWidget(settings_scroll)
 
-        self.submit_button = QPushButton("Preflight & Queue")
+        self.submit_button = QPushButton("Preflight")
         self.submit_button.setObjectName("submitJobButton")
         self.submit_button.setDefault(True)
-        source_group = QGroupBox()
+        self.submit_button.setFixedHeight(CONTROL_HEIGHT)
+        self.submit_button.setMinimumWidth(160)
+        source_group = QGroupBox("Source Clips")
         source_group.setObjectName("sourceClipListGroup")
         group_layout = QVBoxLayout(source_group)
-        group_layout.setContentsMargins(2, 9, 9, 9)
-        source_clips_label = QLabel("Source Clips")
-        source_clips_label.setObjectName("sourceClipsLabel")
-        group_layout.addWidget(source_clips_label)
+        group_layout.setContentsMargins(SPACE_3, SPACE_4, SPACE_3, SPACE_3)
+        group_layout.setSpacing(SPACE_2)
         group_layout.addWidget(self.inputs)
         group_layout.addLayout(input_controls)
         submit_row = QHBoxLayout()
+        submit_row.setContentsMargins(0, 0, 0, 0)
+        submit_row.addStretch(1)
         submit_row.addWidget(self.submit_button)
         group_layout.addLayout(submit_row)
         outer = QVBoxLayout()
         outer.setContentsMargins(0, 0, 0, 0)
         columns = QHBoxLayout()
         columns.setContentsMargins(0, 0, 0, 0)
+        columns.setSpacing(MAJOR_REGION_GAP)
         columns.addWidget(basic_settings)
         columns.addWidget(source_group)
         outer.addLayout(columns)
@@ -256,13 +277,6 @@ class JobEditor(QWidget):
         self.submit_button.clicked.connect(self._request_submission)
         self.inputs.currentRowChanged.connect(self._update_input_controls)
         self._update_input_controls()
-
-    @staticmethod
-    def _emphasize_group_title(group: QGroupBox, extra_points: int = 0) -> None:
-        """Emphasize a group-box title without changing its child controls."""
-
-        title_size = max(1, group.font().pointSize() + extra_points)
-        group.setStyleSheet(f"QGroupBox::title {{ font-size: {title_size}pt; font-weight: 700; }}")
 
     def input_paths(self) -> tuple[Path, ...]:
         """Return clip paths in their visible concat order."""
@@ -285,14 +299,15 @@ class JobEditor(QWidget):
         self.inputs.clear()
         for path in self._paths:
             item = QListWidgetItem()
-            item.setSizeHint(QSize(0, 28))
+            item.setSizeHint(QSize(0, SOURCE_CLIP_ROW_HEIGHT))
             self.inputs.addItem(item)
             row = QWidget()
             row.setMinimumWidth(0)
-            row.setFixedHeight(28)
+            row.setFixedHeight(SOURCE_CLIP_ROW_HEIGHT)
             row.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
             row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(8, 0, 4, 0)
+            row_layout.setContentsMargins(SPACE_2, SPACE_1, SPACE_2, SPACE_1)
+            row_layout.setSpacing(SPACE_2)
             filename = _ElidedFilenameLabel(path.name)
             filename.setObjectName("sourceClipFilename")
             filename.setMinimumWidth(0)
@@ -304,9 +319,8 @@ class JobEditor(QWidget):
             trash_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
             trash_button.setAccessibleName(f"Move {path.name} to Trash")
             trash_button.setToolTip(f"Move {path.name} to Trash")
-            trash_button.setIconSize(QSize(10, 10))
-            trash_button.setFixedSize(20, 20)
-            trash_button.setStyleSheet("QToolButton { padding: 0px; margin: 0px; }")
+            trash_button.setIconSize(QSize(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE))
+            trash_button.setFixedSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
             trash_button.clicked.connect(lambda _checked=False, current_item=item: self._move_item_to_trash(current_item))
             row_layout.addWidget(trash_button)
             self.inputs.setItemWidget(item, row)

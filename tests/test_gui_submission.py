@@ -21,9 +21,10 @@ from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QSize, QThread,
 from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QLabel, QListWidget, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.editor import OUTPUT_DIRECTORY_ICON_COLOR, OUTPUT_DIRECTORY_ICON_SIZE, SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH, JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
+from ai_video_tools.gui.editor import EDITOR_SETTINGS_WIDTH, OUTPUT_DIRECTORY_ICON_COLOR, OUTPUT_DIRECTORY_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH, SOURCE_CLIP_ROW_HEIGHT, JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.preflight import GuiPreflightController  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.submission import JobSubmissionController, PreflightDecision, PreflightDialog  # noqa: E402  # pylint: disable=wrong-import-position
+from ai_video_tools.gui.theme import CONTROL_HEIGHT, MAJOR_REGION_GAP, SPACE_2, SPACE_3, SPACE_4, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
 
 _CREATED = datetime(2026, 8, 21, 14, 30, 52, 123456, tzinfo=timezone.utc)
@@ -141,7 +142,7 @@ def test_editor_preserves_concat_order_and_builds_frozen_supported_request(qt_ap
     settings = ApplicationSettings(tools=tools, target_height=2160, overwrite_mode=OverwriteMode.NO_OVERWRITE)
     editor = JobEditor(settings, clock=lambda: _CREATED)
     paths = (tmp_path / "one.mov", tmp_path / "two.mov", tmp_path / "three.mov")
-    assert editor.findChild(QLabel, "sourceClipsLabel").text() == "Source Clips"
+    assert editor.findChild(QGroupBox, "sourceClipListGroup").title() == "Source Clips"
     editor.add_inputs(paths)
     assert [editor.inputs.item(row).text() for row in range(editor.inputs.count())] == [""] * len(paths)
     editor.inputs.setCurrentRow(2)
@@ -182,7 +183,7 @@ def test_editor_shows_inline_accessible_validation_errors(qt_app: QApplication) 
 
 
 def test_basic_settings_width_and_target_height_guidance(qt_app: QApplication) -> None:
-    """Basic settings provide room for compact target-height guidance."""
+    """Basic settings use the shared editor width and readable guidance."""
 
     del qt_app
     editor = JobEditor(ApplicationSettings())
@@ -190,15 +191,15 @@ def test_basic_settings_width_and_target_height_guidance(qt_app: QApplication) -
     explanation = editor.findChild(QLabel, "targetHeightExplanation")
 
     assert basic_settings is not None
-    assert basic_settings.width() == 290
+    assert basic_settings.width() == EDITOR_SETTINGS_WIDTH
     assert explanation is not None
     assert "preserve aspect ratio" in explanation.text()
-    assert explanation.font().pointSize() <= 10
+    assert explanation.font().pointSize() == 12
 
     output_explanation = editor.findChild(QLabel, "outputDirectoryExplanation")
     output_button = editor.findChild(QToolButton, "chooseOutputButton")
     assert output_explanation is not None
-    assert output_explanation.font().pointSize() <= 10
+    assert output_explanation.font().pointSize() == 12
     assert "completed videos" in output_explanation.text()
     assert output_button is not None
     assert output_button.text() == ""
@@ -212,8 +213,7 @@ def test_basic_settings_width_and_target_height_guidance(qt_app: QApplication) -
     assert any(image.pixelColor(x, y).name() == OUTPUT_DIRECTORY_ICON_COLOR for x in range(image.width()) for y in range(image.height()))
     visible_rows = [row for row in range(image.height()) if any(image.pixelColor(column, row).alpha() > 0 for column in range(image.width()))]
     assert visible_rows[0] == image.height() - visible_rows[-1] - 1
-    assert "background: transparent" in output_button.styleSheet()
-    assert "border: none" in output_button.styleSheet()
+    assert output_button.styleSheet() == ""
     assert image.pixelColor(0, 0).alpha() == 0
 
     upscaler_group = editor.findChild(QGroupBox, "aiUpscalerGroup")
@@ -221,13 +221,47 @@ def test_basic_settings_width_and_target_height_guidance(qt_app: QApplication) -
     assert upscaler_group is not None
     assert upscaler_group.title() == "AI Upscaler"
     assert upscaler_explanation is not None
-    assert upscaler_explanation.font().pointSize() <= 10
+    assert upscaler_explanation.font().pointSize() == 12
     assert "Enhances video detail" in upscaler_explanation.text()
-    assert "font-weight: 700" in basic_settings.styleSheet()
-    assert f"font-size: {basic_settings.font().pointSize() + 4}pt" in basic_settings.styleSheet()
-    assert "font-weight: 700" in editor.findChild(QGroupBox, "outputDirectoryGroup").styleSheet()
-    assert "font-weight: 700" in editor.findChild(QGroupBox, "targetHeightGroup").styleSheet()
-    assert "font-weight: 700" in upscaler_group.styleSheet()
+    assert basic_settings.styleSheet() == ""
+    assert editor.findChild(QGroupBox, "outputDirectoryGroup").styleSheet() == ""
+    assert editor.findChild(QGroupBox, "targetHeightGroup").styleSheet() == ""
+    assert upscaler_group.styleSheet() == ""
+
+
+def test_editor_uses_shared_spacing_and_control_metrics(qt_app: QApplication, tmp_path: Path) -> None:
+    """The job editor's panels, controls, and rows share one visual system."""
+
+    apply_dark_theme(qt_app)
+    source = tmp_path / "source.mov"
+    source.touch()
+    editor = JobEditor(ApplicationSettings())
+    editor.add_inputs((source,))
+    editor.show()
+    qt_app.processEvents()
+
+    basic_settings = editor.findChild(QGroupBox, "basicSettings")
+    source_group = editor.findChild(QGroupBox, "sourceClipListGroup")
+    assert basic_settings is not None
+    assert source_group is not None
+    assert source_group.title() == "Source Clips"
+    assert basic_settings.layout().contentsMargins().left() == SPACE_3
+    assert basic_settings.layout().contentsMargins().top() == SPACE_4
+    assert source_group.layout().contentsMargins().left() == SPACE_3
+    assert source_group.layout().contentsMargins().top() == SPACE_4
+    assert source_group.layout().spacing() == SPACE_2
+    assert editor.layout().itemAt(0).layout().spacing() == MAJOR_REGION_GAP
+    assert {button.height() for button in (editor.add_button, editor.remove_button, editor.input_up_button, editor.input_down_button, editor.submit_button, editor.output_button, editor.target_height)} == {CONTROL_HEIGHT}
+    assert editor.inputs.minimumHeight() == CONTROL_HEIGHT * 5
+    assert editor.inputs.sizeHintForRow(0) == SOURCE_CLIP_ROW_HEIGHT
+    trash_button = editor.findChild(QToolButton, "sourceClipTrashButton")
+    assert trash_button is not None
+    assert trash_button.size() == QSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
+    assert trash_button.iconSize() == QSize(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE)
+    assert "border-radius: 8px" in qt_app.styleSheet()
+    assert "border-radius: 6px" in qt_app.styleSheet()
+    assert editor.target_height.style().metaObject().className() in {"QStyleSheetStyle", "_ReadableSpinBoxStyle"}
+    editor.close()
 
 
 def test_target_height_remains_custom_without_presets(qt_app: QApplication) -> None:
@@ -255,7 +289,7 @@ def test_source_clip_reorder_controls_are_grouped_and_right_aligned(qt_app: QApp
     assert move_layout is not None
     assert [move_layout.itemAt(index).widget() for index in range(2)] == [editor.input_up_button, editor.input_down_button]
 
-    input_controls = source_group.layout().itemAt(2).layout()
+    input_controls = source_group.layout().itemAt(1).layout()
     assert input_controls is not None
     assert [input_controls.itemAt(index).widget() for index in range(2)] == [editor.add_button, editor.remove_button]
     assert input_controls.itemAt(2).spacerItem() is not None
@@ -324,8 +358,8 @@ def test_long_source_filename_is_elided_and_trash_control_is_compact(qt_app: QAp
     assert filename.toolTip() == str(path)
     assert editor.input_paths() == (path,)
     assert trash_button is not None
-    assert trash_button.width() == 20
-    assert trash_button.iconSize().width() == 10
+    assert trash_button.width() == CONTROL_HEIGHT
+    assert trash_button.iconSize().width() == SOURCE_CLIP_ACTION_ICON_SIZE
     editor.close()
 
 

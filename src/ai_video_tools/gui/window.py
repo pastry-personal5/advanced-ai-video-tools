@@ -18,6 +18,7 @@ from ai_video_tools.gui.jobs import JobListModel, JobRole
 from ai_video_tools.gui.messages import MessageEvent, MessageWidget
 from ai_video_tools.gui.preview import SourcePreviewPane
 from ai_video_tools.gui.submission import JobSubmissionController
+from ai_video_tools.gui.theme import CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, SPACE_3, SPACE_4
 from ai_video_tools.gui.tool_settings import ToolSettingsDialog, ToolSettingsValidator
 from ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
 
@@ -95,6 +96,9 @@ class MainWindow(QMainWindow):
         details = QGroupBox("Selected Job")
         details.setObjectName("selectedJobDetails")
         details_layout = QFormLayout(details)
+        details_layout.setContentsMargins(SPACE_3, SPACE_4, SPACE_3, SPACE_3)
+        details_layout.setHorizontalSpacing(SPACE_3)
+        details_layout.setVerticalSpacing(SPACE_2)
         self.job_name_value = QLabel("No job selected")
         self.job_name_value.setObjectName("selectedJobName")
         self.job_state_value = QLabel("No job selected")
@@ -109,18 +113,24 @@ class MainWindow(QMainWindow):
 
         creation_page = QWidget()
         creation_layout = QVBoxLayout(creation_page)
-        creation_layout.setContentsMargins(0, 9, 9, 9)
+        creation_layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
         creation_content = QHBoxLayout()
+        creation_content.setContentsMargins(0, 0, 0, 0)
+        creation_content.setSpacing(MAJOR_REGION_GAP)
         creation_content.addWidget(self.editor, 1)
         creation_content.addWidget(self.source_preview)
         creation_layout.addLayout(creation_content, 1)
         monitoring_page = QWidget()
         monitoring_layout = QVBoxLayout(monitoring_page)
+        monitoring_layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
+        monitoring_layout.setSpacing(SPACE_3)
         monitoring_layout.addWidget(self.job_list, 1)
         monitoring_layout.addWidget(details)
         monitoring_layout.addWidget(self.overall_progress)
         monitoring_layout.addWidget(self.progress)
         controls = QHBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
+        controls.setSpacing(SPACE_2)
         controls.addWidget(self.move_up_button)
         controls.addWidget(self.move_down_button)
         controls.addStretch(1)
@@ -136,12 +146,11 @@ class MainWindow(QMainWindow):
         self.navigation_rail = QWidget()
         self.navigation_rail.setObjectName("navigationRail")
         rail_layout = QVBoxLayout(self.navigation_rail)
+        rail_layout.setSpacing(SPACE_2)
         self.job_creation_button = self._navigation_button("✎", "Job Creation", "jobCreationButton")
         self.queue_monitoring_button = self._navigation_button("☷", "Queue Monitoring", "queueMonitoringButton")
-        left_button_space = self.job_creation_button.minimumWidth() // 8
-        right_button_space = 9
-        rail_layout.setContentsMargins(left_button_space, 9, right_button_space, 0)
-        rail_width = self.job_creation_button.minimumWidth() + left_button_space + right_button_space
+        rail_layout.setContentsMargins(SPACE_2, SPACE_4, SPACE_2, SPACE_4)
+        rail_width = self.job_creation_button.minimumWidth() + (SPACE_2 * 2)
         self.navigation_rail.setFixedWidth(rail_width)
         rail_layout.addWidget(self.job_creation_button, alignment=Qt.AlignmentFlag.AlignHCenter)
         rail_layout.addWidget(self.queue_monitoring_button, alignment=Qt.AlignmentFlag.AlignHCenter)
@@ -221,7 +230,7 @@ class MainWindow(QMainWindow):
         font = QFont(button.font())
         font.setPointSize(max(1, font.pointSize() * 2))
         button.setFont(font)
-        button.setStyleSheet("QToolButton { border: none; outline: none; background: transparent; color: #e6e6e6; }" + "QToolButton:checked { color: #ff3b30; background: transparent; }" + "QToolButton:hover, QToolButton:pressed { background: transparent; }")
+        button.setStyleSheet("QToolButton { " f"border: 1px solid transparent; border-radius: {CONTROL_RADIUS}px; " "min-width: 62px; max-width: 62px; min-height: 62px; max-height: 62px; " "outline: none; background: #303134; color: #e8eaed; padding: 0px; }" "QToolButton:checked { color: #ffffff; background: #39485f; border-color: #8ab4f8; }" "QToolButton:hover { background: #3c4043; border-color: #8ab4f8; }" "QToolButton:pressed { background: #474a4f; }")
         return button
 
     @Slot(int)
