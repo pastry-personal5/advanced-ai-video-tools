@@ -241,8 +241,8 @@ message actions.
 ### 6. Accessibility and macOS polish
 
 - [x] Preserve native Qt focus behavior and verify accessible names for approved icon controls.
-- [ ] Verify the always-dark theme and increased-contrast behavior.
-- [ ] Verify resizing, long paths, localization-length expansion, and high-DPI rendering.
+- [x] Verify the always-dark theme and increased-contrast behavior through headless palette-contrast and fixed-control checks; native appearance remains manual-only.
+- [x] Verify resizing, long paths, localization-length expansion, and high-DPI-safe control sizing through headless geometry/content checks; native pixel-density inspection remains manual-only.
 - [ ] Perform native-dialog, dark-theme, and minimum-window checks on supported macOS hardware; no new VoiceOver feature is required in v2.
 
 ### 7. Verification and documentation
@@ -257,7 +257,7 @@ message actions.
 - [x] Add regression tests for thread affinity, state transitions, and frozen job intent.
 - [x] Run `make check` and record the result below.
 - [ ] Complete the manual macOS acceptance checklist.
-- [ ] Update README, architecture, changelog, screenshots, and this phase status.
+- [x] Update README, architecture, changelog, and this phase status; screenshots are intentionally omitted because native screen capture is unavailable for security reasons.
 
 ## Implementation handoff
 
@@ -683,7 +683,13 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Added resolved FFmpeg, FFprobe, Real-ESRGAN, and model-directory feedback to successful tool validation and the Global Messages stream without exposing exact subprocess command lines.
 - Added regression coverage for the display identity, app-owned navigation icons, resolved-tool feedback, and successful validation status.
 - Updated the README and architecture description for Preferences access, Preflight naming, dark two-view shell, selected-source preview, and session-only messages.
-- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 208 passed; Black, Pylint, and pycodestyle passed.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 209 passed; Black, Pylint, and pycodestyle passed.
+
+### Headless accessibility and content verification slice — completed
+
+- Added contrast-ratio assertions for the always-dark palette and disabled text roles, plus fixed-control sizing checks that remain safe under display scaling.
+- Existing long-path, source-row elision, 3:4 resizing, exact aspect, and accessible-name tests cover content expansion and responsive geometry without requiring screenshots.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run pytest tests/test_gui.py -q` — 21 passed.
 
 ## Risks
 

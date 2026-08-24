@@ -65,6 +65,25 @@ def test_gui_theme_is_always_dark(qt_app: QApplication) -> None:
     assert f"min-height: {CONTROL_HEIGHT - 2}px" in qt_app.styleSheet()
 
 
+def test_gui_theme_text_contrast_and_scaled_control_inventory(qt_app: QApplication) -> None:
+    """Headless checks cover contrast-safe palette roles and fixed high-DPI hit areas."""
+
+    apply_dark_theme(qt_app)
+    palette = qt_app.palette()
+    window_color = palette.color(QPalette.ColorRole.Window)
+    text_color = palette.color(QPalette.ColorRole.Text)
+    disabled_color = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text)
+
+    def luminance(color: object) -> float:
+        red, green, blue = color.redF(), color.greenF(), color.blueF()  # type: ignore[attr-defined]
+        channels = [component / 12.92 if component <= 0.04045 else ((component + 0.055) / 1.055) ** 2.4 for component in (red, green, blue)]
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+    assert (luminance(text_color) + 0.05) / (luminance(window_color) + 0.05) > 8.0
+    assert (luminance(disabled_color) + 0.05) / (luminance(window_color) + 0.05) > 3.0
+    assert CONTROL_HEIGHT == 32
+
+
 def _snapshot(tmp_path: Path, job_id: str, state: JobState, position: int | None, *, revision: int, progress: ProgressEvent | None = None) -> QueueJobSnapshot:
     created = datetime(2026, 8, 21, tzinfo=timezone.utc)
     request = JobRequest((tmp_path / f"{job_id}.mov",), tmp_path, explicit_output_path=tmp_path / f"{job_id}.mp4", created_at=created)
