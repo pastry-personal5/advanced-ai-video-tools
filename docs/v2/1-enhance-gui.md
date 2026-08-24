@@ -674,6 +674,7 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Confirmed the supported host reports macOS 26.5.2, arm64, and Apple M5 Max.
 - Launched `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run ai-video-tools gui`; Qt multimedia initialized successfully and the process entered the native event loop.
 - The current execution shell could not expose the application window to macOS window capture (`screencapture` reported that no display image was available), so minimum-size, native-dialog, high-DPI, and VoiceOver observations remain unverified and the manual-acceptance checkboxes stay open.
+- Repeated the native launch on 2026-08-24; Qt multimedia initialized and the GUI event loop stayed active, but System Events and `screencapture` still could not access a display window. No screenshot was generated.
 
 ### Phase 1 verification hardening slice — completed
 
