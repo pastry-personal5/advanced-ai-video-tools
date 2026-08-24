@@ -399,6 +399,50 @@ def test_trash_is_blocked_when_source_is_in_active_queue_intent(qt_app: QApplica
     assert messages == ["Cannot move source clip to Trash because it is already queued: clip.mov"]
 
 
+def test_trash_provider_exception_preserves_source(qt_app: QApplication, tmp_path: Path) -> None:
+    """An OS Trash provider exception fails closed without list mutation."""
+
+    del qt_app
+    path = tmp_path / "clip.mov"
+    path.touch()
+
+    def raising_mover(_path: str) -> bool:
+        raise OSError("Trash service unavailable")
+
+    editor = JobEditor(ApplicationSettings(), trash_service=SourceClipTrashService(raising_mover))
+    editor.add_inputs((path,))
+    menu_button = editor.findChild(QToolButton, "sourceClipMenuButton")
+    assert menu_button is not None
+    messages: list[str] = []
+    editor.message.connect(messages.append)
+    menu = editor._item_menu(editor.inputs.item(0), menu_button)  # pylint: disable=protected-access
+    menu.actions()[2].trigger()
+
+    assert editor.input_paths() == (path,)
+    assert path.exists()
+    assert messages == ["Could not move source clip to Trash: clip.mov"]
+
+
+def test_queue_lookup_exception_blocks_trash_fail_closed(qt_app: QApplication, tmp_path: Path) -> None:
+    """A queue-state lookup failure cannot authorize a destructive action."""
+
+    del qt_app
+    path = tmp_path / "clip.mov"
+    path.touch()
+    editor = JobEditor(ApplicationSettings(), queued_inputs=lambda: (_ for _ in ()).throw(RuntimeError("queue unavailable")))
+    editor.add_inputs((path,))
+    menu_button = editor.findChild(QToolButton, "sourceClipMenuButton")
+    assert menu_button is not None
+    messages: list[str] = []
+    editor.message.connect(messages.append)
+    menu = editor._item_menu(editor.inputs.item(0), menu_button)  # pylint: disable=protected-access
+    menu.actions()[2].trigger()
+
+    assert editor.input_paths() == (path,)
+    assert path.exists()
+    assert messages == ["Could not verify whether source clip is safe to move to Trash: clip.mov"]
+
+
 def test_long_source_filename_is_elided_and_remove_control_is_compact(qt_app: QApplication, tmp_path: Path) -> None:
     """Long names elide in the row and the minus remove control stays compact."""
 

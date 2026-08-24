@@ -622,7 +622,8 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Extracted filesystem Trash business rules into `gui.source_clip_actions.SourceClipTrashService`.
 - `JobEditor` receives the current active queue input paths from `MainWindow`; Trash is blocked for clips referenced by queued, validating, running, or cancelling jobs before any OS filesystem call.
 - The blocked operation preserves editor intent and emits a concise Global Messages-ready notice; terminal completed, failed, and cancelled jobs do not block a new Trash request.
-- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 212 passed; Black, Pylint, and pycodestyle passed.
+- Trash authorization fails closed if queue-state lookup, path canonicalization, file validation, or the OS Trash provider raises an error; no source row or filesystem state is changed in those cases.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 214 passed; Black, Pylint, and pycodestyle passed.
 - Widened the source clip list maximum from 623 px to 673 px, adding 25 px of room on each side for filenames and row actions.
 
 ### Source-list reorder controls slice — completed

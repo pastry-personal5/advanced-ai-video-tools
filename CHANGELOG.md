@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added a per-row vertical-ellipsis menu with `Open in Filesystem` and `Move to Trash` actions.
 - Made Trash handling duplicate-safe: successful moves remove all canonical duplicate references, while failed or unavailable-file operations preserve list intent.
 - Added `SourceClipTrashService` to guard Trash operations; clips referenced by queued, validating, running, or cancelling jobs cannot be moved and emit a Global Messages notice.
+- Hardened Trash guards to fail closed on queue-state lookup failures, path-resolution errors, missing files, and OS Trash-provider exceptions.
 - Unified the dark GUI's surface, field, button, list, progress, tab, and scrollbar treatment around the approved 8 px spacing grid, 32 px controls, and shared corner radii.
 - Unified the horizontal major-region gap between Basic Settings→Source Clips and Source Clips→Preview at 32 px.
 - Rebalanced Job Creation columns by widening the source-clip list allowance by 100 px and narrowing the preview minimum width by 100 px.

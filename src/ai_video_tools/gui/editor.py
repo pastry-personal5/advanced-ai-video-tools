@@ -417,7 +417,12 @@ class JobEditor(QWidget):
         if row < 0 or row >= len(self._paths):
             return
         path = self._paths[row]
-        result = self._trash_service.move_to_trash(path, self._queued_inputs())
+        try:
+            queued_inputs = self._queued_inputs()
+        except (OSError, RuntimeError, ValueError):
+            self.message.emit(f"Could not verify whether source clip is safe to move to Trash: {path.name}")
+            return
+        result = self._trash_service.move_to_trash(path, queued_inputs)
         if not result.moved:
             self.message.emit(result.message)
             return

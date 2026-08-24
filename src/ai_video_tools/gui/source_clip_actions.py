@@ -37,11 +37,18 @@ class SourceClipTrashService:
     def move_to_trash(self, path: Path, queued_inputs: Iterable[Path] = ()) -> TrashMoveResult:
         """Move a source to Trash unless active queue intent references it."""
 
-        canonical = self.canonical_path(path)
-        if any(self.canonical_path(candidate) == canonical for candidate in queued_inputs):
-            return TrashMoveResult(False, f"Cannot move source clip to Trash because it is already queued: {path.name}")
-        if not path.is_file():
+        try:
+            canonical = self.canonical_path(path)
+            if any(self.canonical_path(candidate) == canonical for candidate in queued_inputs):
+                return TrashMoveResult(False, f"Cannot move source clip to Trash because it is already queued: {path.name}")
+        except (OSError, RuntimeError, ValueError):
+            return TrashMoveResult(False, f"Could not verify whether source clip is safe to move to Trash: {path.name}")
+        if not path.is_file() or path.is_dir():
             return TrashMoveResult(False, f"Could not move source clip to Trash; file is unavailable: {path.name}")
-        if not self._mover(str(path)):
+        try:
+            moved = self._mover(str(path))
+        except (OSError, RuntimeError, ValueError):
+            moved = False
+        if not moved:
             return TrashMoveResult(False, f"Could not move source clip to Trash: {path.name}")
         return TrashMoveResult(True, f"Moved source clip to Trash: {path.name}")
