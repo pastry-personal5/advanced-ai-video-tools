@@ -4,6 +4,11 @@ All notable changes to Advanced AI Video Tools are documented in this file.
 
 ## [Unreleased] — v2 rename
 
+- Completed Phase 3 stabilization with deterministic failure-path coverage,
+  native presentation and screen-capture acceptance checks, and no-upscaling
+  queue/resource measurements. Performance benchmarks that invoke AI
+  upscaling are disabled.
+
 - Added opt-in Apple Silicon Metal-gated native GUI presentation measurements
   and a macOS `screencapture` acceptance check; neither expands the default
   hardware-independent test suite.

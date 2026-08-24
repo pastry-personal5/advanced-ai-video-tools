@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. This phase was authorized after the Phase 3 proposal in
+Complete. This phase was authorized after the Phase 3 proposal in
 `docs/v2/plans.md` was reviewed. It covers performance, resource ownership,
 lifecycle behavior, and exception/error handling before refactoring.
 
@@ -66,15 +66,32 @@ trusted macOS capture tool and direct window-region capture.
   `tests/test_tools.py` (including denied prerequisite launch),
   `tests/test_preflight.py`, `tests/test_queue.py`,
   `tests/test_pipeline.py`, and `tests/test_gui.py`.
-- [ ] Measure queue cancellation, shutdown, cleanup, memory stability, and
-  resource ownership against the proposed Phase 3 budgets.
+- [x] Measure queue cancellation, shutdown, cleanup, memory stability, and
+  resource ownership against the proposed Phase 3 budgets with a deterministic
+  no-upscaling queue workload.
+
+  Evidence:
+
+  - Ten sequential jobs completed with one maximum active job; mean job time
+    was 0.013140 seconds.
+  - Queued cancellation: 0.000157 seconds. Active cancellation: 0.000188
+    seconds. Shutdown with active and pending jobs: 0.000097 seconds.
+  - Destination claims were released after shutdown (`0` remaining), and the
+    queue worker joined successfully. Workspace cleanup invariants remain
+    covered by `tests/test_pipeline.py` and `tests/test_workspaces.py`.
+  - Per-job Python allocation peak rose from 15,538 to 96,811 bytes, an
+    81,273-byte increase (523.06%). This is below the charter's 100 MB minimum
+    tolerance; process peak RSS was 41,353,216 bytes. The queue intentionally
+    retains terminal outcomes for session history.
+  - The workload used only `ControlledRunner`; it launched no FFmpeg,
+    FFprobe, Real-ESRGAN, or upscaling stage.
 - [x] Disable AI-upscaling performance workloads. The historical one-off
   Real-ESRGAN run is retained only as superseded evidence and is not an active
   benchmark, acceptance target, or regression baseline.
 - [x] Run `make check` and resolve any failures before marking this phase
   complete.
 
-The repository-side Phase 3 slice and native presentation checks are validated.
-No active performance benchmark invokes upscaling. Phase 3 must not be marked
-complete until the separate memory/resource campaign is recorded, followed by
-a final documentation review.
+The repository-side Phase 3 slice, native presentation checks, and
+no-upscaling lifecycle/resource campaign are validated. No active performance
+benchmark invokes upscaling. The Phase 3 documentation review is complete;
+Phase 4 remains provisional and requires separate approval before work begins.

@@ -38,11 +38,11 @@ The new project name, rename compatibility policy, and exact scope of later phas
 | --- | --- | --- | --- |
 | 1 | [Enhance GUI](1-enhance-gui.md) | Complete | A clearer, more accessible, native macOS workflow over the existing backend |
 | 2 | [Rename Project](2-rename-project.md) | Complete | Apply the approved identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
-| 3 | Stabilization | In progress | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
+| 3 | Stabilization | Complete | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
 | 4 | Refactoring | Proposed | Improve code readability and maintainability without weakening approved behavior |
 | 5 | Stabilization and release | Proposed | Re-verify behavior after refactoring and produce the v2 release artifacts |
 
-Phase 2 is complete after Phase 1. Phase 3 is now in progress under [Phase 3 — Stabilization](3-stabilization.md); Phases 4–5 remain provisional.
+Phase 2 is complete after Phase 1. Phase 3 is complete under [Phase 3 — Stabilization](3-stabilization.md); Phases 4–5 remain provisional.
 
 ## Cross-phase decisions still required
 
@@ -185,3 +185,4 @@ A phase is complete only when:
 | 2026-08-24 | Approve distribution outside the Mac App Store using Developer ID distribution via `.dmg`; defer execution of signing/notarization to the human release checklist. |
 | 2026-08-25 | Begin Phase 3 stabilization, including the proposed performance and exception/error-handling charter, while retaining opt-in native and benchmark checks. |
 | 2026-08-25 | Disable performance benchmarks that include AI upscaling; performance measurements are limited to native GUI presentation or explicitly non-upscaling media work. |
+| 2026-08-25 | Complete Phase 3 stabilization after the documented regression, native presentation, no-upscaling lifecycle/resource, and documentation checks. |
