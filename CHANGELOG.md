@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Set the temporary v2 GUI display identity to `Advanced AI Video Tools` while retaining the existing organization/storage identity for the later rename phase.
 - Replaced navigation-rail text glyphs with app-owned monochrome vector icons and added resolved-tool feedback after successful Preferences validation.
+- Matched the horizontal inset between the navigation rail and Basic Settings to the rail's application-edge inset (8 px).
+- Removed the duplicate creation-view left inset so the visible rail-button-to-Basic Settings gap is 8 px rather than 16 px.
+- Added an 8 px outer inset around each Basic Settings group while retaining 16 px separation and existing internal group padding.
+- Added a titled `Job Queue` panel around the monitoring table with the same heading and padding treatment as `Basic Settings`.
+- Removed the redundant `No actions available` and `Diagnostics: …` rows from Queue Monitoring; control state and selected-job details remain authoritative.
+- Replaced the source-list `Remove` button and filesystem Trash action with an app-owned minus-in-circle button on each clip row that removes only the list item.
+- Added a per-row vertical-ellipsis menu with `Open in Filesystem` and `Move to Trash` actions.
+- Made Trash handling duplicate-safe: successful moves remove all canonical duplicate references, while failed or unavailable-file operations preserve list intent.
+- Added `SourceClipTrashService` to guard Trash operations; clips referenced by queued, validating, running, or cancelling jobs cannot be moved and emit a Global Messages notice.
 - Unified the dark GUI's surface, field, button, list, progress, tab, and scrollbar treatment around the approved 8 px spacing grid, 32 px controls, and shared corner radii.
 - Unified the horizontal major-region gap between Basic Settings→Source Clips and Source Clips→Preview at 32 px.
 - Rebalanced Job Creation columns by widening the source-clip list allowance by 100 px and narrowing the preview minimum width by 100 px.

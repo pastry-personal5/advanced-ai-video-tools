@@ -31,6 +31,7 @@ class MainWindow(QMainWindow):
         # Declarative widget construction is intentionally kept together.
         # pylint: disable=too-many-statements
         super().__init__()
+        del log_path
         self._model = model
         self._settings = settings
         self._submission = submission
@@ -43,7 +44,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(GUI_DISPLAY_NAME)
         self.setMinimumSize(1400, 880)
 
-        self.editor = JobEditor(settings)
+        self.editor = JobEditor(settings, queued_inputs=self._queued_source_paths)
         self.source_preview = SourcePreviewPane(muted=settings.preview_muted, volume=settings.preview_volume)
         edit_menu = self.menuBar().addMenu("Edit")
         self.preferences_action = QAction("Preferences", self)
@@ -63,6 +64,12 @@ class MainWindow(QMainWindow):
         self.job_list.setColumnWidth(2, 120)
         self.job_list.setAlternatingRowColors(True)
         self.job_list.setAccessibleName("Processing jobs")
+        job_queue_group = QGroupBox("Job Queue")
+        job_queue_group.setObjectName("jobQueueGroup")
+        job_queue_layout = QVBoxLayout(job_queue_group)
+        job_queue_layout.setContentsMargins(SPACE_3, SPACE_4, SPACE_3, SPACE_3)
+        job_queue_layout.setSpacing(SPACE_2)
+        job_queue_layout.addWidget(self.job_list)
         self.status_label = QLabel("No jobs have been submitted.")
         self.status_label.setObjectName("statusLabel")
         self.status_label.setWordWrap(True)
@@ -87,13 +94,6 @@ class MainWindow(QMainWindow):
         self.move_down_button.setObjectName("moveDownButton")
         self.cancel_button = QPushButton("Cancel Job")
         self.cancel_button.setObjectName("cancelButton")
-        self.action_summary = QLabel("No actions available")
-        self.action_summary.setObjectName("jobActionSummary")
-        self.action_summary.setWordWrap(True)
-        log_label = QLabel(f"Diagnostics: {log_path}" if log_path is not None else "Diagnostics log is not configured")
-        log_label.setObjectName("logPathLabel")
-        log_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        log_label.setWordWrap(True)
         details = QGroupBox("Selected Job")
         details.setObjectName("selectedJobDetails")
         details_layout = QFormLayout(details)
@@ -114,7 +114,9 @@ class MainWindow(QMainWindow):
 
         creation_page = QWidget()
         creation_layout = QVBoxLayout(creation_page)
-        creation_layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
+        # The rail already owns the horizontal edge inset. Removing a second
+        # left inset keeps the visible button-to-panel gap optically symmetric.
+        creation_layout.setContentsMargins(0, SPACE_4, SPACE_4, SPACE_4)
         creation_content = QHBoxLayout()
         creation_content.setContentsMargins(0, 0, 0, 0)
         creation_content.setSpacing(MAJOR_REGION_GAP)
@@ -125,7 +127,7 @@ class MainWindow(QMainWindow):
         monitoring_layout = QVBoxLayout(monitoring_page)
         monitoring_layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
         monitoring_layout.setSpacing(SPACE_3)
-        monitoring_layout.addWidget(self.job_list, 1)
+        monitoring_layout.addWidget(job_queue_group, 1)
         monitoring_layout.addWidget(details)
         monitoring_layout.addWidget(self.overall_progress)
         monitoring_layout.addWidget(self.progress)
@@ -137,8 +139,6 @@ class MainWindow(QMainWindow):
         controls.addStretch(1)
         controls.addWidget(self.cancel_button)
         monitoring_layout.addLayout(controls)
-        monitoring_layout.addWidget(self.action_summary)
-        monitoring_layout.addWidget(log_label)
 
         self.view_stack = QStackedWidget()
         self.view_stack.setObjectName("mainViewStack")
@@ -267,6 +267,17 @@ class MainWindow(QMainWindow):
         paths = self.editor.input_paths()
         self.source_preview.set_sources(paths, row)
 
+    def _queued_source_paths(self) -> tuple[Path, ...]:
+        """Return source paths referenced by jobs that still occupy the queue."""
+
+        active_states = {JobState.QUEUED, JobState.VALIDATING, JobState.RUNNING, JobState.CANCELLING}
+        paths: list[Path] = []
+        for row in range(self._model.rowCount()):
+            snapshot = self._model.snapshot_at(self._model.index(row, 0))
+            if snapshot is not None and snapshot.state in active_states:
+                paths.extend(snapshot.request.inputs)
+        return tuple(paths)
+
     def _select_source_relative(self, offset: int) -> None:
         """Navigate source selection without changing concat order."""
 
@@ -376,7 +387,6 @@ class MainWindow(QMainWindow):
             self.cancel_button.setEnabled(False)
             self.move_up_button.setEnabled(False)
             self.move_down_button.setEnabled(False)
-            self.action_summary.setText("No actions available")
             self.job_name_value.setText("No job selected")
             self.job_state_value.setText("No job selected")
             self.job_stage_value.setText("No job selected")
@@ -413,16 +423,6 @@ class MainWindow(QMainWindow):
         position = self._model.data(index, int(JobRole.QUEUE_POSITION))
         self.move_up_button.setEnabled(position is not None and int(position) > 0)
         self.move_down_button.setEnabled(position is not None and int(position) + 1 < self._model.pending_count)
-        actions: list[str] = []
-        if self.cancel_button.isEnabled():
-            actions.append("Cancel Job")
-        if self.move_up_button.isEnabled():
-            actions.append("Move Up")
-        if self.move_down_button.isEnabled():
-            actions.append("Move Down")
-        if str(self._model.data(index, int(JobRole.STATE))) in {JobState.CANCELLED.value, JobState.FAILED.value}:
-            actions.append("Remove")
-        self.action_summary.setText(f"Available actions: {', '.join(actions)}" if actions else "No actions available")
         self.message_widget.select_job(str(self._model.data(index, int(JobRole.JOB_ID))), activate=activate_job_tab)
 
     @Slot()

@@ -116,7 +116,7 @@ This phase enhances the GUI; it does not redesign the media pipeline.
   - Navigation rail: `Job Creation` (document-plus) and `Queue Monitoring` (stacked list).
   - Source preview: `Play/Pause`, `First frame` (bar plus single-left triangle), `Last frame` (single-right triangle plus bar), `Previous clip` (double-left triangles), and `Next clip` (double-right triangles).
   - Queue: `Remove` (trash) for cancelled and failed rows only.
-- Keep source-list actions (`Add Clips…`, `Remove`, `Move Up`, `Move Down`) and `Edit` → `Preferences` text-labeled rather than adding extra icon-only controls. Do not add status/severity icons in v2.
+- Keep source-list actions (`Add Clips…`, `Move Up`, `Move Down`) text-labeled; use one app-owned minus-in-circle icon per populated row to remove that clip from the list and one vertical-ellipsis icon for `Open in Filesystem` and `Move to Trash`. Keep `Edit` → `Preferences` text-labeled and do not add status/severity icons in v2.
 - Draw icons at an 18 px visual mark inside the 32 × 32 px hit area, use the same stroke/fill treatment throughout, and provide accessible names and tooltips independently of the artwork.
 
 ### Source-list input and preview interpretation
@@ -602,13 +602,27 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Made the `Basic Settings` title bold and 4 pt larger, with bold child section labels for Output Directory, Target Height, and AI Upscaler.
 - Added headless regression coverage in `tests/test_gui_submission.py`.
 
-### Source-row Trash action — implemented
+### Source-row remove action — implemented
 
-- Added a right-aligned icon-only Trash action to every populated source row.
-- The action moves the corresponding source file through Qt's OS Trash API before removing it from the editor list; failed moves leave the row intact and report the problem through `Global Messages`.
-- Existing text-labeled `Remove` behavior remains list-only.
-- Added regression coverage with an injected Trash mover in `tests/test_gui_submission.py`.
-- Long source filenames now use middle ellipsis in the row, with the full path retained as a tooltip; each row is constrained to the list viewport, and the Trash control uses a compact 20 px hit area and 10 px icon.
+- Removed the standalone text-labeled `Remove` button from the source-list action row.
+- Added an app-owned monochrome minus-in-circle action to every populated source row; it removes only that clip from the ordered list and never modifies the filesystem.
+- Added regression coverage for row removal, source-order preservation, filename elision, accessible labels, and the absence of the standalone button in `tests/test_gui_submission.py`.
+- Long source filenames use middle ellipsis in the row, with the full path retained as a tooltip; each row remains constrained to the list viewport and the remove control uses a 32 px hit area with a 16 px icon.
+
+### Source-row filesystem menu slice — implemented
+
+- Added a right-aligned vertical-ellipsis button beside each row's minus remove button.
+- Its menu contains `Open in Filesystem`, a separator, and `Move to Trash`; Finder reveal uses the macOS `open -R` process without shell execution, while Trash uses Qt's OS Trash API.
+- If duplicate rows reference the same canonical file, a successful Trash operation removes every affected list entry so no stale intent remains; failed moves leave every duplicate untouched.
+- Missing files and Finder launch failures remain non-destructive and are reported through `Global Messages`.
+- Added headless coverage for menu contents, icon accessibility, duplicate-safe Trash behavior, failure preservation, and list-state updates.
+
+### Queued-source Trash protection slice — implemented
+
+- Extracted filesystem Trash business rules into `gui.source_clip_actions.SourceClipTrashService`.
+- `JobEditor` receives the current active queue input paths from `MainWindow`; Trash is blocked for clips referenced by queued, validating, running, or cancelling jobs before any OS filesystem call.
+- The blocked operation preserves editor intent and emits a concise Global Messages-ready notice; terminal completed, failed, and cancelled jobs do not block a new Trash request.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 212 passed; Black, Pylint, and pycodestyle passed.
 - Widened the source clip list maximum from 623 px to 673 px, adding 25 px of room on each side for filenames and row actions.
 
 ### Source-list reorder controls slice — completed

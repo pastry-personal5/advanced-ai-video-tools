@@ -18,11 +18,12 @@ import yaml
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QSize, QThread, QUrl, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QLabel, QListWidget, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QLabel, QListWidget, QPushButton, QScrollArea, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.editor import EDITOR_SETTINGS_WIDTH, OUTPUT_DIRECTORY_ICON_COLOR, OUTPUT_DIRECTORY_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH, SOURCE_CLIP_ROW_HEIGHT, JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.preflight import GuiPreflightController  # noqa: E402  # pylint: disable=wrong-import-position
+from ai_video_tools.gui.source_clip_actions import SourceClipTrashService  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.submission import JobSubmissionController, PreflightDecision, PreflightDialog  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.theme import CONTROL_HEIGHT, MAJOR_REGION_GAP, SPACE_2, SPACE_3, SPACE_4, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
@@ -247,17 +248,25 @@ def test_editor_uses_shared_spacing_and_control_metrics(qt_app: QApplication, tm
     assert source_group.title() == "Source Clips"
     assert basic_settings.layout().contentsMargins().left() == SPACE_3
     assert basic_settings.layout().contentsMargins().top() == SPACE_4
+    settings_scroll = editor.findChild(QScrollArea, "basicSettingsScroll")
+    assert settings_scroll is not None
+    settings_content_layout = settings_scroll.widget().layout()
+    assert settings_content_layout.contentsMargins().left() == SPACE_2
+    assert settings_content_layout.contentsMargins().right() == SPACE_2
+    assert settings_content_layout.contentsMargins().top() == SPACE_2
+    assert settings_content_layout.contentsMargins().bottom() == SPACE_2
     assert source_group.layout().contentsMargins().left() == SPACE_3
     assert source_group.layout().contentsMargins().top() == SPACE_4
     assert source_group.layout().spacing() == SPACE_2
     assert editor.layout().itemAt(0).layout().spacing() == MAJOR_REGION_GAP
-    assert {button.height() for button in (editor.add_button, editor.remove_button, editor.input_up_button, editor.input_down_button, editor.submit_button, editor.output_button, editor.target_height)} == {CONTROL_HEIGHT}
+    assert {button.height() for button in (editor.add_button, editor.input_up_button, editor.input_down_button, editor.submit_button, editor.output_button, editor.target_height)} == {CONTROL_HEIGHT}
     assert editor.inputs.minimumHeight() == CONTROL_HEIGHT * 5
     assert editor.inputs.sizeHintForRow(0) == SOURCE_CLIP_ROW_HEIGHT
-    trash_button = editor.findChild(QToolButton, "sourceClipTrashButton")
-    assert trash_button is not None
-    assert trash_button.size() == QSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
-    assert trash_button.iconSize() == QSize(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE)
+    remove_button = editor.findChild(QToolButton, "sourceClipRemoveButton")
+    assert remove_button is not None
+    assert remove_button.size() == QSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
+    assert remove_button.iconSize() == QSize(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE)
+    assert editor.findChild(QPushButton, "removeClipButton") is None
     assert "border-radius: 8px" in qt_app.styleSheet()
     assert "border-radius: 6px" in qt_app.styleSheet()
     assert editor.target_height.style().metaObject().className() in {"QStyleSheetStyle", "_ReadableSpinBoxStyle"}
@@ -291,9 +300,9 @@ def test_source_clip_reorder_controls_are_grouped_and_right_aligned(qt_app: QApp
 
     input_controls = source_group.layout().itemAt(1).layout()
     assert input_controls is not None
-    assert [input_controls.itemAt(index).widget() for index in range(2)] == [editor.add_button, editor.remove_button]
-    assert input_controls.itemAt(2).spacerItem() is not None
-    assert input_controls.itemAt(3).widget() is move_controls
+    assert input_controls.itemAt(0).widget() is editor.add_button
+    assert input_controls.itemAt(1).spacerItem() is not None
+    assert input_controls.itemAt(2).widget() is move_controls
 
     editor.resize(1200, 500)
     editor.show()
@@ -302,47 +311,105 @@ def test_source_clip_reorder_controls_are_grouped_and_right_aligned(qt_app: QApp
     editor.close()
 
 
-def test_source_rows_offer_os_trash_action(qt_app: QApplication, tmp_path: Path) -> None:
-    """A row Trash action moves the source file before removing its row."""
+def test_source_rows_offer_minus_remove_action(qt_app: QApplication, tmp_path: Path) -> None:
+    """A row minus-circle action removes only the source-list item."""
 
     del qt_app
     first = tmp_path / "first.mov"
     second = tmp_path / "second.mov"
     first.touch()
     second.touch()
-    moved: list[str] = []
-
-    def move_to_trash(path: str) -> bool:
-        moved.append(path)
-        return True
-
-    editor = JobEditor(ApplicationSettings(), trash_mover=move_to_trash)
+    editor = JobEditor(ApplicationSettings())
     editor.add_inputs((first, second))
-    buttons = editor.findChildren(QToolButton, "sourceClipTrashButton")
+    buttons = editor.findChildren(QToolButton, "sourceClipRemoveButton")
     assert len(buttons) == 2
-    assert buttons[1].accessibleName() == "Move second.mov to Trash"
+    assert buttons[1].accessibleName() == "Remove second.mov from source clips"
 
     messages: list[str] = []
     editor.message.connect(messages.append)
     buttons[1].click()
 
-    assert moved == [str(second)]
+    assert second.exists()
     assert editor.input_paths() == (first,)
-    assert editor.inputs.item(0).text() == ""
-    assert messages == ["Moved source clip to Trash: second.mov"]
+    assert messages == ["Removed source clip: second.mov"]
 
 
-def test_long_source_filename_is_elided_and_trash_control_is_compact(qt_app: QApplication, tmp_path: Path) -> None:
-    """Long names elide in the row and the Trash control stays compact."""
+def test_source_row_overflow_menu_offers_filesystem_and_trash_actions(qt_app: QApplication, tmp_path: Path) -> None:
+    """The per-row overflow menu exposes Finder reveal and OS Trash actions."""
+
+    del qt_app
+    path = tmp_path / "clip.mov"
+    path.touch()
+    editor = JobEditor(ApplicationSettings(), trash_service=SourceClipTrashService(lambda _path: True))
+    editor.add_inputs((path, path))
+    menu_button = editor.findChild(QToolButton, "sourceClipMenuButton")
+    assert menu_button is not None
+    assert not menu_button.icon().isNull()
+    messages: list[str] = []
+    editor.message.connect(messages.append)
+    menu = editor._item_menu(editor.inputs.item(0), menu_button)  # pylint: disable=protected-access
+    assert [action.text() for action in menu.actions()] == ["Open in Filesystem", "", "Move to Trash"]
+    menu.actions()[2].trigger()
+    assert not editor.input_paths()
+    assert path.exists()
+    assert messages == ["Moved source clip to Trash: clip.mov and removed 2 list entries."]
+
+
+def test_trash_failure_preserves_duplicate_source_rows(qt_app: QApplication, tmp_path: Path) -> None:
+    """A failed OS Trash operation cannot silently discard duplicate intent."""
+
+    del qt_app
+    path = tmp_path / "clip.mov"
+    path.touch()
+    editor = JobEditor(ApplicationSettings(), trash_service=SourceClipTrashService(lambda _path: False))
+    editor.add_inputs((path, path))
+    menu_button = editor.findChild(QToolButton, "sourceClipMenuButton")
+    assert menu_button is not None
+    messages: list[str] = []
+    editor.message.connect(messages.append)
+    menu = editor._item_menu(editor.inputs.item(0), menu_button)  # pylint: disable=protected-access
+    menu.actions()[2].trigger()
+
+    assert editor.input_paths() == (path, path)
+    assert messages == ["Could not move source clip to Trash: clip.mov"]
+
+
+def test_trash_is_blocked_when_source_is_in_active_queue_intent(qt_app: QApplication, tmp_path: Path) -> None:
+    """Queued source intent blocks Trash and emits a global-ready message."""
+
+    del qt_app
+    path = tmp_path / "clip.mov"
+    path.touch()
+    calls: list[str] = []
+    editor = JobEditor(
+        ApplicationSettings(),
+        trash_service=SourceClipTrashService(lambda value: calls.append(value) or True),
+        queued_inputs=lambda: (path,),
+    )
+    editor.add_inputs((path,))
+    menu_button = editor.findChild(QToolButton, "sourceClipMenuButton")
+    assert menu_button is not None
+    messages: list[str] = []
+    editor.message.connect(messages.append)
+    menu = editor._item_menu(editor.inputs.item(0), menu_button)  # pylint: disable=protected-access
+    menu.actions()[2].trigger()
+
+    assert editor.input_paths() == (path,)
+    assert not calls
+    assert messages == ["Cannot move source clip to Trash because it is already queued: clip.mov"]
+
+
+def test_long_source_filename_is_elided_and_remove_control_is_compact(qt_app: QApplication, tmp_path: Path) -> None:
+    """Long names elide in the row and the minus remove control stays compact."""
 
     path = tmp_path / "a-very-long-source-clip-filename\nthat-needs-elision-in-the-row.mov"
-    editor = JobEditor(ApplicationSettings(), trash_mover=lambda _path: True)
+    editor = JobEditor(ApplicationSettings())
     editor.resize(1200, 500)
     editor.add_inputs((path,))
     editor.show()
     qt_app.processEvents()
     filename = editor.findChild(QLabel, "sourceClipFilename")
-    trash_button = editor.findChild(QToolButton, "sourceClipTrashButton")
+    remove_button = editor.findChild(QToolButton, "sourceClipRemoveButton")
 
     assert filename is not None
     assert editor.inputs.item(0).text() == ""
@@ -357,9 +424,9 @@ def test_long_source_filename_is_elided_and_trash_control_is_compact(qt_app: QAp
     assert filename.parentWidget().height() == editor.inputs.sizeHintForRow(0)
     assert filename.toolTip() == str(path)
     assert editor.input_paths() == (path,)
-    assert trash_button is not None
-    assert trash_button.width() == CONTROL_HEIGHT
-    assert trash_button.iconSize().width() == SOURCE_CLIP_ACTION_ICON_SIZE
+    assert remove_button is not None
+    assert remove_button.width() == CONTROL_HEIGHT
+    assert remove_button.iconSize().width() == SOURCE_CLIP_ACTION_ICON_SIZE
     editor.close()
 
 

@@ -26,7 +26,7 @@ from ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # p
 from ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.preview import VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, SourcePreviewPane  # noqa: E402  # pylint: disable=wrong-import-position
-from ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
+from ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
 from ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot  # noqa: E402  # pylint: disable=wrong-import-position
@@ -208,6 +208,10 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     assert window.minimumWidth() == 1400
     assert window.minimumHeight() == 880
     assert window.job_list.height() == 240
+    job_queue_group = window.findChild(QGroupBox, "jobQueueGroup")
+    assert job_queue_group is not None
+    assert job_queue_group.title() == "Job Queue"
+    assert job_queue_group.layout().contentsMargins().left() == 16
 
     window.job_list.setCurrentIndex(model.index(0, 0))
     qt_app.processEvents()
@@ -221,7 +225,8 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     assert window.overall_progress.value() > 0
     assert window.overall_progress.format().startswith("Whole job:")
     assert window.cancel_button.isEnabled()
-    assert "Cancel Job" in window.action_summary.text()
+    assert window.findChild(QLabel, "jobActionSummary") is None
+    assert window.findChild(QLabel, "logPathLabel") is None
     window.cancel_button.click()
     assert queue.cancelled == ["first"]
 
@@ -363,6 +368,14 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.queue_monitoring_button.minimumHeight() == 64
     left_gap = window.job_creation_button.geometry().left()
     right_gap = window.navigation_rail.width() - window.job_creation_button.geometry().right() - 1
+    basic_settings = window.editor.findChild(QGroupBox, "basicSettings")
+    assert basic_settings is not None
+    rail_origin = window.navigation_rail.mapTo(window, window.navigation_rail.rect().topLeft())
+    basic_origin = basic_settings.mapTo(window, basic_settings.rect().topLeft())
+    assert basic_origin.x() - (rail_origin.x() + window.navigation_rail.width()) == 0
+    button_origin = window.job_creation_button.mapTo(window, window.job_creation_button.rect().topLeft())
+    assert basic_origin.x() - (button_origin.x() + window.job_creation_button.width()) == SPACE_2
+    assert left_gap == right_gap == SPACE_2
     assert left_gap == 8
     assert right_gap == 8
     assert window.view_stack.geometry().left() - window.navigation_rail.geometry().right() - 1 == 0

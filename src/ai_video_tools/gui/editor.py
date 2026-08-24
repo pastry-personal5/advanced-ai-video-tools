@@ -9,11 +9,12 @@ from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QFile, QSize, Qt, Signal, Slot
+from PySide6.QtCore import QProcess, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QIcon, QPainter, QPixmap, QShowEvent
-from PySide6.QtWidgets import QFileDialog, QGroupBox, QHBoxLayout, QLabel, QListWidget, QLineEdit, QListWidgetItem, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QStyle, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFileDialog, QGroupBox, QHBoxLayout, QLabel, QListWidget, QLineEdit, QListWidgetItem, QMenu, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QStyle, QToolButton, QVBoxLayout, QWidget
 
 from ai_video_tools.core.models import JobRequest
+from ai_video_tools.gui.source_clip_actions import SourceClipTrashService
 from ai_video_tools.gui.theme import CONTROL_HEIGHT, MAJOR_REGION_GAP, SPACE_1, SPACE_2, SPACE_3, SPACE_4
 from ai_video_tools.storage.naming import automatic_output_basename
 from ai_video_tools.system.settings import ApplicationSettings
@@ -47,6 +48,37 @@ def _light_gray_standard_icon(style: QStyle, standard_pixmap: QStyle.StandardPix
     painter.fillRect(tinted.rect(), QColor(OUTPUT_DIRECTORY_ICON_COLOR))
     painter.end()
     return QIcon(tinted)
+
+
+def _minus_circle_icon() -> QIcon:
+    """Create the app-owned monochrome row-remove icon."""
+
+    icon = QPixmap(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE)
+    icon.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(icon)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(QColor(OUTPUT_DIRECTORY_ICON_COLOR))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawEllipse(1, 1, SOURCE_CLIP_ACTION_ICON_SIZE - 2, SOURCE_CLIP_ACTION_ICON_SIZE - 2)
+    painter.drawLine(4, SOURCE_CLIP_ACTION_ICON_SIZE // 2, SOURCE_CLIP_ACTION_ICON_SIZE - 4, SOURCE_CLIP_ACTION_ICON_SIZE // 2)
+    painter.end()
+    return QIcon(icon)
+
+
+def _vertical_dots_icon() -> QIcon:
+    """Create the app-owned monochrome overflow icon."""
+
+    icon = QPixmap(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE)
+    icon.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(icon)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(OUTPUT_DIRECTORY_ICON_COLOR))
+    center = SOURCE_CLIP_ACTION_ICON_SIZE // 2
+    for offset in (-4, 0, 4):
+        painter.drawEllipse(center - 1, center + offset - 1, 2, 2)
+    painter.end()
+    return QIcon(icon)
 
 
 def _vertically_center_pixmap_ink(source: QPixmap) -> QPixmap:
@@ -118,14 +150,15 @@ class JobEditor(QWidget):
     request_ready = Signal(object)
     message = Signal(str)
 
-    def __init__(self, settings: ApplicationSettings, *, clock: Callable[[], datetime] = _local_now, trash_mover: Callable[[str], bool] | None = None, parent: QWidget | None = None) -> None:
+    def __init__(self, settings: ApplicationSettings, *, clock: Callable[[], datetime] = _local_now, trash_service: SourceClipTrashService | None = None, queued_inputs: Callable[[], tuple[Path, ...]] | None = None, parent: QWidget | None = None) -> None:
         # Declarative widget construction is intentionally kept together.
         # pylint: disable=too-many-statements
         super().__init__(parent)
         self.setAcceptDrops(True)
         self._settings = settings
         self._clock = clock
-        self._trash_mover = trash_mover or QFile.moveToTrash
+        self._trash_service = trash_service or SourceClipTrashService()
+        self._queued_inputs = queued_inputs or (lambda: ())
         self._paths: list[Path] = []
 
         self.inputs = QListWidget()
@@ -139,13 +172,11 @@ class JobEditor(QWidget):
 
         self.add_button = QPushButton("Add Clips…")
         self.add_button.setObjectName("addClipsButton")
-        self.remove_button = QPushButton("Remove")
-        self.remove_button.setObjectName("removeClipButton")
         self.input_up_button = QPushButton("Move Up")
         self.input_up_button.setObjectName("inputUpButton")
         self.input_down_button = QPushButton("Move Down")
         self.input_down_button.setObjectName("inputDownButton")
-        for button in (self.add_button, self.remove_button, self.input_up_button, self.input_down_button):
+        for button in (self.add_button, self.input_up_button, self.input_down_button):
             button.setFixedHeight(CONTROL_HEIGHT)
 
         self.source_clip_move_controls = QWidget()
@@ -162,7 +193,6 @@ class JobEditor(QWidget):
         input_controls.setContentsMargins(0, 0, 0, 0)
         input_controls.setSpacing(SPACE_2)
         input_controls.addWidget(self.add_button)
-        input_controls.addWidget(self.remove_button)
         input_controls.addStretch(1)
         input_controls.addWidget(self.source_clip_move_controls, alignment=Qt.AlignmentFlag.AlignRight)
 
@@ -233,7 +263,9 @@ class JobEditor(QWidget):
         settings_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         settings_content = QWidget()
         settings_content_layout = QVBoxLayout(settings_content)
-        settings_content_layout.setContentsMargins(0, 0, 0, 0)
+        # Give each titled group a visible breathing room inside the scroll
+        # surface; group-internal padding remains responsible for its fields.
+        settings_content_layout.setContentsMargins(SPACE_2, SPACE_2, SPACE_2, SPACE_2)
         settings_content_layout.setSpacing(SPACE_3)
         settings_content_layout.addWidget(output_group)
         settings_content_layout.addWidget(target_group)
@@ -270,7 +302,6 @@ class JobEditor(QWidget):
         self.setLayout(outer)
 
         self.add_button.clicked.connect(self._choose_inputs)
-        self.remove_button.clicked.connect(self.remove_selected)
         self.input_up_button.clicked.connect(lambda: self.move_selected(-1))
         self.input_down_button.clicked.connect(lambda: self.move_selected(1))
         self.output_button.clicked.connect(self._choose_output_directory)
@@ -294,7 +325,7 @@ class JobEditor(QWidget):
         self._update_input_controls()
 
     def _rebuild_input_rows(self, selected_row: int) -> None:
-        """Render filename rows with a right-aligned per-row Trash action."""
+        """Render filename rows with a right-aligned per-row remove action."""
 
         self.inputs.clear()
         for path in self._paths:
@@ -314,34 +345,95 @@ class JobEditor(QWidget):
             filename.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             filename.setToolTip(str(path))
             row_layout.addWidget(filename, 1)
-            trash_button = QToolButton()
-            trash_button.setObjectName("sourceClipTrashButton")
-            trash_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
-            trash_button.setAccessibleName(f"Move {path.name} to Trash")
-            trash_button.setToolTip(f"Move {path.name} to Trash")
-            trash_button.setIconSize(QSize(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE))
-            trash_button.setFixedSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
-            trash_button.clicked.connect(lambda _checked=False, current_item=item: self._move_item_to_trash(current_item))
-            row_layout.addWidget(trash_button)
+            remove_button = QToolButton()
+            remove_button.setObjectName("sourceClipRemoveButton")
+            remove_button.setIcon(_minus_circle_icon())
+            remove_button.setAccessibleName(f"Remove {path.name} from source clips")
+            remove_button.setToolTip(f"Remove {path.name} from source clips")
+            remove_button.setIconSize(QSize(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE))
+            remove_button.setFixedSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
+            remove_button.clicked.connect(lambda _checked=False, current_item=item: self._remove_item(current_item))
+            row_layout.addWidget(remove_button)
+            menu_button = QToolButton()
+            menu_button.setObjectName("sourceClipMenuButton")
+            menu_button.setIcon(_vertical_dots_icon())
+            menu_button.setAccessibleName(f"More actions for {path.name}")
+            menu_button.setToolTip(f"More actions for {path.name}")
+            menu_button.setIconSize(QSize(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE))
+            menu_button.setFixedSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
+            menu_button.clicked.connect(lambda _checked=False, current_item=item, anchor=menu_button: self._show_item_menu(current_item, anchor))
+            row_layout.addWidget(menu_button)
             self.inputs.setItemWidget(item, row)
         if self._paths:
             self.inputs.setCurrentRow(max(0, min(selected_row, len(self._paths) - 1)))
 
     @Slot()
-    def _move_item_to_trash(self, item: QListWidgetItem) -> None:
-        """Move one source file to the OS Trash before removing its row."""
+    def _remove_item(self, item: QListWidgetItem) -> None:
+        """Remove one source clip from the ordered list without filesystem effects."""
 
         row = self.inputs.row(item)
         if row < 0 or row >= len(self._paths):
             return
         path = self._paths[row]
-        if not self._trash_mover(str(path)):
-            self.message.emit(f"Could not move source clip to Trash: {path.name}")
-            return
         self._paths.pop(row)
         self._rebuild_input_rows(min(row, len(self._paths) - 1))
         self._update_input_controls()
-        self.message.emit(f"Moved source clip to Trash: {path.name}")
+        self.message.emit(f"Removed source clip: {path.name}")
+
+    def _show_item_menu(self, item: QListWidgetItem, anchor: QToolButton) -> None:
+        """Show filesystem actions for one source row."""
+
+        menu = self._item_menu(item, anchor)
+        menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+
+    def _item_menu(self, item: QListWidgetItem, anchor: QToolButton) -> QMenu:
+        """Build the source-row filesystem menu for testing and presentation."""
+
+        del anchor
+        menu = QMenu(self)
+        open_action = menu.addAction("Open in Filesystem")
+        menu.addSeparator()
+        trash_action = menu.addAction("Move to Trash")
+        open_action.triggered.connect(lambda: self._open_in_filesystem(item))
+        trash_action.triggered.connect(lambda: self._move_item_to_trash(item))
+        return menu
+
+    def _open_in_filesystem(self, item: QListWidgetItem) -> None:
+        """Ask macOS Finder to reveal the source file."""
+
+        row = self.inputs.row(item)
+        if 0 <= row < len(self._paths):
+            path = self._paths[row]
+            if not path.is_file():
+                self.message.emit(f"Could not open source clip in Filesystem; file is unavailable: {path.name}")
+                return
+            if not QProcess.startDetached("open", ["-R", str(path)]):
+                self.message.emit(f"Could not open source clip in Filesystem: {path.name}")
+
+    def _move_item_to_trash(self, item: QListWidgetItem) -> None:
+        """Move one source file to Trash and remove all duplicate references."""
+
+        row = self.inputs.row(item)
+        if row < 0 or row >= len(self._paths):
+            return
+        path = self._paths[row]
+        result = self._trash_service.move_to_trash(path, self._queued_inputs())
+        if not result.moved:
+            self.message.emit(result.message)
+            return
+        canonical = self._trash_service.canonical_path(path)
+        removed = sum(self._canonical_source_path(candidate) == canonical for candidate in self._paths)
+        self._paths[:] = [candidate for candidate in self._paths if self._canonical_source_path(candidate) != canonical]
+        self._rebuild_input_rows(min(row, len(self._paths) - 1))
+        self._update_input_controls()
+        entry_word = "entry" if removed == 1 else "entries"
+        self.message.emit(f"{result.message} and removed {removed} list {entry_word}.")
+
+    @staticmethod
+    def _canonical_source_path(path: Path) -> Path:
+        """Normalize source identity for duplicate-safe list operations."""
+
+        return SourceClipTrashService.canonical_path(path)
 
     @staticmethod
     def _local_drop_paths(event: QDragEnterEvent | QDropEvent) -> tuple[Path, ...]:
@@ -425,7 +517,7 @@ class JobEditor(QWidget):
     def set_busy(self, busy: bool) -> None:
         """Prevent overlapping previews while keeping current intent visible."""
 
-        for widget in (self.inputs, self.add_button, self.remove_button, self.input_up_button, self.input_down_button, self.output_directory, self.output_button, self.target_height, self.submit_button):
+        for widget in (self.inputs, self.add_button, self.input_up_button, self.input_down_button, self.output_directory, self.output_button, self.target_height, self.submit_button):
             widget.setEnabled(not busy)
         if not busy:
             self._update_input_controls()
@@ -472,6 +564,5 @@ class JobEditor(QWidget):
     def _update_input_controls(self) -> None:
         row = self.inputs.currentRow()
         count = self.inputs.count()
-        self.remove_button.setEnabled(row >= 0)
         self.input_up_button.setEnabled(row > 0)
         self.input_down_button.setEnabled(0 <= row < count - 1)

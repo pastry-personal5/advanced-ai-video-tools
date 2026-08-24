@@ -216,20 +216,27 @@ QPushButton#submitJobButton:disabled {{
 }}
 
 QToolButton#chooseOutputButton,
-QToolButton#sourceClipTrashButton {{
+QToolButton#sourceClipRemoveButton,
+QToolButton#sourceClipMenuButton {{
     min-width: {CONTROL_HEIGHT - 2}px;
     max-width: {CONTROL_HEIGHT - 2}px;
     padding: 0;
 }}
 
-QToolButton#sourceClipTrashButton {{
+QToolButton#sourceClipRemoveButton,
+QToolButton#sourceClipMenuButton {{
     background: transparent;
     border-color: transparent;
 }}
 
-QToolButton#sourceClipTrashButton:hover {{
-    background: #5c2b29;
-    border-color: #f28b82;
+QToolButton#sourceClipRemoveButton:hover {{
+    background: #3c4043;
+    border-color: #8ab4f8;
+}}
+
+QToolButton#sourceClipMenuButton:hover {{
+    background: #3c4043;
+    border-color: #8ab4f8;
 }}
 
 QListWidget {{
