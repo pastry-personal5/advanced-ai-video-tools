@@ -3,7 +3,7 @@
 ## Status
 
 - Phase: 1
-- State: In progress
+- State: Verification
 - Started: 2026-08-22
 - Released baseline: v1.0.0
 - Target: v2
@@ -192,7 +192,7 @@ message actions.
 
 ### 3. Job editor enhancement
 
-- [ ] Implement the approved layout and field hierarchy.
+- [x] Implement the approved layout and field hierarchy.
 - [x] Remove the two v1 heading labels without changing job state, settings behavior, or External Tools configuration behavior.
 - [x] Add the integrated two-tab message widget at the bottom of the main window and connect it to global and selected-job event streams.
 - [x] Add the far-left two-icon navigation rail and switch between Job Creation and Queue Monitoring views without losing either view's state.
@@ -228,34 +228,34 @@ message actions.
 - [x] Add the approved selected-job details surface.
 - [x] Distinguish measured determinate progress from indeterminate work.
 - [x] Make legal actions obvious for each job state and guard illegal transitions.
-- [ ] Implement the approved session-history policy and omit retry support in v2.
+- [x] Implement the approved session-history policy and omit retry support in v2.
 
 ### 5. Preflight, settings, and diagnostics
 
 - [x] Improve issue grouping and inline presentation without adding severity controls or weakening acknowledgement gates.
-- [ ] Improve external-tool validation status and resolved-tool feedback.
+- [x] Improve external-tool validation status and resolved-tool feedback.
 - [x] Add `Edit` → `Preferences` as a separate settings window for External Tools and remove the main-window `External Tools…` button.
 - [x] Append completed-job messages to `Global Messages` and show session history in each message tab's read-only log widget.
-- [ ] Ensure settings changes continue to affect only future drafts, never frozen queued requests.
+- [x] Ensure settings changes continue to affect only future drafts, never frozen queued requests.
 
 ### 6. Accessibility and macOS polish
 
-- [ ] Preserve native Qt focus behavior and verify accessible names for approved icon controls.
+- [x] Preserve native Qt focus behavior and verify accessible names for approved icon controls.
 - [ ] Verify the always-dark theme and increased-contrast behavior.
 - [ ] Verify resizing, long paths, localization-length expansion, and high-DPI rendering.
 - [ ] Perform native-dialog, dark-theme, and minimum-window checks on supported macOS hardware; no new VoiceOver feature is required in v2.
 
 ### 7. Verification and documentation
 
-- [ ] Add headless GUI tests for every changed critical interaction.
-- [ ] Test dark-theme rendering, Codex-created icon accessibility, file-manager drag-and-drop, and URL/remote-drop rejection.
-- [ ] Test player load, decode, and unsupported-format failures as non-blocking preview states without proxy generation.
+- [x] Add headless GUI tests for every changed critical interaction.
+- [x] Test dark-theme rendering, Codex-created icon accessibility, file-manager drag-and-drop, and URL/remote-drop rejection.
+- [x] Test player load, decode, and unsupported-format failures as non-blocking preview states without proxy generation.
 - [x] Test native preview-as-is rotation behavior, custom target height without presets, Preferences-menu settings access, and removal of the main-window External Tools button.
 - [x] Test queue Status/Job Name columns, completion messages in `Global Messages`, and session history/minimum five-line message widgets.
-- [ ] Test that retry actions are absent for failed and cancelled jobs.
-- [ ] Test width-driven resizing, exact aspect preservation, and native preview rotation behavior.
-- [ ] Add regression tests for thread affinity, state transitions, and frozen job intent.
-- [ ] Run `make check` and record the result below.
+- [x] Test that retry actions are absent for failed and cancelled jobs.
+- [x] Test width-driven resizing, exact aspect preservation, and native preview rotation behavior.
+- [x] Add regression tests for thread affinity, state transitions, and frozen job intent.
+- [x] Run `make check` and record the result below.
 - [ ] Complete the manual macOS acceptance checklist.
 - [ ] Update README, architecture, changelog, screenshots, and this phase status.
 
@@ -674,6 +674,15 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Confirmed the supported host reports macOS 26.5.2, arm64, and Apple M5 Max.
 - Launched `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache uv run ai-video-tools gui`; Qt multimedia initialized successfully and the process entered the native event loop.
 - The current execution shell could not expose the application window to macOS window capture (`screencapture` reported that no display image was available), so minimum-size, native-dialog, high-DPI, and VoiceOver observations remain unverified and the manual-acceptance checkboxes stay open.
+
+### Phase 1 verification hardening slice — completed
+
+- Centralized the temporary v2 display identity as `Advanced AI Video Tools` for the GUI shell while retaining the existing organization/storage identity pending Phase 2 rename decisions.
+- Replaced navigation-rail text glyphs with app-owned 18 px monochrome vector artwork for Job Creation and Queue Monitoring; accessible names and tooltips remain independent of the artwork.
+- Added resolved FFmpeg, FFprobe, Real-ESRGAN, and model-directory feedback to successful tool validation and the Global Messages stream without exposing exact subprocess command lines.
+- Added regression coverage for the display identity, app-owned navigation icons, resolved-tool feedback, and successful validation status.
+- Updated the README and architecture description for Preferences access, Preflight naming, dark two-view shell, selected-source preview, and session-only messages.
+- Validation run: `UV_CACHE_DIR=/private/tmp/ai-videol-tools-uv-cache make check` — 208 passed; Black, Pylint, and pycodestyle passed.
 
 ## Risks
 

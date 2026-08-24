@@ -117,6 +117,7 @@ def test_dialog_resets_overrides_and_persists_only_after_success(qt_app: QApplic
     assert len(saved) == 1 and saved[0].tools == ToolOverrides()
     assert store.load().tools == ToolOverrides()
     assert store.load().target_height == 1080
+    assert "Resolved tools:" in dialog.status.text()
     validator.shutdown()
 
 

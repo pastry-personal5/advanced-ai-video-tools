@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Set the temporary v2 GUI display identity to `Advanced AI Video Tools` while retaining the existing organization/storage identity for the later rename phase.
+- Replaced navigation-rail text glyphs with app-owned monochrome vector icons and added resolved-tool feedback after successful Preferences validation.
 - Unified the dark GUI's surface, field, button, list, progress, tab, and scrollbar treatment around the approved 8 px spacing grid, 32 px controls, and shared corner radii.
 - Unified the horizontal major-region gap between Basic Settings→Source Clips and Source Clips→Preview at 32 px.
 - Rebalanced Job Creation columns by widening the source-clip list allowance by 100 px and narrowing the preview minimum width by 100 px.

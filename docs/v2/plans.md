@@ -32,7 +32,7 @@ The new project name, rename compatibility policy, and exact scope of later phas
 
 | Phase | Title | Status | Outcome |
 | --- | --- | --- | --- |
-| 1 | [Enhance GUI](1-enhance-gui.md) | In progress | A clearer, more accessible, native macOS workflow over the existing backend |
+| 1 | [Enhance GUI](1-enhance-gui.md) | Verification | A clearer, more accessible, native macOS workflow over the existing backend |
 | 2 | [Rename Project](2-rename-project.md) | Active planning; implementation follows Phase 1 | Consistent new identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
 | 3 | v2 stabilization and release | Proposed | Migration verification, target-hardware acceptance, packaging, release notes, and v2.0.0 artifacts |
 

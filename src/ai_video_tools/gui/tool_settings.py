@@ -238,6 +238,7 @@ class ToolSettingsDialog(QDialog):
             self.status.setText(f"Tools passed validation, but settings could not be saved: {error}")
             return
         self._settings = updated
+        self.status.setText("Validated and saved. Resolved tools: " f"FFmpeg {toolchain_value.ffmpeg.path}; FFprobe {toolchain_value.ffprobe.path}; " f"Real-ESRGAN {toolchain_value.realesrgan.path}; models {toolchain_value.model_directory}.")
         self.settings_saved.emit(updated)
         self.accept()
 

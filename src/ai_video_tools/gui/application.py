@@ -14,6 +14,7 @@ from PySide6.QtCore import QCoreApplication, QLockFile, QStandardPaths
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from ai_video_tools.gui.jobs import JobListModel, QueueSnapshotBridge
+from ai_video_tools.gui.identity import GUI_DISPLAY_NAME, GUI_ORGANIZATION_NAME
 from ai_video_tools.gui.preflight import GuiPreflightController
 from ai_video_tools.gui.submission import JobSubmissionController
 from ai_video_tools.gui.theme import apply_dark_theme
@@ -90,16 +91,18 @@ def run_gui(arguments: list[str] | None = None) -> int:
     apply_dark_theme(application)
     instance_lock = _single_instance_lock()
     if not instance_lock.tryLock(0):
-        QMessageBox.warning(None, "AI Video Tools", "AI Video Tools is already running.")
+        QMessageBox.warning(None, GUI_DISPLAY_NAME, f"{GUI_DISPLAY_NAME} is already running.")
         return 1
-    application.setOrganizationName("AI Video Tools")
-    application.setApplicationName("AI Video Tools")
-    application.setApplicationDisplayName("AI Video Tools")
+    application.setOrganizationName(GUI_ORGANIZATION_NAME)
+    # Keep the existing application name so settings/cache locations remain
+    # stable until the explicit Phase 2 migration decision.
+    application.setApplicationName(GUI_ORGANIZATION_NAME)
+    application.setApplicationDisplayName(GUI_DISPLAY_NAME)
     try:
         runtime = create_gui_runtime()
     except SettingsError as error:
         logger.error("GUI startup failed while loading settings: {}", error)
-        QMessageBox.critical(None, "AI Video Tools", f"Could not load application settings:\n{error}")
+        QMessageBox.critical(None, GUI_DISPLAY_NAME, f"Could not load application settings:\n{error}")
         instance_lock.unlock()
         return 1
     application.aboutToQuit.connect(runtime.shutdown)

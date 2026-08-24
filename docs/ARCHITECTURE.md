@@ -40,6 +40,14 @@ per-job stream-drop acknowledgement, queue submission, and non-safety preference
 persistence. Its external-tools editor supports native browsing and reset-to-discovery controls, validates executable launches, model assets, and Vulkan inference off the presentation thread, and atomically persists only a successful override set. The
 implemented boundaries are:
 
+The Phase 1 presentation shell uses a single dark-themed window with a two-view
+navigation rail, a far-right selected-source `QMediaPlayer`/`QVideoWidget`
+preview, and a user-resizable bottom `Global Messages`/`Job Messages` splitter.
+Preview state is presentation-only and accepts existing local editor files; queue
+requests remain frozen typed values. Session messages are timestamped in memory,
+receive queued snapshots through Qt signals, and never expose exact subprocess
+command lines.
+
 - `core.models`: immutable job intent, exact rationals, typed stream inventory,
   issue codes, concat strategy, and frozen execution plans
 - `storage.naming`: timezone-aware automatic names and process-local destination

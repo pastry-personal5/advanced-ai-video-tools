@@ -165,6 +165,12 @@ def test_model_exposes_pending_order_actions_and_terminal_error(qt_app: QApplica
     assert _process_until(qt_app, lambda: model.data(model.index(1, 0), int(JobRole.ERROR)) == "Cancelled by user")
     assert model.data(model.index(1, 0), int(JobRole.MESSAGE)) == "Cancelled"
 
+    failed = _snapshot(tmp_path, "failed", JobState.FAILED, None, revision=1)
+    bridge.forward(failed)
+    assert _process_until(qt_app, lambda: model.rowCount() == 3)
+    assert model.data(model.index(2, 2), int(Qt.ItemDataRole.DisplayRole)) == "Remove"
+    assert all("Retry" not in str(model.data(model.index(row, column), int(Qt.ItemDataRole.DisplayRole))) for row in range(model.rowCount()) for column in range(model.columnCount()))
+
 
 def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication, tmp_path: Path) -> None:
     """The native shell renders measured progress and delegates user actions."""
@@ -177,6 +183,9 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     window = MainWindow(model, ApplicationSettings(target_height=2160), tmp_path / "application.log")
     window.show()
     qt_app.processEvents()
+    assert window.windowTitle() == "Advanced AI Video Tools"
+    assert not window.job_creation_button.icon().isNull()
+    assert not window.queue_monitoring_button.icon().isNull()
     assert window.minimumWidth() == 1400
     assert window.minimumHeight() == 880
     assert window.job_list.height() == 240

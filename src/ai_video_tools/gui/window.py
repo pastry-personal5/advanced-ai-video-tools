@@ -9,12 +9,13 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QModelIndex, Qt, Slot
-from PySide6.QtGui import QAction, QFont
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QAbstractItemView, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QStackedWidget, QTableView, QToolButton, QVBoxLayout, QWidget
 
-from ai_video_tools.core.models import JobState, PipelineStage
+from ai_video_tools.core.models import JobState, PipelineStage, Toolchain
 from ai_video_tools.gui.editor import JobEditor
 from ai_video_tools.gui.jobs import JobListModel, JobRole
+from ai_video_tools.gui.identity import GUI_DISPLAY_NAME
 from ai_video_tools.gui.messages import MessageEvent, MessageWidget
 from ai_video_tools.gui.preview import SourcePreviewPane
 from ai_video_tools.gui.submission import JobSubmissionController
@@ -39,7 +40,7 @@ class MainWindow(QMainWindow):
         self._last_upscale_message_percent: dict[str, int] = {}
         self._preview_processing_job_id: str | None = None
         self._global_shutdown_recorded = False
-        self.setWindowTitle("AI Video Tools")
+        self.setWindowTitle(GUI_DISPLAY_NAME)
         self.setMinimumSize(1400, 880)
 
         self.editor = JobEditor(settings)
@@ -147,8 +148,8 @@ class MainWindow(QMainWindow):
         self.navigation_rail.setObjectName("navigationRail")
         rail_layout = QVBoxLayout(self.navigation_rail)
         rail_layout.setSpacing(SPACE_2)
-        self.job_creation_button = self._navigation_button("✎", "Job Creation", "jobCreationButton")
-        self.queue_monitoring_button = self._navigation_button("☷", "Queue Monitoring", "queueMonitoringButton")
+        self.job_creation_button = self._navigation_button("create", "Job Creation", "jobCreationButton")
+        self.queue_monitoring_button = self._navigation_button("queue", "Queue Monitoring", "queueMonitoringButton")
         rail_layout.setContentsMargins(SPACE_2, SPACE_4, SPACE_2, SPACE_4)
         rail_width = self.job_creation_button.minimumWidth() + (SPACE_2 * 2)
         self.navigation_rail.setFixedWidth(rail_width)
@@ -210,7 +211,7 @@ class MainWindow(QMainWindow):
             submission.settings_changed.connect(self._settings_changed)
             submission.busy_changed.connect(lambda busy: self._append_global("Preflight started." if busy else "Preflight finished."))
         if tool_validator is not None:
-            tool_validator.succeeded.connect(lambda *_: self._append_global("External tools validated."))
+            tool_validator.succeeded.connect(self._tools_validated)
             tool_validator.failed.connect(lambda _overrides, message: self._append_global(f"External-tool validation failed: {message}"))
         self._refresh_selection()
 
@@ -219,7 +220,25 @@ class MainWindow(QMainWindow):
         """Create one accessible, mutually exclusive view-rail control."""
 
         button = QToolButton()
-        button.setText(glyph)
+        icon = QPixmap(18, 18)
+        icon.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(icon)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor("#e8eaed"), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        if glyph == "create":
+            painter.drawRoundedRect(3, 2, 10, 14, 1.5, 1.5)
+            painter.drawLine(6, 6, 10, 6)
+            painter.drawLine(6, 9, 10, 9)
+            painter.drawLine(13, 11, 13, 16)
+            painter.drawLine(10.5, 13.5, 15.5, 13.5)
+        else:
+            for y in (3, 8, 13):
+                painter.drawLine(3, y, 5, y)
+                painter.drawLine(7, y, 15, y)
+        painter.end()
+        button.setIcon(QIcon(icon))
+        button.setIconSize(icon.size())
+        button.setText("")
         button.setObjectName(object_name)
         button.setAccessibleName(label)
         button.setToolTip(label)
@@ -264,6 +283,15 @@ class MainWindow(QMainWindow):
 
     def _append_job(self, job_id: str, text: str) -> None:
         self.message_widget.append(MessageEvent(text, job_id))
+
+    @Slot(object, object)
+    def _tools_validated(self, _overrides: object, toolchain: object) -> None:
+        """Publish resolved tool paths without exposing command lines."""
+
+        if not isinstance(toolchain, Toolchain):
+            self._append_global("External tools validated, but no resolved toolchain was returned.")
+            return
+        self._append_global("External tools validated: " f"FFmpeg {toolchain.ffmpeg.path}; FFprobe {toolchain.ffprobe.path}; " f"Real-ESRGAN {toolchain.realesrgan.path}; models {toolchain.model_directory}.")
 
     def _append_upscale_progress(self, job_id: str, progress: object) -> None:
         """Append a concise upscale summary at 10-percent intervals."""
