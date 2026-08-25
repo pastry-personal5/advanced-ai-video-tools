@@ -698,6 +698,12 @@ Record subsequent completed slices here with links to the relevant modules/tests
 - Native screenshot capture and System Events window inspection are intentionally unavailable under the execution security policy; therefore native pixel appearance, Finder dialog rendering, and VoiceOver observations cannot be claimed as verified.
 - The two manual checklist items remain open as an explicit external-verification limitation rather than being marked passed without evidence.
 
+### Native acceptance rerun — 2026-08-25
+
+- The native Cocoa capture check now passed with `make gui-capture-test` (`1 passed`), confirming that the visible application window can be captured and contains the approved dark surface.
+- The native presentation benchmark passed with `make performance-test` (`1 passed`); it exercised startup/presentation only and launched no media processing or upscaling.
+- Finder-dialog rendering, physical high-DPI appearance, and VoiceOver behavior remain unverified. The capture and benchmark results do not establish those observations.
+
 ### Phase 1 verification hardening slice — completed
 
 - Centralized the temporary v2 display identity as `Advanced AI Video Tools` for the GUI shell while retaining the existing organization/storage identity pending Phase 2 rename decisions.

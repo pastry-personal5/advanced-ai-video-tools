@@ -39,10 +39,10 @@ The new project name, rename compatibility policy, and exact scope of later phas
 | 1 | [Enhance GUI](1-enhance-gui.md) | Complete | A clearer, more accessible, native macOS workflow over the existing backend |
 | 2 | [Rename Project](2-rename-project.md) | Complete | Apply the approved identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
 | 3 | Stabilization | Complete | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
-| 4 | Refactoring | Proposed | Improve code readability and maintainability without weakening approved behavior |
+| 4 | Refactoring | Approved | Improve code readability and maintainability without weakening approved behavior |
 | 5 | Stabilization and release | Proposed | Re-verify behavior after refactoring and produce the v2 release artifacts |
 
-Phase 2 is complete after Phase 1. Phase 3 is complete under [Phase 3 — Stabilization](3-stabilization.md); Phases 4–5 remain provisional.
+Phase 2 is complete after Phase 1. Phase 3 is complete under [Phase 3 — Stabilization](3-stabilization.md); Phase 4 is approved and Phase 5 remains provisional.
 
 ## Cross-phase decisions still required
 
@@ -120,6 +120,14 @@ baseline rather than treating media throughput as an absolute promise.
 
 ### Phase 4 refactoring scope
 
+- Phase 4 is approved to proceed from the bottom layer upward: foundational/core code,
+  application services, queue and pipeline orchestration, then GUI presentation.
+- Internal API renames are allowed when public CLI behavior, compatibility aliases,
+  media contracts, and documented user-facing behavior remain unchanged.
+- No numeric complexity budgets are required; each slice must still be small,
+  reviewable, typed, and covered by focused regression tests.
+- Phase 4 is refactoring-only. It must not add product features or change approved
+  behavior.
 - Phase 4 is dedicated to improving code readability and maintainability after Phase 3 stabilization.
 - Refactoring must preserve approved GUI behavior, CLI behavior, media-pipeline invariants, settings safety, queue semantics, and public compatibility unless a later decision explicitly changes them.
 - Prefer small independently validated slices over broad rewrites.
@@ -130,7 +138,7 @@ baseline rather than treating media throughput as an absolute promise.
 - Keep each extraction reviewable: one responsibility per helper, typed boundaries, preserved exceptions, and focused regression coverage before broader movement.
 - Add or strengthen tests before moving behavior across boundaries; every refactoring slice must retain focused regression coverage and pass the full quality gate.
 - Do not combine Phase 4 with new product features, branding changes, media-policy changes, or speculative compatibility abstractions.
-- Detailed module targets, complexity budgets, and the policy for internal API renames remain to be approved before the phase file is created.
+- Detailed module targets will be selected in bottom-up implementation slices; no separate numeric complexity budget applies.
 
 ## Version 2 invariants
 
