@@ -98,6 +98,11 @@ class SettingsStore:
             if self._legacy_path is not None and self._legacy_path.exists():
                 return self._load_legacy_json()
             return ApplicationSettings()
+        return self._load_yaml()
+
+    def _load_yaml(self) -> ApplicationSettings:
+        """Decode the current YAML document and quarantine invalid data."""
+
         try:
             document = yaml.safe_load(self._path.read_text(encoding="utf-8"))
             settings = _decode_document(document)
@@ -136,6 +141,12 @@ class SettingsStore:
         if not isinstance(settings, ApplicationSettings):
             raise TypeError("settings must be an ApplicationSettings instance")
         self._reject_symlink()
+        self._write_atomic_document(_encode_document(settings))
+        logger.debug("Application settings saved")
+
+    def _write_atomic_document(self, document: dict[str, object]) -> None:
+        """Serialize one document through a private temporary file and replace."""
+
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             descriptor, raw_temporary = tempfile.mkstemp(prefix=f".{self._path.name}-", suffix=".tmp", dir=self._path.parent)
@@ -145,7 +156,7 @@ class SettingsStore:
         try:
             os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-                stream.write(yaml.safe_dump(_encode_document(settings), allow_unicode=True, default_flow_style=False, sort_keys=True))
+                stream.write(yaml.safe_dump(document, allow_unicode=True, default_flow_style=False, sort_keys=True))
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, self._path)
@@ -156,7 +167,6 @@ class SettingsStore:
                 pass
             temporary.unlink(missing_ok=True)
             raise SettingsError("could not atomically save application settings") from error
-        logger.debug("Application settings saved")
 
     def _reject_symlink(self) -> None:
         if self._path.is_symlink():

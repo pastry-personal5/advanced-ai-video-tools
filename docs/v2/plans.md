@@ -4,7 +4,7 @@
 
 - Development target: v2
 - Released baseline: v1.0.0
-- Current phase: [Phase 2 — Rename Project](2-rename-project.md) (complete)
+- Current phase: [Phase 4 — Refactoring](4-refactoring.md) (in progress)
 - Last updated: 2026-08-24
 
 ## Purpose

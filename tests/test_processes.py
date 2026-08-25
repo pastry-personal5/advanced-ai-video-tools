@@ -49,6 +49,16 @@ def test_process_runner_captures_success_output() -> None:
     assert result.stderr_tail.strip() == "err"
 
 
+def test_process_runner_rejects_invalid_requests_before_launch() -> None:
+    """Request validation remains independent from process lifecycle handling."""
+
+    runner = SubprocessRunner()
+    with pytest.raises(ValueError, match="command cannot be empty"):
+        runner.run((), CancellationToken(), 5)
+    with pytest.raises(ValueError, match="timeout must be positive"):
+        runner.run((sys.executable,), CancellationToken(), 0)
+
+
 def test_process_failure_retains_only_bounded_diagnostics() -> None:
     """Unbounded tool output cannot consume unbounded application memory."""
 

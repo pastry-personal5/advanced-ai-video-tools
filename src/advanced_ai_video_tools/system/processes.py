@@ -145,14 +145,41 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
 class SubprocessRunner:
     """macOS process-group runner that never invokes a command shell."""
 
-    def run(self, command: Sequence[str], cancellation: CancellationToken, timeout_seconds: float) -> ProcessResult:
-        """Execute with a deadline and terminate the full group on cancellation."""
-
+    @staticmethod
+    def _validate_request(command: Sequence[str], timeout_seconds: float) -> tuple[str, ...]:
         arguments = tuple(str(argument) for argument in command)
         if not arguments:
             raise ValueError("a process command cannot be empty")
         if timeout_seconds <= 0:
             raise ValueError("process timeout must be positive")
+        return arguments
+
+    @staticmethod
+    def _wait_for_completion(
+        process: subprocess.Popen[bytes],
+        *,
+        arguments: tuple[str, ...],
+        cancellation: CancellationToken,
+        timeout_seconds: float,
+        started_at: float,
+        stdout_file: BinaryIO,
+        stderr_file: BinaryIO,
+    ) -> None:
+        deadline = time.monotonic() + timeout_seconds
+        while process.poll() is None:
+            if cancellation.wait(0.05):
+                _terminate_process_group(process)
+                logger.info("Process cancelled executable={} elapsed_seconds={:.3f}", Path(arguments[0]).name, time.monotonic() - started_at)
+                raise ProcessCancelled("process cancelled", arguments, _read_tail(stdout_file), _read_tail(stderr_file))
+            if time.monotonic() >= deadline:
+                _terminate_process_group(process)
+                logger.error("Process timed out executable={} elapsed_seconds={:.3f}", Path(arguments[0]).name, time.monotonic() - started_at)
+                raise ProcessTimeoutError(f"{Path(arguments[0]).name} exceeded its {timeout_seconds:g}-second timeout", arguments, _read_tail(stdout_file), _read_tail(stderr_file))
+
+    def run(self, command: Sequence[str], cancellation: CancellationToken, timeout_seconds: float) -> ProcessResult:
+        """Execute with a deadline and terminate the full group on cancellation."""
+
+        arguments = self._validate_request(command, timeout_seconds)
         if cancellation.cancelled:
             logger.info("Process cancelled before launch executable={}", Path(arguments[0]).name)
             raise ProcessCancelled("process cancelled before launch", arguments)
@@ -166,16 +193,15 @@ class SubprocessRunner:
                 logger.error("Process launch failed executable={} error_type={}", Path(arguments[0]).name, type(error).__name__)
                 raise ProcessError(f"could not launch {Path(arguments[0]).name}: {error}", arguments) from error
             with process_context as process:
-                deadline = time.monotonic() + timeout_seconds
-                while process.poll() is None:
-                    if cancellation.wait(0.05):
-                        _terminate_process_group(process)
-                        logger.info("Process cancelled executable={} elapsed_seconds={:.3f}", Path(arguments[0]).name, time.monotonic() - started_at)
-                        raise ProcessCancelled("process cancelled", arguments, _read_tail(stdout_file), _read_tail(stderr_file))
-                    if time.monotonic() >= deadline:
-                        _terminate_process_group(process)
-                        logger.error("Process timed out executable={} elapsed_seconds={:.3f}", Path(arguments[0]).name, time.monotonic() - started_at)
-                        raise ProcessTimeoutError(f"{Path(arguments[0]).name} exceeded its {timeout_seconds:g}-second timeout", arguments, _read_tail(stdout_file), _read_tail(stderr_file))
+                self._wait_for_completion(
+                    process,
+                    arguments=arguments,
+                    cancellation=cancellation,
+                    timeout_seconds=timeout_seconds,
+                    started_at=started_at,
+                    stdout_file=stdout_file,
+                    stderr_file=stderr_file,
+                )
                 stdout_tail = _read_tail(stdout_file)
                 stderr_tail = _read_tail(stderr_file)
                 if process.returncode != 0:
