@@ -11,7 +11,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from advanced_ai_video_tools.core.models import ToolInfo, Toolchain, ToolOverrides
-from advanced_ai_video_tools.system.processes import log_subprocess_launch
+from advanced_ai_video_tools.system.processes import ProcessOutputLimitError, log_subprocess_launch, run_captured_subprocess
 
 CommandRunner = Callable[[Sequence[str], float], subprocess.CompletedProcess[str]]
 
@@ -23,14 +23,7 @@ class ToolDiscoveryError(RuntimeError):
 
 
 def _default_runner(arguments: Sequence[str], timeout: float) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        list(arguments),
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        shell=False,
-    )
+    return run_captured_subprocess(arguments, timeout)
 
 
 class ToolDiscovery:
@@ -60,7 +53,7 @@ class ToolDiscovery:
         try:
             log_subprocess_launch(arguments)
             result = self._runner(arguments, 10.0)
-        except (OSError, subprocess.TimeoutExpired) as error:
+        except (OSError, ProcessOutputLimitError, subprocess.TimeoutExpired) as error:
             raise ToolDiscoveryError(f"could not launch {name}: {error}") from error
         combined = "\n".join(part for part in (result.stdout, result.stderr) if part)
         if result.returncode != 0 and (nonzero_success_marker is None or nonzero_success_marker not in combined):
@@ -123,7 +116,7 @@ class ToolDiscovery:
             try:
                 log_subprocess_launch(arguments)
                 result = self._runner(arguments, 60.0)
-            except (OSError, subprocess.TimeoutExpired) as error:
+            except (OSError, ProcessOutputLimitError, subprocess.TimeoutExpired) as error:
                 raise ToolDiscoveryError(f"Real-ESRGAN Vulkan smoke test could not run: {error}") from error
             if result.returncode != 0 or not output_path.is_file() or output_path.stat().st_size == 0:
                 combined = "\n".join(part for part in (result.stdout, result.stderr) if part).strip()

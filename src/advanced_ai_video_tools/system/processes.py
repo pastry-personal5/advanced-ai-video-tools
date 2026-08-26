@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import selectors
 import shlex
 import signal
 import subprocess
@@ -17,6 +18,7 @@ from typing import BinaryIO, Protocol
 from loguru import logger
 
 DIAGNOSTIC_LIMIT_BYTES = 64 * 1024
+INSPECTION_OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024
 TERMINATION_GRACE_SECONDS = 5.0
 
 
@@ -80,6 +82,14 @@ class ProcessCancelled(ProcessError):
     """A child process was terminated after cooperative cancellation."""
 
 
+class ProcessOutputLimitError(RuntimeError):
+    """A bounded inspection command emitted more output than policy allows."""
+
+    def __init__(self, limit_bytes: int) -> None:
+        super().__init__(f"process output exceeded the {limit_bytes:,}-byte limit")
+        self.limit_bytes = limit_bytes
+
+
 class ProcessRunner(Protocol):
     """Replaceable process boundary for application-service tests."""
 
@@ -124,22 +134,95 @@ def _read_tail(handle: BinaryIO) -> str:
 
 
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
-    if process.poll() is not None:
-        return
+    process_group = process.pid
+
+    def group_exists() -> bool:
+        try:
+            os.killpg(process_group, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            # Sandboxed macOS environments can permit termination signals while
+            # denying the zero-signal group probe. The parent status is the
+            # conservative fallback in that environment.
+            return process.poll() is None
+        return True
+
     try:
-        os.killpg(process.pid, signal.SIGTERM)
+        os.killpg(process_group, signal.SIGTERM)
     except ProcessLookupError:
         return
-    try:
-        process.wait(timeout=TERMINATION_GRACE_SECONDS)
+    deadline = time.monotonic() + TERMINATION_GRACE_SECONDS
+    while group_exists() and time.monotonic() < deadline:
+        process.poll()
+        time.sleep(0.05)
+    if not group_exists():
         return
-    except subprocess.TimeoutExpired:
-        pass
     try:
-        os.killpg(process.pid, signal.SIGKILL)
+        os.killpg(process_group, signal.SIGKILL)
     except ProcessLookupError:
         return
-    process.wait(timeout=TERMINATION_GRACE_SECONDS)
+    deadline = time.monotonic() + TERMINATION_GRACE_SECONDS
+    while group_exists() and time.monotonic() < deadline:
+        process.poll()
+        time.sleep(0.05)
+
+
+def _append_bounded_output(captured: bytearray, chunk: bytes, limit_bytes: int) -> bool:
+    """Retain up to one output limit while continuing to drain the child pipe."""
+
+    available = limit_bytes - len(captured)
+    if available <= 0:
+        return bool(chunk)
+    captured.extend(chunk[:available])
+    return len(chunk) > available
+
+
+def run_captured_subprocess(command: Sequence[str], timeout_seconds: float, *, output_limit_bytes: int = INSPECTION_OUTPUT_LIMIT_BYTES) -> subprocess.CompletedProcess[str]:
+    """Run one shell-free inspection command with bounded stdout and stderr.
+
+    Inspection commands must consume complete output to avoid pipe deadlocks, but
+    FFprobe input and configured tools are outside the application's trust
+    boundary.  This drains each pipe after its retained limit so a noisy child
+    cannot make validation or probing allocate unbounded Python memory.
+    """
+
+    arguments = tuple(str(argument) for argument in command)
+    if not arguments:
+        raise ValueError("a process command cannot be empty")
+    if timeout_seconds <= 0:
+        raise ValueError("process timeout must be positive")
+    if output_limit_bytes <= 0:
+        raise ValueError("process output limit must be positive")
+    started_at = time.monotonic()
+    stdout = bytearray()
+    stderr = bytearray()
+    truncated = False
+    with subprocess.Popen(arguments, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, start_new_session=True, close_fds=True) as process:
+        assert process.stdout is not None
+        assert process.stderr is not None
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ, stdout)
+            selector.register(process.stderr, selectors.EVENT_READ, stderr)
+            while selector.get_map() or process.poll() is None:
+                remaining_seconds = timeout_seconds - (time.monotonic() - started_at)
+                if remaining_seconds <= 0:
+                    _terminate_process_group(process)
+                    raise subprocess.TimeoutExpired(arguments, timeout_seconds)
+                for key, _events in selector.select(timeout=min(remaining_seconds, 0.05)):
+                    chunk = os.read(key.fileobj.fileno(), 64 * 1024)
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        continue
+                    truncated = _append_bounded_output(key.data, chunk, output_limit_bytes) or truncated
+    if truncated:
+        raise ProcessOutputLimitError(output_limit_bytes)
+    return subprocess.CompletedProcess(
+        arguments,
+        process.returncode,
+        stdout.decode("utf-8", errors="replace"),
+        stderr.decode("utf-8", errors="replace"),
+    )
 
 
 class SubprocessRunner:

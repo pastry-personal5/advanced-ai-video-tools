@@ -68,7 +68,7 @@ command lines.
 - `system.tools`: explicit-path-first discovery, executable inspection, x4plus
   model-pair validation, and a cached 16 × 16 inference smoke test that proves
   the Real-ESRGAN Vulkan backend can create output
-- `video.probe`: pure FFprobe arguments, bounded invocation, and defensive typed JSON parsing
+- `video.probe`: pure FFprobe arguments, bounded time and 4 MiB-per-stream capture, and defensive typed JSON parsing
 - `video.compatibility`: typed stream-copy findings and normalize-all-or-none strategy selection
 - `video.manifest`: ordered absolute concat paths with FFmpeg token escaping
 - `video.commands`: lossless normalization, concat and RGB PNG extraction arguments, exact frame-count calculation, and typed preparation/extraction plans
@@ -406,6 +406,7 @@ Progress events include the job ID, stage, measured completed work, measured tot
 
 - Pass subprocess commands as argument arrays with `shell=False`.
 - Capture enough stderr for diagnosis without exposing secrets or flooding the GUI.
+- Cap FFprobe and prerequisite-inspection stdout and stderr at 4 MiB per stream while continuing to drain pipes; reject oversized output instead of retaining it in memory.
 - Treat nonzero exit codes, malformed probe output, missing frames, and failed output verification as typed failures.
 - Cancellation must terminate the active process tree and wait for termination before workspace deletion.
 - Never modify or delete source inputs.

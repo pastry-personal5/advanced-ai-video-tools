@@ -207,32 +207,32 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     assert not window.queue_monitoring_button.icon().isNull()
     assert window.minimumWidth() == 1400
     assert window.minimumHeight() == 880
-    assert window.job_list.height() == 240
-    job_queue_group = window.findChild(QGroupBox, "jobQueueGroup")
+    assert window.queue_table.height() == 240
+    job_queue_group = window.findChild(QGroupBox, "queueGroup")
     assert job_queue_group is not None
     assert job_queue_group.title() == "Job Queue"
     assert job_queue_group.layout().contentsMargins().left() == 16
 
-    window.job_list.setCurrentIndex(model.index(0, 0))
+    window.queue_table.setCurrentIndex(model.index(0, 0))
     qt_app.processEvents()
-    assert window.status_label.text() == "Encoding output"
+    assert window.selected_job_message.text() == "Encoding output"
     assert window.job_name_value.text() == "first.mov"
     assert window.job_state_value.text() == "Running"
     assert window.job_stage_value.text() == "encode"
-    assert window.progress.maximum() == 8
-    assert window.progress.value() == 3
-    assert window.progress.format() == "Stage: 3/8"
-    assert window.overall_progress.value() > 0
-    assert window.overall_progress.format().startswith("Whole job:")
-    assert window.cancel_button.isEnabled()
+    assert window.selected_job_stage_progress.maximum() == 8
+    assert window.selected_job_stage_progress.value() == 3
+    assert window.selected_job_stage_progress.format() == "Stage: 3/8"
+    assert window.selected_job_overall_progress.value() > 0
+    assert window.selected_job_overall_progress.format().startswith("Whole job:")
+    assert window.cancel_selected_job_button.isEnabled()
     assert window.findChild(QLabel, "jobActionSummary") is None
     assert window.findChild(QLabel, "logPathLabel") is None
-    window.cancel_button.click()
+    window.cancel_selected_job_button.click()
     assert queue.cancelled == ["first"]
 
-    window.job_list.setCurrentIndex(model.index(1, 0))
+    window.queue_table.setCurrentIndex(model.index(1, 0))
     qt_app.processEvents()
-    assert not window.move_up_button.isEnabled()
+    assert not window.move_job_up_button.isEnabled()
     window.close()
 
 
@@ -279,7 +279,7 @@ def test_upscale_messages_are_throttled_to_progress_summaries(qt_app: QApplicati
     qt_app.processEvents()
     for revision, completed in enumerate((0, 1, 9, 10, 11, 20, 100), start=1):
         progress = ProgressEvent(PipelineStage.UPSCALE, completed, 100, f"Processed {completed} frames")
-        window._queue_snapshot_changed(_snapshot(tmp_path, "upscale", JobState.RUNNING, None, revision=revision, progress=progress))  # pylint: disable=protected-access
+        window._handle_queue_snapshot(_snapshot(tmp_path, "upscale", JobState.RUNNING, None, revision=revision, progress=progress))  # pylint: disable=protected-access
 
     lines = window.message_widget.history.job_lines("upscale")
     progress_lines = [line for line in lines if "Upscale progress:" in line]
@@ -302,10 +302,10 @@ def test_background_queue_refresh_preserves_active_message_tab(qt_app: QApplicat
     window.show()
     qt_app.processEvents()
     assert window.message_tabs.currentIndex() == 0
-    window.job_list.setCurrentIndex(model.index(0, 0))
+    window.queue_table.setCurrentIndex(model.index(0, 0))
     assert window.message_tabs.currentIndex() == 1
     window.message_tabs.setCurrentIndex(0)
-    window._refresh_selection()  # pylint: disable=protected-access
+    window._refresh_selected_job()  # pylint: disable=protected-access
     assert window.message_tabs.currentIndex() == 0
     window.close()
 
@@ -348,7 +348,7 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     window = MainWindow(model, ApplicationSettings(target_height=2160))
     window.show()
     qt_app.processEvents()
-    assert window.findChild(QSplitter, "mainContentSplitter") is not None
+    assert window.findChild(QSplitter, "contentMessageSplitter") is not None
     assert window.findChild(QPushButton, "externalToolsButton") is None
     assert window.preferences_action.text() == "Preferences"
     assert [window.message_tabs.tabText(index) for index in range(2)] == ["Global Messages", "Job Messages"]
@@ -674,11 +674,11 @@ def test_preview_pauses_when_processing_starts_without_automatic_resume(qt_app: 
     pause_calls: list[str] = []
     monkeypatch.setattr(window.source_preview, "pause_for_processing", lambda: pause_calls.append("paused"))
 
-    window._queue_snapshot_changed(_snapshot(tmp_path, "preview-job", JobState.QUEUED, 0, revision=0))  # pylint: disable=protected-access
-    window._queue_snapshot_changed(_snapshot(tmp_path, "preview-job", JobState.VALIDATING, None, revision=1))  # pylint: disable=protected-access
-    window._queue_snapshot_changed(_snapshot(tmp_path, "preview-job", JobState.RUNNING, None, revision=2))  # pylint: disable=protected-access
-    window._queue_snapshot_changed(_snapshot(tmp_path, "preview-job", JobState.RUNNING, None, revision=3))  # pylint: disable=protected-access
-    window._queue_snapshot_changed(_snapshot(tmp_path, "preview-job", JobState.COMPLETED, None, revision=4))  # pylint: disable=protected-access
+    window._handle_queue_snapshot(_snapshot(tmp_path, "preview-job", JobState.QUEUED, 0, revision=0))  # pylint: disable=protected-access
+    window._handle_queue_snapshot(_snapshot(tmp_path, "preview-job", JobState.VALIDATING, None, revision=1))  # pylint: disable=protected-access
+    window._handle_queue_snapshot(_snapshot(tmp_path, "preview-job", JobState.RUNNING, None, revision=2))  # pylint: disable=protected-access
+    window._handle_queue_snapshot(_snapshot(tmp_path, "preview-job", JobState.RUNNING, None, revision=3))  # pylint: disable=protected-access
+    window._handle_queue_snapshot(_snapshot(tmp_path, "preview-job", JobState.COMPLETED, None, revision=4))  # pylint: disable=protected-access
 
     assert pause_calls == ["paused"]
     assert window._preview_processing_job_id is None  # pylint: disable=protected-access

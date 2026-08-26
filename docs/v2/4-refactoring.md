@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Phase 4 is approved after Phase 3 stabilization and proceeds from
+Complete. Phase 4 was approved after Phase 3 stabilization and proceeded from
 the bottom layer upward. This phase is refactoring-only: approved behavior,
 media contracts, public CLI behavior, compatibility aliases, and safety
 invariants must remain unchanged.
@@ -41,10 +41,55 @@ invariants must remain unchanged.
 - Full validation: `make check` — 234 passed, 2 native-only tests skipped;
   Black, Pylint, and pycodestyle passed.
 
+### Media preparation boundary — completed
+
+- Extracted sequential normalization execution from the preparation
+  orchestrator while preserving concat-first ordering, cancellation, progress,
+  diagnostics, and workspace ownership.
+- Focused validation: `tests/test_media_preparation.py` — 8 passed.
+
+### Pipeline workspace boundary — completed
+
+- Extracted validated workspace creation from the full-job orchestration path
+  while preserving lifecycle transitions, typed failures, and ownership.
+- Focused validation: `tests/test_pipeline.py` — 9 passed.
+
+### Queue worker boundaries — completed
+
+- Extracted pending-job activation and runner-outcome translation from the
+  single-worker loop while preserving FIFO order, callback isolation, terminal
+  outcomes, cancellation, and destination claims.
+- Focused validation: `tests/test_queue.py` — 8 passed.
+
+### GUI snapshot boundaries — completed
+
+- Extracted insertion and refresh operations from the Qt queue snapshot bridge,
+  preserving Qt-thread mutation, revision filtering, model ordering, and
+  notifications.
+- Focused validation: GUI tests — 42 passed.
+
+### Top-down GUI presentation naming and selection boundaries — completed
+
+- Split `MainWindow` selected-job rendering into explicit empty-state,
+  progress-rendering, and selected-row presentation helpers.
+- Renamed GUI private handlers to domain actions such as
+  `_handle_queue_snapshot`, `_refresh_selected_job`, `_open_preferences`, and
+  `_append_job_message`.
+- Renamed GUI attributes and Qt object names to consistent queue, selected-job,
+  source, message, and preferences terminology; updated theme/test consumers
+  where applicable.
+- Preserved Qt thread affinity, signal wiring, selection behavior, progress
+  calculations, accessibility labels, and user-visible text.
+- Focused validation: GUI tests — 42 passed.
+
+## Completion validation
+
+- Full quality gate: `make check` — 234 passed, 2 native-only tests skipped.
+- Black, Pylint, pycodestyle, and `git diff --check` passed.
+- No product features, media-policy changes, public CLI changes, or
+  compatibility removals were introduced.
+
 ## Remaining work
 
-- Continue with small application-service refactorings from the bottom layer
-  upward while preserving the Phase 3 stabilization evidence.
-- Re-run the full quality gate after each refactoring slice.
-- Mark the phase complete only after the approved refactoring scope has been
-  addressed and final documentation review is complete.
+- Phase 5 remains provisional and requires separate approval before release
+  stabilization or artifact work begins.

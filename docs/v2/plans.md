@@ -4,8 +4,8 @@
 
 - Development target: v2
 - Released baseline: v1.0.0
-- Current phase: [Phase 4 — Refactoring](4-refactoring.md) (in progress)
-- Last updated: 2026-08-24
+- Current phase: [Phase 4 — Refactoring](4-refactoring.md) (complete)
+- Last updated: 2026-08-25
 
 ## Purpose
 
@@ -39,10 +39,10 @@ The new project name, rename compatibility policy, and exact scope of later phas
 | 1 | [Enhance GUI](1-enhance-gui.md) | Complete | A clearer, more accessible, native macOS workflow over the existing backend |
 | 2 | [Rename Project](2-rename-project.md) | Complete | Apply the approved identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
 | 3 | Stabilization | Complete | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
-| 4 | Refactoring | Approved | Improve code readability and maintainability without weakening approved behavior |
+| 4 | Refactoring | Complete | Improve code readability and maintainability without weakening approved behavior |
 | 5 | Stabilization and release | Proposed | Re-verify behavior after refactoring and produce the v2 release artifacts |
 
-Phase 2 is complete after Phase 1. Phase 3 is complete under [Phase 3 — Stabilization](3-stabilization.md); Phase 4 is approved and Phase 5 remains provisional.
+Phase 2 is complete after Phase 1. Phase 3 is complete under [Phase 3 — Stabilization](3-stabilization.md); Phase 4 is complete under [Phase 4 — Refactoring](4-refactoring.md), and Phase 5 remains provisional.
 
 ## Cross-phase decisions still required
 

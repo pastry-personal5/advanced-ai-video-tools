@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from loguru import logger
 
-from advanced_ai_video_tools.system.processes import CancellationToken, DIAGNOSTIC_LIMIT_BYTES, ProcessCancelled, ProcessExecutionError, ProcessTimeoutError, SubprocessRunner, command_line_for_log, redacted_command
+from advanced_ai_video_tools.system.processes import CancellationToken, DIAGNOSTIC_LIMIT_BYTES, ProcessCancelled, ProcessExecutionError, ProcessOutputLimitError, ProcessTimeoutError, SubprocessRunner, command_line_for_log, redacted_command, run_captured_subprocess
 
 
 def test_command_redaction_hides_absolute_paths_and_home_fragments() -> None:
@@ -68,6 +68,13 @@ def test_process_failure_retains_only_bounded_diagnostics() -> None:
     assert captured.value.returncode == 7
     assert len(captured.value.stderr_tail.encode("utf-8")) <= DIAGNOSTIC_LIMIT_BYTES
     assert captured.value.stderr_tail.endswith("x" * 100)
+
+
+def test_inspection_capture_rejects_oversized_child_output_without_buffering_it() -> None:
+    """Untrusted inspection output is drained but cannot grow process memory."""
+
+    with pytest.raises(ProcessOutputLimitError, match="128-byte"):
+        run_captured_subprocess((sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'x' * 512); sys.stderr.buffer.write(b'y' * 512)"), 5, output_limit_bytes=128)
 
 
 def test_cancellation_terminates_the_process_group(tmp_path: Path) -> None:

@@ -301,35 +301,53 @@ class JobQueue:
             snapshot = self._snapshot_locked(record)
         self._emit((snapshot,))
 
+    def _activate_next_locked(self) -> tuple[_JobRecord, tuple[QueueJobSnapshot, ...]]:
+        """Move the next pending record to active and update pending positions."""
+
+        job_id = self._pending.popleft()
+        record = self._records[job_id]
+        self._active_id = job_id
+        record.revision += 1
+        for pending_id in self._pending:
+            self._records[pending_id].revision += 1
+        snapshots = (self._snapshot_locked(record),) + tuple(self._snapshot_locked(self._records[pending_id]) for pending_id in self._pending)
+        return record, snapshots
+
+    def _run_record(self, record: _JobRecord) -> tuple[JobState, PipelineResult | None, QueueTerminalError | None]:
+        """Run one active record and translate every terminal runner outcome."""
+
+        result: PipelineResult | None = None
+        error: QueueTerminalError | None = None
+        state = JobState.COMPLETED
+        try:
+            result = self._runner.run(
+                record.request,
+                cancellation=record.token,
+                progress=lambda event: self._pipeline_progress(record, event),
+                state_changed=lambda changed: self._pipeline_state(record, changed),
+                job_id=record.job_id,
+            )
+        except PipelineCancelled as caught:
+            state = JobState.CANCELLED
+            error = caught
+        except PipelineFailed as caught:
+            state = JobState.FAILED
+            error = caught
+        except Exception as caught:  # pylint: disable=broad-exception-caught
+            state = JobState.FAILED
+            error = QueueWorkerFailed(f"Unexpected pipeline failure: {type(caught).__name__}")
+            logger.opt(exception=caught).error("Unexpected exception escaped queued pipeline execution")
+        return state, result, error
+
     def _work(self) -> None:
         while True:
             with self._condition:
                 self._condition.wait_for(lambda: self._closing or bool(self._pending))
                 if self._closing:
                     return
-                job_id = self._pending.popleft()
-                record = self._records[job_id]
-                self._active_id = job_id
-                record.revision += 1
-                for pending_id in self._pending:
-                    self._records[pending_id].revision += 1
-                snapshots = (self._snapshot_locked(record),) + tuple(self._snapshot_locked(self._records[pending_id]) for pending_id in self._pending)
+                record, snapshots = self._activate_next_locked()
             self._emit(snapshots)
-            result: PipelineResult | None = None
-            error: QueueTerminalError | None = None
-            state = JobState.COMPLETED
-            try:
-                result = self._runner.run(record.request, cancellation=record.token, progress=lambda event: self._pipeline_progress(record, event), state_changed=lambda changed: self._pipeline_state(record, changed), job_id=record.job_id)
-            except PipelineCancelled as caught:
-                state = JobState.CANCELLED
-                error = caught
-            except PipelineFailed as caught:
-                state = JobState.FAILED
-                error = caught
-            except Exception as caught:  # pylint: disable=broad-exception-caught
-                state = JobState.FAILED
-                error = QueueWorkerFailed(f"Unexpected pipeline failure: {type(caught).__name__}")
-                logger.opt(exception=caught).error("Unexpected exception escaped queued pipeline execution")
+            state, result, error = self._run_record(record)
             with self._condition:
                 self._finish_locked(record, state, result=result, error=error)
                 self._active_id = None

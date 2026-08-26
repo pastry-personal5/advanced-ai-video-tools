@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Protocol, cast
@@ -16,7 +16,9 @@ from advanced_ai_video_tools.core.models import (
     Rational,
     VideoStream,
 )
-from advanced_ai_video_tools.system.processes import log_subprocess_launch
+from advanced_ai_video_tools.system.processes import ProcessOutputLimitError, log_subprocess_launch, run_captured_subprocess
+
+CommandRunner = Callable[[Sequence[str], float], subprocess.CompletedProcess[str]]
 
 
 class ProbeError(RuntimeError):
@@ -210,9 +212,10 @@ def _optional_string(value: object) -> str | None:
 class FFprobeClient:
     """Subprocess-backed implementation of the probing boundary."""
 
-    def __init__(self, executable: Path, timeout_seconds: float = 30.0) -> None:
+    def __init__(self, executable: Path, timeout_seconds: float = 30.0, runner: CommandRunner = run_captured_subprocess) -> None:
         self._executable = executable
         self._timeout_seconds = timeout_seconds
+        self._runner = runner
 
     def probe(self, path: Path) -> MediaProbe:
         """Run FFprobe once and convert its JSON result."""
@@ -220,15 +223,8 @@ class FFprobeClient:
         arguments: Sequence[str] = build_ffprobe_command(self._executable, path)
         try:
             log_subprocess_launch(arguments)
-            result = subprocess.run(
-                arguments,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=self._timeout_seconds,
-                shell=False,
-            )
-        except (OSError, subprocess.TimeoutExpired) as error:
+            result = self._runner(arguments, self._timeout_seconds)
+        except (OSError, ProcessOutputLimitError, subprocess.TimeoutExpired) as error:
             raise ProbeError(f"could not run FFprobe for {path}: {error}") from error
         if result.returncode != 0:
             detail = result.stderr.strip() or "no diagnostic output"

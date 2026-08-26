@@ -214,6 +214,20 @@ class JobListModel(QAbstractTableModel):
 
         return sum(snapshot.queue_position is not None for snapshot in self._snapshots.values())
 
+    def _insert_snapshot(self, snapshot: QueueJobSnapshot) -> None:
+        """Insert a newly observed queue record at the end of session history."""
+
+        self.beginInsertRows(QModelIndex(), len(self._order), len(self._order))
+        self._submission_order[snapshot.job_id] = len(self._submission_order)
+        self._snapshots[snapshot.job_id] = snapshot
+        self._order.append(snapshot.job_id)
+        self.endInsertRows()
+
+    def _refresh_snapshot(self, snapshot: QueueJobSnapshot) -> None:
+        """Replace one observed record without changing model ordering."""
+
+        self._snapshots[snapshot.job_id] = snapshot
+
     @Slot(object)
     def _apply_snapshot(self, value: object) -> None:
         if QThread.currentThread() != self.thread():
@@ -225,13 +239,9 @@ class JobListModel(QAbstractTableModel):
         if not is_new and value.revision < self._snapshots[value.job_id].revision:
             return
         if is_new:
-            self.beginInsertRows(QModelIndex(), len(self._order), len(self._order))
-            self._submission_order[value.job_id] = len(self._submission_order)
-            self._snapshots[value.job_id] = value
-            self._order.append(value.job_id)
-            self.endInsertRows()
+            self._insert_snapshot(value)
         else:
-            self._snapshots[value.job_id] = value
+            self._refresh_snapshot(value)
         desired = self._desired_order()
         if desired != self._order:
             self.beginResetModel()

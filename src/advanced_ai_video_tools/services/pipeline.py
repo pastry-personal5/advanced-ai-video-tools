@@ -204,6 +204,17 @@ class PipelineService:
         messages = tuple(issue.message for issue in report.issues if issue.severity is IssueSeverity.ERROR)
         return "; ".join(messages) if messages else "Preflight did not produce a runnable job plan."
 
+    def _create_workspace(self, report: PreflightReport, lifecycle: JobLifecycle) -> OwnedWorkspace:
+        """Create the caller-owned workspace after validation succeeds."""
+
+        try:
+            workspace = self._workspace_manager.create()
+            logger.info("Created owned workspace identifier={}", workspace.identifier)
+            return workspace
+        except WorkspaceError as error:
+            lifecycle.transition(JobState.FAILED)
+            raise PipelineFailed(f"Could not create the job workspace: {error}", PipelineStage.VALIDATE, preflight=report) from error
+
     def _validate(self, request: JobRequest, token: CancellationToken, lifecycle: JobLifecycle, progress: ProgressCallback | None) -> tuple[PreflightReport, JobPlan, Toolchain]:
         """Run preflight and return only a complete runnable plan."""
 
@@ -236,13 +247,7 @@ class PipelineService:
                 lifecycle.transition(JobState.CANCELLED)
                 raise PipelineCancelled("Processing cancelled after validation.", PipelineStage.VALIDATE, preflight=report)
             lifecycle.transition(JobState.RUNNING)
-            try:
-                workspace = self._workspace_manager.create()
-                logger.info("Created owned workspace identifier={}", workspace.identifier)
-            except WorkspaceError as error:
-                lifecycle.transition(JobState.FAILED)
-                raise PipelineFailed(f"Could not create the job workspace: {error}", PipelineStage.VALIDATE, preflight=report) from error
-
+            workspace = self._create_workspace(report, lifecycle)
             finalized = self._execute_stages(plan, toolchain, workspace, token, progress)
         except FinalizationCancelled as error:
             lifecycle.transition(JobState.CANCELLING)

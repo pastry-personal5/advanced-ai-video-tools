@@ -159,6 +159,22 @@ class MediaPreparationExecutor:
         self._workspace_manager.cleanup(workspace)
         self._emit(callback, PipelineStage.CLEANUP, 1, 1, "Preparation workspace cleaned")
 
+    def _normalize_clips(
+        self,
+        plan: MediaPreparationPlan,
+        token: CancellationToken,
+        progress: ProgressCallback | None,
+        results: list[ProcessResult],
+    ) -> None:
+        normalization_total = len(plan.normalization_commands)
+        if normalization_total == 0:
+            self._emit(progress, PipelineStage.NORMALIZE, 0, 0, "Normalization is not required")
+            return
+        self._emit(progress, PipelineStage.NORMALIZE, 0, normalization_total, "Starting lossless normalization")
+        for index, command in enumerate(plan.normalization_commands, start=1):
+            results.append(self._process_runner.run(command, token, self._command_timeout_seconds))
+            self._emit(progress, PipelineStage.NORMALIZE, index, normalization_total, f"Normalized clip {index} of {normalization_total}")
+
     def execute(self, job: JobPlan, ffmpeg: Path, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None) -> PreparationResult:
         """Run normalize-all-or-none, concat once, verify, then clean success."""
 
@@ -188,14 +204,7 @@ class MediaPreparationExecutor:
             workspace_path = self._workspace_manager.validate(workspace)
             plan = build_media_preparation_plan(job, ffmpeg, workspace_path)
             self._prepare_directories(plan)
-            normalization_total = len(plan.normalization_commands)
-            if normalization_total == 0:
-                self._emit(progress, PipelineStage.NORMALIZE, 0, 0, "Normalization is not required")
-            else:
-                self._emit(progress, PipelineStage.NORMALIZE, 0, normalization_total, "Starting lossless normalization")
-                for index, command in enumerate(plan.normalization_commands, start=1):
-                    results.append(self._process_runner.run(command, token, self._command_timeout_seconds))
-                    self._emit(progress, PipelineStage.NORMALIZE, index, normalization_total, f"Normalized clip {index} of {normalization_total}")
+            self._normalize_clips(plan, token, progress, results)
             if token.cancelled:
                 raise ProcessCancelled("preparation cancelled", ())
             write_concat_manifest(plan.concat_manifest_path, plan.concat_inputs)

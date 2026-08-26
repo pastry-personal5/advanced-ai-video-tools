@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from advanced_ai_video_tools.core.models import Rational
-from advanced_ai_video_tools.video.probe import FFprobeClient, build_ffprobe_command, parse_probe_document
+from advanced_ai_video_tools.system.processes import ProcessOutputLimitError
+from advanced_ai_video_tools.video.probe import FFprobeClient, ProbeError, build_ffprobe_command, parse_probe_document
 
 
 def test_probe_parser_preserves_exact_rates_and_stream_inventory() -> None:
@@ -138,12 +139,21 @@ def test_ffprobe_client_logs_the_complete_argument_vector_before_launch(tmp_path
     media = tmp_path / "clip with spaces.mov"
     logged: list[tuple[str, ...]] = []
 
-    def completed(arguments: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+    def completed(arguments: object, _timeout: float) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(arguments, 0, json.dumps({"streams": []}), "")  # type: ignore[arg-type]
 
     monkeypatch.setattr("advanced_ai_video_tools.video.probe.log_subprocess_launch", lambda command: logged.append(tuple(command)))
-    monkeypatch.setattr("advanced_ai_video_tools.video.probe.subprocess.run", completed)
 
-    FFprobeClient(executable).probe(media)
+    FFprobeClient(executable, runner=completed).probe(media)
 
     assert logged == [build_ffprobe_command(executable, media)]
+
+
+def test_ffprobe_client_rejects_oversized_output(tmp_path: Path) -> None:
+    """A hostile media probe cannot make the client retain unlimited output."""
+
+    def oversized(_arguments: object, _timeout: float) -> subprocess.CompletedProcess[str]:
+        raise ProcessOutputLimitError(1024)
+
+    with pytest.raises(ProbeError, match="1,024-byte"):
+        FFprobeClient(tmp_path / "ffprobe", runner=oversized).probe(tmp_path / "clip.mov")

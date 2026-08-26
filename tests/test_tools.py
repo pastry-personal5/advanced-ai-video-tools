@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from advanced_ai_video_tools.core.models import ToolOverrides
+from advanced_ai_video_tools.system.processes import ProcessOutputLimitError
 from advanced_ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
 
 
@@ -85,6 +86,22 @@ def test_tool_launch_permission_failure_is_actionable(tmp_path: Path) -> None:
 
     with pytest.raises(ToolDiscoveryError, match="Real-ESRGAN Vulkan smoke test could not run: operation not permitted"):
         ToolDiscovery(denied_runner).discover(ToolOverrides(executable, executable, executable, models))
+
+
+def test_tool_validation_rejects_oversized_output(tmp_path: Path) -> None:
+    """A configured tool cannot exhaust memory by writing unbounded output."""
+
+    executable = _executable(tmp_path / "tool")
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "realesrgan-x4plus.param").touch()
+    (models / "realesrgan-x4plus.bin").touch()
+
+    def oversized(_arguments: Sequence[str], _timeout: float) -> subprocess.CompletedProcess[str]:
+        raise ProcessOutputLimitError(1024)
+
+    with pytest.raises(ToolDiscoveryError, match="1,024-byte"):
+        ToolDiscovery(oversized).discover(ToolOverrides(executable, executable, executable, models))
 
 
 def test_realesrgan_help_usage_accepts_the_tools_nonzero_help_exit(tmp_path: Path) -> None:
