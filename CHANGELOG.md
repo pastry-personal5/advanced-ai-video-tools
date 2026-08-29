@@ -33,6 +33,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   using one data-driven key registry and dispatcher, generated shortcut help,
   complete press/release consumption, synchronous requested playback state,
   and matched embedded/fullscreen play-control feedback.
+- Presented fullscreen shortcut help in a borderless, non-activating
+  right-center dialog with opaque white text and a 50%-opaque background that
+  remains visible above the native video surface.
 - Added Phase 5 fullscreen selected-source preview with two entry points,
   keyboard playback and clip navigation, shortcut help, auto-hiding controls,
   invalid-input control feedback, a hidden-by-default top-right close button, and

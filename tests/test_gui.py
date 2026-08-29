@@ -26,7 +26,7 @@ from advanced_ai_video_tools.core.models import JobRequest, JobState, PipelineSt
 from advanced_ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
-from advanced_ai_video_tools.gui.preview import FULLSCREEN_SHORTCUTS, SHORTCUT_HELP, VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, FullscreenCommand, SourcePreviewPane, resolve_fullscreen_shortcut  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.preview import FULLSCREEN_HELP_MARGIN, FULLSCREEN_SHORTCUTS, SHORTCUT_HELP, VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, FullscreenCommand, SourcePreviewPane, resolve_fullscreen_shortcut  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
@@ -67,6 +67,8 @@ def test_gui_theme_is_always_dark(qt_app: QApplication) -> None:
     assert "border-radius: 0px;" in qt_app.styleSheet()
     assert "QHeaderView::section:first" in qt_app.styleSheet()
     assert "QHeaderView::section:last" in qt_app.styleSheet()
+    assert "QDialog#fullscreenPreviewHelpPanel" in qt_app.styleSheet()
+    assert "background: rgba(37, 38, 41, 128);" in qt_app.styleSheet()
     assert f"min-height: {CONTROL_HEIGHT - 2}px" in qt_app.styleSheet()
 
 
@@ -687,7 +689,17 @@ def test_fullscreen_preview_entry_points_and_keyboard_help(qt_app: QApplication,
     assert not dialog.controls.isVisible()
     QTest.keyClick(dialog.video, Qt.Key.Key_Slash, Qt.KeyboardModifier.ShiftModifier)
     assert dialog.help_panel.isVisible()
-    QTest.keyClick(dialog.help_button, Qt.Key.Key_Question)
+    QApplication.processEvents()
+    assert dialog.help_panel.windowFlags() & Qt.WindowType.FramelessWindowHint
+    assert dialog.help_panel.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus
+    assert dialog.help_panel.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    title = dialog.help_panel.findChild(QLabel, "fullscreenPreviewHelpTitle")
+    help_text = dialog.help_panel.findChild(QLabel, "fullscreenPreviewHelpText")
+    assert title is not None and help_text is not None
+    help_position = dialog._help_panel_local_position()  # pylint: disable=protected-access
+    assert dialog.width() - help_position.x() - dialog.help_panel.width() == FULLSCREEN_HELP_MARGIN
+    assert abs(dialog.height() // 2 - (help_position.y() + dialog.help_panel.height() // 2)) <= 1
+    QTest.keyClick(dialog.video, Qt.Key.Key_Question)
     assert not dialog.help_panel.isVisible()
     QTest.keyClick(dialog, Qt.Key.Key_G)
     assert dialog.controls.isVisible()

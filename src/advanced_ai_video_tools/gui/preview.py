@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QSignalBlocker, QSize, QTimer, QUrl, Qt, Signal, Slot
+from PySide6.QtCore import QEvent, QPoint, QSignalBlocker, QSize, QTimer, QUrl, Qt, Signal, Slot
 from PySide6.QtGui import QColor, QFont, QKeyEvent, QPainter, QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
@@ -21,6 +21,7 @@ from advanced_ai_video_tools.gui.theme import SPACE_2, SPACE_3
 VOLUME_ICON_COLOR = "#b8bcc2"
 VOLUME_ICON_OPTICAL_OFFSET = 0
 FULLSCREEN_HIDE_DELAY_MS = 2500
+FULLSCREEN_HELP_MARGIN = 24
 
 
 class FullscreenCommand(Enum):
@@ -83,6 +84,28 @@ def resolve_fullscreen_shortcut(key: Qt.Key, modifiers: Qt.KeyboardModifier, tex
     return _SHORTCUT_LOOKUP.get((key, normalized_modifiers))
 
 
+class FullscreenShortcutHelpDialog(QDialog):
+    """Non-activating translucent shortcut reference above native video."""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setObjectName("fullscreenPreviewHelpPanel")
+        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowDoesNotAcceptFocus)
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setAccessibleName("Fullscreen preview keyboard shortcuts")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        title = QLabel("Preview Keyboard Shortcuts")
+        title.setObjectName("fullscreenPreviewHelpTitle")
+        layout.addWidget(title)
+        help_text = QLabel(SHORTCUT_HELP)
+        help_text.setObjectName("fullscreenPreviewHelpText")
+        layout.addWidget(help_text)
+        self.hide()
+
+
 class FullscreenPreviewDialog(QDialog):
     """Fullscreen presentation surface using the pane's existing video widget."""
 
@@ -92,8 +115,6 @@ class FullscreenPreviewDialog(QDialog):
         super().__init__(pane)
         self._pane = pane
         self._application = QApplication.instance()
-        if self._application is not None:
-            self._application.installEventFilter(self)
         self.setObjectName("fullscreenPreviewDialog")
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
         self.setStyleSheet("QDialog#fullscreenPreviewDialog { background: #101113; }")
@@ -149,17 +170,7 @@ class FullscreenPreviewDialog(QDialog):
         button_row.addStretch(1)
         button_row.addWidget(self.help_button)
         controls_layout.addLayout(button_row)
-        self.help_panel = QFrame(self)
-        self.help_panel.setObjectName("fullscreenPreviewHelpPanel")
-        help_layout = QVBoxLayout(self.help_panel)
-        help_layout.setContentsMargins(24, 20, 24, 20)
-        title = QLabel("Preview Keyboard Shortcuts")
-        title.setObjectName("fullscreenPreviewHelpTitle")
-        help_layout.addWidget(title)
-        help_text = QLabel(SHORTCUT_HELP)
-        help_text.setObjectName("fullscreenPreviewHelpText")
-        help_layout.addWidget(help_text)
-        self.help_panel.hide()
+        self.help_panel = FullscreenShortcutHelpDialog(self)
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.addWidget(self.video, 1)
@@ -176,6 +187,8 @@ class FullscreenPreviewDialog(QDialog):
             FullscreenCommand.CLOSE: self._close_help_or_fullscreen,
             FullscreenCommand.TOGGLE_HELP: self.toggle_help,
         }
+        if self._application is not None:
+            self._application.installEventFilter(self)
         self._sync_from_pane()
 
     @staticmethod
@@ -244,21 +257,40 @@ class FullscreenPreviewDialog(QDialog):
     def toggle_help(self) -> None:
         """Toggle the keyboard-help panel without changing playback."""
 
-        self.help_panel.setVisible(not self.help_panel.isVisible())
+        if self.help_panel.isVisible():
+            self.help_panel.hide()
+            return
+        self.help_panel.adjustSize()
+        self._position_help_panel()
+        self.help_panel.show()
         self.help_panel.raise_()
 
+    def _position_help_panel(self) -> None:
+        """Place help at the right edge and vertical center of fullscreen."""
+
+        self.help_panel.move(self.mapToGlobal(self._help_panel_local_position()))
+
+    def _help_panel_local_position(self) -> QPoint:
+        """Calculate the help anchor in fullscreen-local coordinates."""
+
+        x_position = max(0, self.width() - self.help_panel.width() - FULLSCREEN_HELP_MARGIN)
+        y_position = max(0, (self.height() - self.help_panel.height()) // 2)
+        return QPoint(x_position, y_position)
+
     def resizeEvent(self, event: object) -> None:  # pylint: disable=invalid-name
-        """Keep the help panel centered as the fullscreen surface changes size."""
+        """Keep overlays anchored as the fullscreen surface changes size."""
 
         super().resizeEvent(event)  # type: ignore[arg-type]
         self.help_panel.adjustSize()
-        self.help_panel.move((self.width() - self.help_panel.width()) // 2, (self.height() - self.help_panel.height()) // 2)
+        self._position_help_panel()
         self.exit_button.move(self.width() - self.exit_button.width() - 20, 20)
 
     def _event_targets_fullscreen(self, watched: object) -> bool:
         """Return whether an application key event belongs to this dialog."""
 
-        if watched is self or isinstance(watched, QWidget) and self.isAncestorOf(watched):
+        if watched in (self, self.help_panel):
+            return True
+        if isinstance(watched, QWidget) and (self.isAncestorOf(watched) or self.help_panel.isAncestorOf(watched)):
             return True
         return QApplication.activeWindow() is self
 
@@ -326,7 +358,7 @@ class FullscreenPreviewDialog(QDialog):
         """Return the shared video widget to the embedded preview pane."""
 
         self._hide_timer.stop()
-        self.help_panel.hide()
+        self.help_panel.close()
         self._layout.removeWidget(self.video)
         self.video.setParent(self._pane)
         self._pane.layout().insertWidget(1, self.video, 1)

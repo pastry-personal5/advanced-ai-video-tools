@@ -53,10 +53,12 @@ and `Shift-N` select the adjacent clip and start playback from that clip's
 beginning. At either boundary, the corresponding action is disabled and has no
 effect.
 
-The help surface is a lightweight modal overlay or dialog titled
-`Preview Keyboard Shortcuts`. It lists the exact bindings above, does not stop
-or reset playback, and closes with `?`, `Esc`, or its close control. When help
-is open, the first `Esc` closes help and leaves fullscreen preview open.
+The help surface is a simple borderless, non-activating dialog titled
+`Preview Keyboard Shortcuts`. It is anchored at the right side and vertically
+centered over the fullscreen preview. Its text is opaque white and its dark
+background uses 50% opacity so the underlying video remains visible. It lists
+the exact bindings above, does not stop or reset playback, and toggles with `?`;
+the first `Esc` closes help and leaves fullscreen preview open.
 
 ## Approved boundaries and invariants
 
@@ -67,6 +69,7 @@ is open, the first `Esc` closes help and leaves fullscreen preview open.
 - Preview failures remain non-blocking and retain the existing message: `Preview unavailable; preflight can still inspect this clip.`
 - No FFmpeg, FFprobe, Real-ESRGAN, proxy media, or processing service is introduced into the fullscreen preview.
 - Keyboard handling must work when the video surface or control bar has focus and must not depend on mouse focus after opening.
+- Shortcut help must use a separate translucent tool-dialog surface so native video stacking cannot hide it; showing help must not take keyboard focus from fullscreen playback.
 - One authoritative shortcut registry must drive both event resolution and help text so bindings cannot drift from documentation.
 - Fullscreen key presses and releases must be consumed once inside the dialog boundary; modifier-only and auto-repeat events must not trigger commands, and focused controls must not double-activate.
 - Fullscreen playback controls, including the top-right close button, remain hidden during normal use; unrecognized keyboard input briefly reveals them and then auto-hides them.
@@ -91,7 +94,7 @@ is open, the first `Esc` closes help and leaves fullscreen preview open.
 - [x] Add keyboard bindings for `0`, `9`, `j`, `l`, `Space`, `k`, `Shift-P`, `Shift-N`, `Esc`, and `?`.
 - [x] Implement non-wrapping clip navigation with autoplay for `j`/`l` and immediate playback from the beginning for `Shift-P`/`Shift-N`.
 - [x] Implement hidden-by-default controls that briefly reveal on unrecognized keyboard input and then auto-hide without hiding essential error/help states.
-- [x] Implement the keyboard-help overlay and its focus/escape behavior.
+- [x] Implement the borderless right-center keyboard-help dialog, translucent-video treatment, and non-activating focus/escape behavior.
 - [x] Ensure fullscreen closes or safely exits before the main window releases preview resources.
 
 ### 3. Regression coverage
@@ -123,7 +126,7 @@ is open, the first `Esc` closes help and leaves fullscreen preview open.
 - `Space` and `k` play or pause the current clip.
 - `Shift-P` and `Shift-N` navigate to the adjacent clip and begin playback from its start.
 - `Esc` closes the help overlay first, then exits fullscreen preview.
-- `?` opens and closes a help surface listing the exact keyboard bindings.
+- `?` opens and closes a borderless right-center help dialog listing the exact keyboard bindings with opaque white text over a 50%-opaque background.
 - The fullscreen playback controls, including the top-right close button, are hidden during normal use and remain accessible when temporarily revealed.
 - An unrecognized keyboard input reveals the control bar temporarily; it then auto-hides.
 - Fullscreen transitions do not alter clip order, job intent, preflight results, or processing behavior.

@@ -55,7 +55,10 @@ application event filter resolves key presses through an immutable shortcut
 registry, consumes matching key releases before focused Qt controls can
 double-activate, and generates the visible help text from that same registry.
 Playback commands track requested state synchronously because native
-`QMediaPlayer` state notifications are asynchronous.
+`QMediaPlayer` state notifications are asynchronous. Shortcut help uses a
+non-activating frameless tool dialog rather than a sibling video widget, keeping
+opaque white text reliably above the native video surface while a 50%-opaque
+background preserves visual context at the fullscreen view's right-center.
 
 - `core.models`: immutable job intent, exact rationals, typed stream inventory,
   issue codes, concat strategy, and frozen execution plans

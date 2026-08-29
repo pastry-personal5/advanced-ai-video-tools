@@ -151,19 +151,20 @@ QFrame#fullscreenPreviewControls {{
     border-top: 1px solid #50535a;
 }}
 
-QFrame#fullscreenPreviewHelpPanel {{
-    background: rgba(37, 38, 41, 190);
-    border: 1px solid #8ab4f8;
+QDialog#fullscreenPreviewHelpPanel {{
+    background: rgba(37, 38, 41, 128);
+    border: none;
     border-radius: {SURFACE_RADIUS}px;
 }}
 
 QLabel#fullscreenPreviewHelpTitle {{
+    color: #ffffff;
     font-size: 15pt;
     font-weight: 600;
 }}
 
 QLabel#fullscreenPreviewHelpText {{
-    color: #f1f3f4;
+    color: #ffffff;
     font-family: monospace;
 }}
 
