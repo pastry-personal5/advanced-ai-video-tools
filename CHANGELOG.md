@@ -27,6 +27,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Fixed selected-job monitoring progress bars showing stale pipeline progress
+  while a job is cancelling or after it has been cancelled.
+- Made fullscreen preview keyboard playback deterministic under rapid input by
+  using one data-driven key registry and dispatcher, generated shortcut help,
+  complete press/release consumption, synchronous requested playback state,
+  and matched embedded/fullscreen play-control feedback.
+- Added Phase 5 fullscreen selected-source preview with two entry points,
+  keyboard playback and clip navigation, shortcut help, auto-hiding controls,
+  invalid-input control feedback, a hidden-by-default top-right close button, and
+  shared-player ownership without proxy media.
 - Set the temporary v2 GUI display identity to `Advanced AI Video Tools` while retaining the existing organization/storage identity for the later rename phase.
 - Replaced navigation-rail text glyphs with app-owned monochrome vector icons and added resolved-tool feedback after successful Preferences validation.
 - Matched the horizontal inset between the navigation rail and Basic Settings to the rail's application-edge inset (8 px).

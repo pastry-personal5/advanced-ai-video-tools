@@ -141,6 +141,32 @@ QVideoWidget#sourcePreviewVideo {{
     border-radius: {CONTROL_RADIUS}px;
 }}
 
+QVideoWidget#sourcePreviewVideo,
+QVideoWidget#fullscreenPreviewVideo {{
+    background: #17181a;
+}}
+
+QFrame#fullscreenPreviewControls {{
+    background: #252629;
+    border-top: 1px solid #50535a;
+}}
+
+QFrame#fullscreenPreviewHelpPanel {{
+    background: rgba(37, 38, 41, 190);
+    border: 1px solid #8ab4f8;
+    border-radius: {SURFACE_RADIUS}px;
+}}
+
+QLabel#fullscreenPreviewHelpTitle {{
+    font-size: 15pt;
+    font-weight: 600;
+}}
+
+QLabel#fullscreenPreviewHelpText {{
+    color: #f1f3f4;
+    font-family: monospace;
+}}
+
 QLineEdit,
 QSpinBox,
 QAbstractItemView,
@@ -253,6 +279,15 @@ QListWidget::item:selected {{
     color: #ffffff;
 }}
 
+QTableView#queueTable {{
+    padding: 0;
+    background: #17181a;
+}}
+
+QTableView#queueTable::item {{
+    padding: 0 {SPACE_2}px;
+}}
+
 QHeaderView::section {{
     background: #303134;
     border: none;
@@ -260,6 +295,14 @@ QHeaderView::section {{
     padding: {SPACE_2}px;
     color: #e8eaed;
     font-weight: 600;
+}}
+
+QHeaderView::section:first {{
+    padding-left: 0;
+}}
+
+QHeaderView::section:last {{
+    padding-right: 0;
 }}
 
 QProgressBar {{
@@ -272,7 +315,9 @@ QProgressBar {{
 }}
 
 QProgressBar::chunk {{
-    border-radius: {CONTROL_RADIUS - 2}px;
+    /* Keep the fill flush with the track so no background sliver appears at
+       the right edge as progress approaches the end. */
+    border-radius: 0px;
     background: #8ab4f8;
 }}
 

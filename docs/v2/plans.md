@@ -4,8 +4,8 @@
 
 - Development target: v2
 - Released baseline: v1.0.0
-- Current phase: [Phase 4 — Refactoring](4-refactoring.md) (complete)
-- Last updated: 2026-08-25
+- Current phase: [Phase 5 — GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md) (verification)
+- Last updated: 2026-08-29
 
 ## Purpose
 
@@ -14,9 +14,9 @@ Version 2 evolves the released v1.0.0 application without weakening its validate
 1. Enhance the GUI.
 2. Rename the project.
 
-After those product changes, v2 proceeds through three quality phases: an
-initial stabilization pass, a deliberate refactoring pass, and a final
-stabilization/release pass.
+After those product changes, v2 proceeds through quality and product phases: an
+initial stabilization pass, a deliberate refactoring pass, a fullscreen
+preview enhancement, and a final stabilization/release pass.
 
 Phase 1's GUI enhancement includes a single-window layout revision: a right-side
 source-clip preview and an integrated, tabbed message area along the bottom.
@@ -40,9 +40,10 @@ The new project name, rename compatibility policy, and exact scope of later phas
 | 2 | [Rename Project](2-rename-project.md) | Complete | Apply the approved identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
 | 3 | Stabilization | Complete | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
 | 4 | Refactoring | Complete | Improve code readability and maintainability without weakening approved behavior |
-| 5 | Stabilization and release | Proposed | Re-verify behavior after refactoring and produce the v2 release artifacts |
+| 5 | [GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md) | Verification | Complete the GUI enhancement with immersive fullscreen selected-source preview, keyboard playback, and clip-navigation controls |
+| 6 | Stabilization and release | Proposed | Re-verify behavior after the fullscreen-preview feature and produce the v2 release artifacts |
 
-Phase 2 is complete after Phase 1. Phase 3 is complete under [Phase 3 — Stabilization](3-stabilization.md); Phase 4 is complete under [Phase 4 — Refactoring](4-refactoring.md), and Phase 5 remains provisional.
+Phase 2 is complete after Phase 1. Phase 3 is complete under [Phase 3 — Stabilization](3-stabilization.md); Phase 4 is complete under [Phase 4 — Refactoring](4-refactoring.md). Phase 5 implementation is complete and remains in verification under [Phase 5 — GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md); Phase 6 remains provisional.
 
 ## Cross-phase decisions still required
 
@@ -140,6 +141,16 @@ baseline rather than treating media throughput as an absolute promise.
 - Do not combine Phase 4 with new product features, branding changes, media-policy changes, or speculative compatibility abstractions.
 - Detailed module targets will be selected in bottom-up implementation slices; no separate numeric complexity budget applies.
 
+### Phase 5 GUI-enhancement scope
+
+The approved scope and acceptance criteria are maintained in [Phase 5 — GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md). The phase completes the GUI enhancement by extending only the existing selected-source, playback-only preview. It must not add preview editing, output processing, proxy generation, or changes to the media pipeline.
+
+### Phase 6 stabilization and release scope
+
+- Phase 6 retains the previously planned final stabilization and v2 release-artifact work.
+- Phase 6 begins only after Phase 5 is complete and its implementation, tests, and documentation are synchronized.
+- Release work must re-verify fullscreen-preview behavior, including keyboard focus, help visibility, source navigation, player cleanup, and recovery from preview errors.
+
 ## Version 2 invariants
 
 Unless explicitly superseded, v2 retains these v1 guarantees:
@@ -194,3 +205,7 @@ A phase is complete only when:
 | 2026-08-25 | Begin Phase 3 stabilization, including the proposed performance and exception/error-handling charter, while retaining opt-in native and benchmark checks. |
 | 2026-08-25 | Disable performance benchmarks that include AI upscaling; performance measurements are limited to native GUI presentation or explicitly non-upscaling media work. |
 | 2026-08-25 | Complete Phase 3 stabilization after the documented regression, native presentation, no-upscaling lifecycle/resource, and documentation checks. |
+| 2026-08-29 | Approve Phase 5 as a fullscreen selected-source preview enhancement; move final stabilization and release artifacts to Phase 6. |
+| 2026-08-29 | Approve fullscreen preview bindings: `0` first frame, `9` last frame, `j` previous clip, `l` next clip, `Space`/`k` play-pause, `Shift-P` play previous clip, `Shift-N` play next clip, `Esc` close, and `?` shortcut help. |
+| 2026-08-29 | Approve two fullscreen entry points: an expand button in the preview pane and a `Start Fullscreen Preview` button at the right side of each source-clip list row; approve autoplay for `j` and `l`, and an auto-hiding fullscreen control bar revealed by pointer movement or keyboard input. |
+| 2026-08-29 | Complete Phase 5 fullscreen preview with shared-player ownership, approved keyboard shortcuts, help overlay, row and pane entry points, auto-hide controls, regression coverage, and full quality-gate validation. |

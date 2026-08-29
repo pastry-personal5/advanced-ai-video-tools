@@ -91,4 +91,4 @@ Tests must remain independent of a GPU, network, large model files, and long vid
 
 ## Current execution pointer
 
-Proceed from the current phase in [plans.md](plans.md). Phase 1 — Enhance GUI and Phase 2 — Rename Project are complete, with deferred manual release checks documented in the Phase 2 file. The next phases remain provisional until their entry criteria and scope are approved.
+Proceed from the current phase in [plans.md](plans.md). Phase 1 — Enhance GUI, Phase 2 — Rename Project, Phase 3 — Stabilization, and Phase 4 — Refactoring are complete. Phase 5 — GUI Enhancement Including Fullscreen Preview implementation is complete and in verification; Phase 6 — Stabilization and Release remains provisional.

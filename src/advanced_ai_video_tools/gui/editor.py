@@ -149,6 +149,7 @@ class JobEditor(QWidget):
 
     request_ready = Signal(object)
     message = Signal(str)
+    fullscreen_requested = Signal(int)
 
     def __init__(self, settings: ApplicationSettings, *, clock: Callable[[], datetime] = _local_now, trash_service: SourceClipTrashService | None = None, queued_inputs: Callable[[], tuple[Path, ...]] | None = None, parent: QWidget | None = None) -> None:
         # Declarative widget construction is intentionally kept together.
@@ -324,7 +325,7 @@ class JobEditor(QWidget):
             self._rebuild_input_rows(len(self._paths) - 1)
         self._update_input_controls()
 
-    def _rebuild_input_rows(self, selected_row: int) -> None:
+    def _rebuild_input_rows(self, selected_row: int) -> None:  # pylint: disable=too-many-statements
         """Render filename rows with a right-aligned per-row remove action."""
 
         self.inputs.clear()
@@ -345,6 +346,18 @@ class JobEditor(QWidget):
             filename.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             filename.setToolTip(str(path))
             row_layout.addWidget(filename, 1)
+            fullscreen_button = QToolButton()
+            fullscreen_button.setObjectName("sourceClipFullscreenButton")
+            fullscreen_button.setText("⛶")
+            fullscreen_button.setAccessibleName(f"Start fullscreen preview of {path.name}")
+            fullscreen_button.setToolTip(f"Start fullscreen preview of {path.name}")
+            fullscreen_button.setFixedSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
+            fullscreen_button.setStyleSheet("QToolButton { padding: 0px; }")
+            fullscreen_font = fullscreen_button.font()
+            fullscreen_font.setPointSizeF(max(1.0, fullscreen_font.pointSizeF() * 2))
+            fullscreen_button.setFont(fullscreen_font)
+            fullscreen_button.clicked.connect(lambda _checked=False, current_item=item: self._request_fullscreen(current_item))
+            row_layout.addWidget(fullscreen_button)
             remove_button = QToolButton()
             remove_button.setObjectName("sourceClipRemoveButton")
             remove_button.setIcon(_minus_circle_icon())
@@ -366,6 +379,14 @@ class JobEditor(QWidget):
             self.inputs.setItemWidget(item, row)
         if self._paths:
             self.inputs.setCurrentRow(max(0, min(selected_row, len(self._paths) - 1)))
+
+    def _request_fullscreen(self, item: QListWidgetItem) -> None:
+        """Request fullscreen playback for one source row."""
+
+        row = self.inputs.row(item)
+        if 0 <= row < len(self._paths):
+            self.inputs.setCurrentRow(row)
+            self.fullscreen_requested.emit(row)
 
     @Slot()
     def _remove_item(self, item: QListWidgetItem) -> None:

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QModelIndex, Qt, Slot
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QAbstractItemView, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QStackedWidget, QTableView, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QStackedWidget, QTableView, QToolButton, QVBoxLayout, QWidget
 
 from advanced_ai_video_tools.core.models import JobState, PipelineStage, Toolchain
 from advanced_ai_video_tools.gui.editor import JobEditor
@@ -55,13 +55,20 @@ class MainWindow(QMainWindow):
         self.queue_table.setObjectName("queueTable")
         self.queue_table.setModel(model)
         self.queue_table.setFixedHeight(240)
+        self.queue_table.setContentsMargins(0, 0, 0, 0)
+        self.queue_table.setShowGrid(False)
+        self.queue_table.verticalHeader().setVisible(False)
+        self.queue_table.verticalHeader().setDefaultSectionSize(40)
         self.queue_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.queue_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.queue_table.horizontalHeader().setStretchLastSection(False)
-        self.queue_table.setColumnWidth(0, 180)
-        self.queue_table.setColumnWidth(1, 520)
-        self.queue_table.setColumnWidth(2, 120)
+        header = self.queue_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(0, 140)
+        header.resizeSection(2, 110)
+        header.setStretchLastSection(False)
         self.queue_table.setAlternatingRowColors(True)
         self.queue_table.setAccessibleName("Processing queue")
         job_queue_group = QGroupBox("Job Queue")
@@ -199,6 +206,8 @@ class MainWindow(QMainWindow):
         self.source_preview.last_frame_requested.connect(self.source_preview.go_to_last_frame)
         self.source_preview.preview_error.connect(self._append_global_message)
         self.source_preview.audio_preferences_changed.connect(self._audio_preferences_changed)
+        self.source_preview.fullscreen_requested.connect(self.source_preview.open_fullscreen)
+        self.editor.fullscreen_requested.connect(self._open_source_fullscreen)
         self.editor.message.connect(self._append_global_message)
         self._append_global_message("Application started.")
         self._append_global_message("Add clips in order they should be concatenated.")
@@ -266,6 +275,14 @@ class MainWindow(QMainWindow):
 
         paths = self.editor.input_paths()
         self.source_preview.set_sources(paths, row)
+
+    @Slot(int)
+    def _open_source_fullscreen(self, row: int) -> None:
+        """Select a source row and open its fullscreen preview."""
+
+        if 0 <= row < self.editor.inputs.count():
+            self.editor.inputs.setCurrentRow(row)
+            self.source_preview.open_fullscreen()
 
     def _queued_source_paths(self) -> tuple[Path, ...]:
         """Return source paths referenced by jobs that still occupy the queue."""
@@ -391,6 +408,24 @@ class MainWindow(QMainWindow):
 
     def _update_progress_details(self, state: object, stage: object, completed: int, total: object) -> None:
         """Render stage and whole-job progress from typed queue roles."""
+
+        # A cancellation snapshot can retain the last pipeline progress event.
+        # That value describes work before cancellation, not cancellation or
+        # cleanup itself, so do not present it as current job progress.
+        if state == JobState.CANCELLING.value:
+            self.selected_job_overall_progress.setRange(0, 0)
+            self.selected_job_overall_progress.setFormat("Whole job: Cancelling…")
+            self.selected_job_stage_progress.setRange(0, 0)
+            self.selected_job_stage_progress.setFormat("Stage: Cancelling and cleaning up…")
+            return
+        if state == JobState.CANCELLED.value:
+            self.selected_job_overall_progress.setRange(0, 100)
+            self.selected_job_overall_progress.setValue(0)
+            self.selected_job_overall_progress.setFormat("Whole job: Cancelled")
+            self.selected_job_stage_progress.setRange(0, 1)
+            self.selected_job_stage_progress.setValue(0)
+            self.selected_job_stage_progress.setFormat("Stage: Cancelled")
+            return
 
         if state == JobState.COMPLETED.value:
             whole_percent = 100

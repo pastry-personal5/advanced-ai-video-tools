@@ -17,15 +17,16 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QLockFile, QModelIndex, QObject, Qt, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtGui import QPalette  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtGui import QKeyEvent, QPalette  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtTest import QTest  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QPushButton, QSplitter, QToolButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from advanced_ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
-from advanced_ai_video_tools.gui.preview import VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, SourcePreviewPane  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.preview import FULLSCREEN_SHORTCUTS, SHORTCUT_HELP, VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, FullscreenCommand, SourcePreviewPane, resolve_fullscreen_shortcut  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
@@ -62,6 +63,10 @@ def test_gui_theme_is_always_dark(qt_app: QApplication) -> None:
     assert qt_app.palette().color(QPalette.ColorRole.Window).name() == "#202124"
     assert qt_app.palette().color(QPalette.ColorRole.Text).name() == "#f1f3f4"
     assert f"border-radius: {CONTROL_RADIUS}px" in qt_app.styleSheet()
+    assert "QProgressBar::chunk" in qt_app.styleSheet()
+    assert "border-radius: 0px;" in qt_app.styleSheet()
+    assert "QHeaderView::section:first" in qt_app.styleSheet()
+    assert "QHeaderView::section:last" in qt_app.styleSheet()
     assert f"min-height: {CONTROL_HEIGHT - 2}px" in qt_app.styleSheet()
 
 
@@ -208,6 +213,12 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     assert window.minimumWidth() == 1400
     assert window.minimumHeight() == 880
     assert window.queue_table.height() == 240
+    margins = window.queue_table.contentsMargins()
+    assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (1, 1, 1, 1)
+    assert not window.queue_table.verticalHeader().isVisible()
+    assert not window.queue_table.showGrid()
+    assert window.queue_table.horizontalHeader().sectionResizeMode(1).name == "Stretch"
+    assert window.queue_table.horizontalHeader().sectionResizeMode(2).name == "Fixed"
     job_queue_group = window.findChild(QGroupBox, "queueGroup")
     assert job_queue_group is not None
     assert job_queue_group.title() == "Job Queue"
@@ -233,6 +244,34 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     window.queue_table.setCurrentIndex(model.index(1, 0))
     qt_app.processEvents()
     assert not window.move_job_up_button.isEnabled()
+    window.close()
+
+
+def test_main_window_does_not_show_stale_progress_after_cancellation(qt_app: QApplication, tmp_path: Path) -> None:
+    """Cancellation states replace retained pipeline progress with clear status."""
+
+    running = _snapshot(tmp_path, "cancel", JobState.RUNNING, None, revision=2, progress=ProgressEvent(PipelineStage.ENCODE, 8, 8, "Encoding output"))
+    queue = FakeQueue((running,))
+    bridge = QueueSnapshotBridge()
+    model = JobListModel(queue, bridge)  # type: ignore[arg-type]
+    window = MainWindow(model, ApplicationSettings(target_height=2160), tmp_path / "application.log")
+    window.queue_table.setCurrentIndex(model.index(0, 0))
+    qt_app.processEvents()
+
+    bridge.forward(_snapshot(tmp_path, "cancel", JobState.CANCELLING, None, revision=3, progress=running.last_progress))
+    assert _process_until(qt_app, lambda: window.job_state_value.text() == "Cancelling")
+    assert window.selected_job_overall_progress.maximum() == 0
+    assert window.selected_job_overall_progress.format() == "Whole job: Cancelling…"
+    assert window.selected_job_stage_progress.maximum() == 0
+
+    bridge.forward(_snapshot(tmp_path, "cancel", JobState.CANCELLED, None, revision=4, progress=ProgressEvent(PipelineStage.CLEANUP, 1, 1, "Cleaning up")))
+    assert _process_until(qt_app, lambda: window.job_state_value.text() == "Cancelled")
+    assert window.selected_job_overall_progress.maximum() == 100
+    assert window.selected_job_overall_progress.value() == 0
+    assert window.selected_job_overall_progress.format() == "Whole job: Cancelled"
+    assert window.selected_job_stage_progress.maximum() == 1
+    assert window.selected_job_stage_progress.value() == 0
+    assert window.selected_job_stage_progress.format() == "Stage: Cancelled"
     window.close()
 
 
@@ -430,14 +469,15 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.source_preview.play_pause_button.isEnabled()
     assert window.source_preview.previous_button.text() == "←"
     assert window.source_preview.next_button.text() == "→"
+    assert window.source_preview.fullscreen_button.text() == "⛶"
     assert window.source_preview.play_pause_button.text() == "▶"
     controls = window.source_preview.layout().itemAt(3).layout()
     assert controls.itemAt(0).layout() is not None
     assert [controls.itemAt(0).layout().itemAt(index).widget() for index in range(3)] == [window.source_preview.play_pause_button, window.source_preview.first_frame_button, window.source_preview.last_frame_button]
     assert controls.itemAt(1).spacerItem() is not None
     assert controls.itemAt(2).layout() is not None
-    assert [controls.itemAt(2).layout().itemAt(index).widget() for index in range(2)] == [window.source_preview.previous_button, window.source_preview.next_button]
-    for button in (window.source_preview.play_pause_button, window.source_preview.first_frame_button, window.source_preview.last_frame_button, window.source_preview.previous_button, window.source_preview.next_button):
+    assert [controls.itemAt(2).layout().itemAt(index).widget() for index in range(3)] == [window.source_preview.previous_button, window.source_preview.next_button, window.source_preview.fullscreen_button]
+    for button in (window.source_preview.play_pause_button, window.source_preview.first_frame_button, window.source_preview.last_frame_button, window.source_preview.previous_button, window.source_preview.next_button, window.source_preview.fullscreen_button):
         assert button.size().width() == 32
         assert button.size().height() == 32
         assert button.font().pointSizeF() == pytest.approx(QApplication.font().pointSizeF() * 2)
@@ -554,6 +594,7 @@ def test_source_preview_exposes_playback_controls_only(qt_app: QApplication) -> 
         "previewFirstFrameButton",
         "previewLastFrameButton",
         "previewNextButton",
+        "previewFullscreenButton",
     }
     assert not hasattr(pane, "trim_start")
     assert not hasattr(pane, "trim_end")
@@ -561,6 +602,127 @@ def test_source_preview_exposes_playback_controls_only(qt_app: QApplication) -> 
     assert not hasattr(pane, "frame_export_button")
     pane.shutdown()
     pane.close()
+
+
+@pytest.mark.parametrize(("shortcut", "binding"), [(shortcut, binding) for shortcut in FULLSCREEN_SHORTCUTS for binding in shortcut.bindings])
+def test_fullscreen_shortcut_registry_resolves_every_documented_binding(shortcut: object, binding: tuple[Qt.Key, Qt.KeyboardModifier]) -> None:
+    """Every help entry resolves through the same authoritative registry."""
+
+    key, modifiers = binding
+    assert resolve_fullscreen_shortcut(key, modifiers) is shortcut.command  # type: ignore[attr-defined]
+
+
+def test_fullscreen_shortcut_registry_is_unique_complete_and_layout_tolerant() -> None:
+    """Bindings cannot conflict, drift from help, or lose common question-key forms."""
+
+    bindings = [binding for shortcut in FULLSCREEN_SHORTCUTS for binding in shortcut.bindings]
+    assert len(bindings) == len(set(bindings))
+    assert {shortcut.command for shortcut in FULLSCREEN_SHORTCUTS} == set(FullscreenCommand)
+    assert SHORTCUT_HELP.splitlines() == [f"{shortcut.display:<12} {shortcut.description}" for shortcut in FULLSCREEN_SHORTCUTS]
+    assert resolve_fullscreen_shortcut(Qt.Key.Key_Slash, Qt.KeyboardModifier.ShiftModifier, "?") is FullscreenCommand.TOGGLE_HELP
+    assert resolve_fullscreen_shortcut(Qt.Key.Key_Question, Qt.KeyboardModifier.NoModifier, "?") is FullscreenCommand.TOGGLE_HELP
+    assert resolve_fullscreen_shortcut(Qt.Key.Key_0, Qt.KeyboardModifier.KeypadModifier) is FullscreenCommand.FIRST_FRAME
+    assert resolve_fullscreen_shortcut(Qt.Key.Key_K, Qt.KeyboardModifier.ShiftModifier, "K") is None
+    assert resolve_fullscreen_shortcut(Qt.Key.Key_G, Qt.KeyboardModifier.NoModifier, "g") is None
+
+
+# pylint: disable=too-many-statements
+def test_fullscreen_preview_entry_points_and_keyboard_help(qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fullscreen preview supports row/pane entry, navigation, help, and exit."""
+
+    del qt_app
+    window = MainWindow(JobListModel(FakeQueue(), QueueSnapshotBridge()), ApplicationSettings())  # type: ignore[arg-type]
+    paths = (tmp_path / "first.mov", tmp_path / "second.mov", tmp_path / "third.mov")
+    window.editor.add_inputs(paths)
+    window.editor.inputs.setCurrentRow(1)
+    frozen_paths = window.editor.input_paths()
+
+    playback_calls: list[str] = []
+    monkeypatch.setattr(window.source_preview, "_toggle_playback", lambda: playback_calls.append("toggle"))
+    row = window.editor.inputs.itemWidget(window.editor.inputs.item(2))
+    assert row is not None
+    row.findChild(QToolButton, "sourceClipFullscreenButton").click()  # type: ignore[union-attr]
+    dialog = window.source_preview._fullscreen  # pylint: disable=protected-access
+    assert dialog is not None
+    assert window.editor.inputs.currentRow() == 2
+    assert window.source_preview.player.source().toLocalFile() == str(paths[2])
+    assert window.editor.input_paths() == frozen_paths
+    assert not dialog.controls.isVisible()
+    assert not dialog.exit_button.isVisible()
+    assert dialog.exit_button.accessibleName() == "Close fullscreen preview"
+    assert dialog.exit_button.size() == dialog.help_button.size() == window.source_preview.fullscreen_button.size()
+    assert dialog.exit_button.font().pointSizeF() == pytest.approx(QApplication.font().pointSizeF() * 2)
+    assert dialog._hide_timer.interval() == 2500  # pylint: disable=protected-access
+    assert any(label.text() == SHORTCUT_HELP for label in dialog.help_panel.findChildren(QLabel))
+    window.source_preview._playback_state_changed(QMediaPlayer.PlaybackState.PlayingState)  # pylint: disable=protected-access
+    assert dialog.play_button.text() == "Ⅱ"
+    assert dialog.play_button.accessibleName() == "Pause preview"
+    window.source_preview._playback_state_changed(QMediaPlayer.PlaybackState.PausedState)  # pylint: disable=protected-access
+    assert dialog.play_button.text() == "▶"
+    assert dialog.play_button.accessibleName() == "Play preview"
+    dialog.video.setFocus()
+    QTest.keyClick(dialog.video, Qt.Key.Key_K)
+    assert playback_calls == ["toggle"]
+    dialog.play_button.setFocus()
+    QTest.keyClick(dialog.play_button, Qt.Key.Key_Space)
+    assert playback_calls == ["toggle", "toggle"]
+
+    previous: list[str] = []
+    next_clip: list[str] = []
+    window.source_preview.previous_requested.connect(lambda: previous.append("previous"))
+    window.source_preview.next_requested.connect(lambda: next_clip.append("next"))
+    dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_J, Qt.KeyboardModifier.NoModifier, "j"))
+    dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_L, Qt.KeyboardModifier.NoModifier, "l"))
+    assert previous == ["previous"]
+    assert next_clip == ["next"]
+    assert not dialog.controls.isVisible()
+    dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_X, Qt.KeyboardModifier.NoModifier, "x"))
+    assert dialog.controls.isVisible()
+    assert dialog.exit_button.isVisible()
+    dialog._hide_controls()  # pylint: disable=protected-access
+    assert not dialog.controls.isVisible()
+    assert not dialog.exit_button.isVisible()
+    dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Shift, Qt.KeyboardModifier.ShiftModifier, ""))
+    dialog.keyReleaseEvent(QKeyEvent(QKeyEvent.Type.KeyRelease, Qt.Key.Key_Shift, Qt.KeyboardModifier.NoModifier, ""))
+    assert not dialog.controls.isVisible()
+    QTest.keyClick(dialog.video, Qt.Key.Key_Slash, Qt.KeyboardModifier.ShiftModifier)
+    assert dialog.help_panel.isVisible()
+    QTest.keyClick(dialog.help_button, Qt.Key.Key_Question)
+    assert not dialog.help_panel.isVisible()
+    QTest.keyClick(dialog, Qt.Key.Key_G)
+    assert dialog.controls.isVisible()
+    QTest.keyClick(dialog.video, Qt.Key.Key_K)
+    assert playback_calls == ["toggle", "toggle", "toggle"]
+    for _ in range(10):
+        QTest.keyClick(dialog, Qt.Key.Key_G)
+        QTest.keyClick(dialog.video, Qt.Key.Key_K)
+    assert len(playback_calls) == 13
+    assert playback_calls[-10:] == ["toggle"] * 10
+
+    frame_actions: list[str] = []
+    monkeypatch.setattr(window.source_preview, "go_to_first_frame", lambda: frame_actions.append("first"))
+    monkeypatch.setattr(window.source_preview, "go_to_last_frame", lambda: frame_actions.append("last"))
+    dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_0, Qt.KeyboardModifier.NoModifier, "0"))
+    dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_9, Qt.KeyboardModifier.NoModifier, "9"))
+    assert frame_actions == ["first", "last"]
+
+    window.editor.inputs.setCurrentRow(1)
+    dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_P, Qt.KeyboardModifier.ShiftModifier, "P"))
+    assert window.editor.inputs.currentRow() == 0
+    dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_N, Qt.KeyboardModifier.ShiftModifier, "N"))
+    assert window.editor.inputs.currentRow() == 1
+
+    dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Question, Qt.KeyboardModifier.NoModifier, "?"))
+    assert dialog.help_panel.isVisible()
+    dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier, ""))
+    assert not dialog.help_panel.isVisible()
+    dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier, ""))
+    assert window.source_preview._fullscreen is None  # pylint: disable=protected-access
+
+    window.source_preview.open_fullscreen()
+    assert window.source_preview._fullscreen is not None  # pylint: disable=protected-access
+    window.source_preview._fullscreen.close()  # pylint: disable=protected-access
+    window.close()
 
 
 def test_source_preview_progress_tracks_duration_and_user_seek(qt_app: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -579,6 +741,25 @@ def test_source_preview_progress_tracks_duration_and_user_seek(qt_app: QApplicat
     assert pane.progress_slider.value() == 7_500
     assert seek_positions == [7_500]
     assert pane.preview_time_label.text() == "0:02 / 0:10"
+    pane.shutdown()
+    pane.close()
+
+
+def test_source_preview_rapid_playback_toggle_tracks_requested_state(qt_app: QApplication, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rapid input alternates commands without waiting for Qt state signals."""
+
+    del qt_app
+    pane = SourcePreviewPane()
+    commands: list[str] = []
+    monkeypatch.setattr(pane.player, "play", lambda: commands.append("play"))
+    monkeypatch.setattr(pane.player, "pause", lambda: commands.append("pause"))
+
+    for _ in range(10):
+        pane._toggle_playback()  # pylint: disable=protected-access
+        pane._toggle_playback()  # pylint: disable=protected-access
+
+    assert commands == ["play", "pause"] * 10
+    assert not pane._playback_requested  # pylint: disable=protected-access
     pane.shutdown()
     pane.close()
 
