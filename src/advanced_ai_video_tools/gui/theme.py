@@ -124,31 +124,31 @@ QGroupBox#selectedJobDetails {{
     border-color: #50535a;
 }}
 
-QGroupBox#sourcePreviewPane {{
+QGroupBox#sourcePreviewPane,
+QGroupBox#queuePreviewPane {{
     background: #252629;
     border: 1px solid #50535a;
     border-radius: {SURFACE_RADIUS}px;
 }}
 
-QGroupBox#sourcePreviewPane::title {{
+QGroupBox#sourcePreviewPane::title,
+QGroupBox#queuePreviewPane::title {{
     font-size: 13pt;
     font-weight: 600;
 }}
 
-QVideoWidget#sourcePreviewVideo {{
+QVideoWidget#sourcePreviewVideo,
+QVideoWidget#queuePreviewVideo,
+QLabel#queuePreviewFrame {{
     background: #17181a;
     border: 1px solid #3c4043;
     border-radius: {CONTROL_RADIUS}px;
 }}
 
 QVideoWidget#sourcePreviewVideo,
+QVideoWidget#queuePreviewVideo,
 QVideoWidget#fullscreenPreviewVideo {{
     background: #17181a;
-}}
-
-QFrame#fullscreenPreviewControls {{
-    background: #252629;
-    border-top: 1px solid #50535a;
 }}
 
 QDialog#fullscreenPreviewHelpPanel {{
@@ -166,6 +166,22 @@ QLabel#fullscreenPreviewHelpTitle {{
 QLabel#fullscreenPreviewHelpText {{
     color: #ffffff;
     font-family: monospace;
+}}
+
+QLabel#queuePreviewStatus {{
+    color: #b8bcc2;
+}}
+
+QDialog#queuePreviewLastFrameWait {{
+    background: rgba(37, 38, 41, 224);
+    border: 1px solid #5f6368;
+    border-radius: {SURFACE_RADIUS}px;
+}}
+
+QLabel#queuePreviewLastFrameWaitText {{
+    color: #d4d7dc;
+    font-size: 13pt;
+    font-weight: 600;
 }}
 
 QLineEdit,
@@ -243,6 +259,7 @@ QPushButton#submitJobButton:disabled {{
 }}
 
 QToolButton#chooseOutputButton,
+QToolButton#sourceClipFullscreenButton,
 QToolButton#sourceClipRemoveButton,
 QToolButton#sourceClipMenuButton {{
     min-width: {CONTROL_HEIGHT - 2}px;
@@ -250,17 +267,15 @@ QToolButton#sourceClipMenuButton {{
     padding: 0;
 }}
 
+QToolButton#sourceClipFullscreenButton,
 QToolButton#sourceClipRemoveButton,
 QToolButton#sourceClipMenuButton {{
     background: transparent;
     border-color: transparent;
 }}
 
-QToolButton#sourceClipRemoveButton:hover {{
-    background: #3c4043;
-    border-color: #8ab4f8;
-}}
-
+QToolButton#sourceClipFullscreenButton:hover,
+QToolButton#sourceClipRemoveButton:hover,
 QToolButton#sourceClipMenuButton:hover {{
     background: #3c4043;
     border-color: #8ab4f8;

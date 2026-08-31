@@ -17,7 +17,7 @@ from advanced_ai_video_tools.gui.editor import JobEditor
 from advanced_ai_video_tools.gui.jobs import JobListModel, JobRole
 from advanced_ai_video_tools.gui.identity import GUI_DISPLAY_NAME
 from advanced_ai_video_tools.gui.messages import MessageEvent, MessageWidget
-from advanced_ai_video_tools.gui.preview import SourcePreviewPane
+from advanced_ai_video_tools.gui.preview import QueuePreviewPane, SourcePreviewPane
 from advanced_ai_video_tools.gui.submission import JobSubmissionController
 from advanced_ai_video_tools.gui.theme import CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, SPACE_3, SPACE_4
 from advanced_ai_video_tools.gui.tool_settings import ToolSettingsDialog, ToolSettingsValidator
@@ -40,12 +40,14 @@ class MainWindow(QMainWindow):
         self._last_snapshots: dict[str, object] = {}
         self._last_upscale_message_percent: dict[str, int] = {}
         self._preview_processing_job_id: str | None = None
+        self._queue_preview_job_id: str | None = None
         self._global_shutdown_recorded = False
         self.setWindowTitle(GUI_DISPLAY_NAME)
         self.setMinimumSize(1400, 880)
 
         self.editor = JobEditor(settings, queued_inputs=self._queued_source_paths)
         self.source_preview = SourcePreviewPane(muted=settings.preview_muted, volume=settings.preview_volume)
+        self.queue_preview = QueuePreviewPane(muted=settings.preview_muted, volume=settings.preview_volume)
         edit_menu = self.menuBar().addMenu("Edit")
         self.preferences_action = QAction("Preferences", self)
         self.preferences_action.setObjectName("preferencesAction")
@@ -121,18 +123,11 @@ class MainWindow(QMainWindow):
 
         creation_page = QWidget()
         creation_layout = QVBoxLayout(creation_page)
-        # The rail already owns the horizontal edge inset. Removing a second
-        # left inset keeps the visible button-to-panel gap optically symmetric.
-        creation_layout.setContentsMargins(0, SPACE_4, SPACE_4, SPACE_4)
-        creation_content = QHBoxLayout()
-        creation_content.setContentsMargins(0, 0, 0, 0)
-        creation_content.setSpacing(MAJOR_REGION_GAP)
-        creation_content.addWidget(self.editor, 1)
-        creation_content.addWidget(self.source_preview)
-        creation_layout.addLayout(creation_content, 1)
+        creation_layout.setContentsMargins(0, 0, 0, 0)
+        creation_layout.addWidget(self.editor, 1)
         monitoring_page = QWidget()
         monitoring_layout = QVBoxLayout(monitoring_page)
-        monitoring_layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
+        monitoring_layout.setContentsMargins(0, 0, 0, 0)
         monitoring_layout.setSpacing(SPACE_3)
         monitoring_layout.addWidget(job_queue_group, 1)
         monitoring_layout.addWidget(details)
@@ -167,25 +162,36 @@ class MainWindow(QMainWindow):
         self.queue_monitoring_button.clicked.connect(lambda: self._switch_view(1))
         self.job_creation_button.setChecked(True)
 
-        content = QWidget()
-        content_layout = QHBoxLayout(content)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(0)
-        content_layout.addWidget(self.navigation_rail)
-        content_layout.addWidget(self.view_stack, 1)
-
         self.message_widget = MessageWidget()
         self.message_widget.setObjectName("sessionMessageWidget")
         self.message_tabs = self.message_widget.tabs
         self.global_messages = self.message_widget.global_messages
         self.job_messages = self.message_widget.job_messages
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.setObjectName("contentMessageSplitter")
-        splitter.addWidget(content)
-        splitter.addWidget(self.message_widget)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 0)
-        self.setCentralWidget(splitter)
+        self.content_message_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.content_message_splitter.setObjectName("contentMessageSplitter")
+        self.content_message_splitter.setChildrenCollapsible(False)
+        self.content_message_splitter.addWidget(self.view_stack)
+        self.content_message_splitter.addWidget(self.message_widget)
+        self.content_message_splitter.setStretchFactor(0, 1)
+        self.content_message_splitter.setStretchFactor(1, 0)
+        self.preview_stack = QStackedWidget()
+        self.preview_stack.setObjectName("previewViewStack")
+        self.preview_stack.addWidget(self.source_preview)
+        self.preview_stack.addWidget(self.queue_preview)
+        workspace = QWidget()
+        workspace.setObjectName("mainWorkspace")
+        workspace_layout = QHBoxLayout(workspace)
+        workspace_layout.setContentsMargins(0, SPACE_4, SPACE_4, SPACE_4)
+        workspace_layout.setSpacing(MAJOR_REGION_GAP)
+        workspace_layout.addWidget(self.content_message_splitter, 1)
+        workspace_layout.addWidget(self.preview_stack, 1)
+        content = QWidget()
+        content_layout = QHBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        content_layout.addWidget(self.navigation_rail)
+        content_layout.addWidget(workspace, 1)
+        self.setCentralWidget(content)
 
         self.queue_table.selectionModel().currentChanged.connect(self._selection_changed)
         self.queue_table.clicked.connect(self._handle_queue_cell_click)
@@ -266,6 +272,7 @@ class MainWindow(QMainWindow):
         """Switch visible presentation surface without changing job state."""
 
         self.view_stack.setCurrentIndex(index)
+        self.preview_stack.setCurrentIndex(index)
         self.job_creation_button.setChecked(index == 0)
         self.queue_monitoring_button.setChecked(index == 1)
 
@@ -278,10 +285,14 @@ class MainWindow(QMainWindow):
 
     @Slot(int)
     def _open_source_fullscreen(self, row: int) -> None:
-        """Select a source row and open its fullscreen preview."""
+        """Synchronize one source row before opening its fullscreen preview."""
 
         if 0 <= row < self.editor.inputs.count():
             self.editor.inputs.setCurrentRow(row)
+            # A clip-row accessory button can request fullscreen without a new
+            # list-selection signal. Bind the selected source synchronously so
+            # opening never relies on that separate signal's delivery timing.
+            self._update_preview_for_source_selection(row)
             self.source_preview.open_fullscreen()
 
     def _queued_source_paths(self) -> tuple[Path, ...]:
@@ -404,6 +415,8 @@ class MainWindow(QMainWindow):
         self.job_name_value.setText("No job selected")
         self.job_state_value.setText("No job selected")
         self.job_stage_value.setText("No job selected")
+        self._queue_preview_job_id = None
+        self.queue_preview.clear("Select a running or completed job to preview its output.")
         self.message_widget.select_job(None)
 
     def _update_progress_details(self, state: object, stage: object, completed: int, total: object) -> None:
@@ -450,12 +463,34 @@ class MainWindow(QMainWindow):
 
         message = self._model.data(index, int(JobRole.ERROR)) or self._model.data(index, int(JobRole.MESSAGE))
         self.selected_job_message.setText(str(message))
-        self.selected_job_output.setText(str(self._model.data(index, int(JobRole.OUTPUT_PATH))))
+        output_path = str(self._model.data(index, int(JobRole.OUTPUT_PATH)))
+        self.selected_job_output.setText(output_path)
         self.job_name_value.setText(str(self._model.data(self._model.index(index.row(), 1), int(Qt.ItemDataRole.DisplayRole))))
         state = self._model.data(index, int(JobRole.STATE))
         stage = self._model.data(index, int(JobRole.STAGE))
         self.job_state_value.setText(str(state).replace("_", " ").title())
         self.job_stage_value.setText(str(stage or "Waiting"))
+        snapshot = self._model.snapshot_at(index)
+        progress = snapshot.last_progress if snapshot is not None else None
+        job_id = str(self._model.data(index, int(JobRole.JOB_ID)))
+        if state == JobState.COMPLETED.value:
+            self._queue_preview_job_id = job_id
+            self.queue_preview.show_final_output(Path(output_path))
+        elif state == JobState.RUNNING.value and progress is not None and progress.stage is PipelineStage.UPSCALE:
+            preview_path = progress.preview_image_path
+            if preview_path is None:
+                self._queue_preview_job_id = None
+                self.queue_preview.clear("Live upscaled frames appear every 16 frames.")
+            else:
+                self._queue_preview_job_id = job_id
+                self.queue_preview.show_upscaled_frame(preview_path, progress.completed // 16 * 16)
+        elif state == JobState.RUNNING.value:
+            if self._queue_preview_job_id != job_id or not self.queue_preview.showing_live_frame:
+                self._queue_preview_job_id = None
+                self.queue_preview.clear("Live upscaled frames appear during the upscaling stage.")
+        else:
+            self._queue_preview_job_id = None
+            self.queue_preview.clear("Select a running or completed job to preview its output.")
         completed = int(self._model.data(index, int(JobRole.PROGRESS_COMPLETED)) or 0)
         total = self._model.data(index, int(JobRole.PROGRESS_TOTAL))
         self._update_progress_details(state, stage, completed, total)
@@ -494,6 +529,7 @@ class MainWindow(QMainWindow):
             self._settings = value
             self.editor.apply_settings(value)
             self.source_preview.set_audio_preferences(value.preview_muted, value.preview_volume)
+            self.queue_preview.set_audio_preferences(value.preview_muted, value.preview_volume)
             if self._submission is not None:
                 self._submission.apply_settings(value)
             self._append_global_message("Application settings updated.")
@@ -510,10 +546,12 @@ class MainWindow(QMainWindow):
                 self._append_global_message(f"Preview audio preferences could not be saved: {error}")
                 return
         self._settings = updated
+        self.queue_preview.set_audio_preferences(muted, volume)
 
     def closeEvent(self, event: object) -> None:  # pylint: disable=invalid-name
         """Record session shutdown before Qt releases the window."""
         self.source_preview.shutdown()
+        self.queue_preview.shutdown()
         if not self._global_shutdown_recorded:
             self._append_global_message("Application shutting down.")
             self._global_shutdown_recorded = True

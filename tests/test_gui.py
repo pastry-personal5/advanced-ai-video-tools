@@ -17,16 +17,17 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QLockFile, QModelIndex, QObject, Qt, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtGui import QKeyEvent, QPalette  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtGui import QImage, QKeyEvent, QPalette  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtTest import QTest  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QPushButton, QSplitter, QToolButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QPushButton, QSlider, QSplitter, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from advanced_ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.editor import SOURCE_CLIP_LIST_WIDTH  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
-from advanced_ai_video_tools.gui.preview import FULLSCREEN_HELP_MARGIN, FULLSCREEN_SHORTCUTS, SHORTCUT_HELP, VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, FullscreenCommand, SourcePreviewPane, resolve_fullscreen_shortcut  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.preview import FULLSCREEN_HELP_MARGIN, FULLSCREEN_SHORTCUTS, PREVIEW_PANE_MINIMUM_WIDTH, SHORTCUT_HELP, VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, FullscreenCommand, QueuePreviewPane, SourcePreviewPane, resolve_fullscreen_shortcut  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
@@ -419,13 +420,16 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert left_gap == right_gap == SPACE_2
     assert left_gap == 8
     assert right_gap == 8
-    assert window.view_stack.geometry().left() - window.navigation_rail.geometry().right() - 1 == 0
-    assert window.view_stack.geometry().left() - window.job_creation_button.geometry().right() - 1 == right_gap
+    splitter_origin = window.content_message_splitter.mapTo(window, window.content_message_splitter.rect().topLeft())
+    assert splitter_origin.x() - (rail_origin.x() + window.navigation_rail.width()) == 0
+    assert splitter_origin.x() - (button_origin.x() + window.job_creation_button.width()) == right_gap
     window.queue_monitoring_button.click()
     assert window.view_stack.currentIndex() == 1
+    assert window.preview_stack.currentIndex() == 1
     assert not window.job_creation_button.isChecked()
     window.job_creation_button.click()
     assert window.view_stack.currentIndex() == 0
+    assert window.preview_stack.currentIndex() == 0
     assert window.queue_monitoring_button.isEnabled()
     assert window.editor.findChild(QGroupBox, "sourceClipListGroup").title() == "Source Clips"
     assert window.source_preview.title() == "Preview"
@@ -459,15 +463,14 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert [mute_group.itemAt(index).widget() for index in range(2)] == [window.source_preview.mute_toggle, window.source_preview.mute_label]
     window.editor.add_inputs((tmp_path / "first.mov",))
     assert window.findChild(QLabel, "sourcePreviewSource") is None
-    assert window.source_preview.minimumWidth() == 450
-    assert window.editor.inputs.width() <= 823
+    assert window.source_preview.minimumWidth() == PREVIEW_PANE_MINIMUM_WIDTH
+    assert window.editor.inputs.width() <= SOURCE_CLIP_LIST_WIDTH
     window.source_preview._preview_error(QMediaPlayer.Error.ResourceError, "Unsupported preview media")  # pylint: disable=protected-access
     assert "Preview unavailable; preflight can still inspect this clip." in window.global_messages.toPlainText()
     assert window.source_preview.preview_label.text() == "Preview unavailable; preflight can still inspect this clip."
     assert window.source_preview.preview_label.isVisible()
     window.editor.output_directory.setText(str(tmp_path))
     assert window.editor.build_request().inputs == (tmp_path / "first.mov",)
-    assert window.source_preview.heightForWidth(300) == 400
     assert window.source_preview.play_pause_button.isEnabled()
     assert window.source_preview.previous_button.text() == "←"
     assert window.source_preview.next_button.text() == "→"
@@ -518,7 +521,7 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
 
 
 def test_job_creation_major_region_gaps_are_equal(qt_app: QApplication) -> None:
-    """Basic Settings→Source Clips and Source Clips→Preview use one gap token."""
+    """Editor columns and the tall preview boundary use one gap token."""
 
     window = MainWindow(JobListModel(FakeQueue(), QueueSnapshotBridge()), ApplicationSettings(target_height=2160))  # type: ignore[arg-type]
     window.resize(1400, 880)
@@ -526,51 +529,130 @@ def test_job_creation_major_region_gaps_are_equal(qt_app: QApplication) -> None:
     qt_app.processEvents()
 
     editor_columns = window.editor.layout().itemAt(0).layout()
-    creation_content = window.view_stack.widget(0).layout().itemAt(0).layout()
+    workspace_layout = window.findChild(QWidget, "mainWorkspace").layout()
     assert editor_columns.spacing() == MAJOR_REGION_GAP
-    assert creation_content.spacing() == MAJOR_REGION_GAP
+    assert workspace_layout.spacing() == MAJOR_REGION_GAP
 
     basic_settings = window.editor.findChild(QGroupBox, "basicSettings")
     source_group = window.editor.findChild(QGroupBox, "sourceClipListGroup")
     assert basic_settings is not None
     assert source_group is not None
     editor_origin = window.editor.mapTo(window, window.editor.rect().topLeft())
+    left_workspace_origin = window.content_message_splitter.mapTo(window, window.content_message_splitter.rect().topLeft())
     source_origin = source_group.mapTo(window, source_group.rect().topLeft())
     basic_origin = basic_settings.mapTo(window, basic_settings.rect().topLeft())
     preview_origin = window.source_preview.mapTo(window, window.source_preview.rect().topLeft())
     basic_right = basic_origin.x() + basic_settings.width()
-    source_right = source_origin.x() + source_group.width()
-    assert source_origin.x() - basic_right == preview_origin.x() - source_right == MAJOR_REGION_GAP
+    left_workspace_right = left_workspace_origin.x() + window.content_message_splitter.width()
+    assert source_origin.x() - basic_right == preview_origin.x() - left_workspace_right == MAJOR_REGION_GAP
     assert editor_origin.x() <= basic_origin.x()
-    inputs_origin = window.editor.inputs.mapTo(window, window.editor.inputs.rect().topLeft())
-    video_origin = window.source_preview.video.mapTo(window, window.source_preview.video.rect().topLeft())
-    assert video_origin.y() == inputs_origin.y()
+    assert preview_origin.y() == left_workspace_origin.y()
+    assert window.source_preview.height() == window.content_message_splitter.height()
     window.close()
 
 
-def test_source_preview_resize_preserves_pane_ratio_and_native_aspect_mode(qt_app: QApplication) -> None:
-    """The preview pane follows 3:4 geometry without changing native video aspect handling."""
+def test_main_views_share_a_narrow_message_column_and_tall_preview_stack(qt_app: QApplication) -> None:
+    """Both views keep one message size while their right preview fills height."""
+
+    window = MainWindow(JobListModel(FakeQueue(), QueueSnapshotBridge()), ApplicationSettings(target_height=2160))  # type: ignore[arg-type]
+    window.resize(1400, 880)
+    window.show()
+    qt_app.processEvents()
+
+    message_size = window.message_widget.size()
+    assert window.editor.inputs.maximumWidth() == SOURCE_CLIP_LIST_WIDTH
+    assert window.message_widget.width() == window.content_message_splitter.width()
+    assert window.message_widget.width() < window.centralWidget().width()
+    assert window.source_preview.isVisible()
+    assert not window.queue_preview.isVisible()
+    assert window.source_preview.height() >= window.centralWidget().height() - (SPACE_2 * 6)
+
+    window.queue_monitoring_button.click()
+    qt_app.processEvents()
+    assert not window.source_preview.isVisible()
+    assert window.queue_preview.isVisible()
+    assert window.queue_preview.height() == window.source_preview.height()
+    assert window.message_widget.size() == message_size
+    window.close()
+
+
+def test_source_preview_expands_without_forcing_a_pane_ratio(qt_app: QApplication) -> None:
+    """The tall pane can follow window height while video keeps native aspect."""
 
     pane = SourcePreviewPane()
     pane.setMinimumWidth(0)
-    pane.resize(300, pane.heightForWidth(300))
+    pane.resize(520, 760)
     pane.show()
     qt_app.processEvents()
 
-    assert pane.hasHeightForWidth()
-    assert pane.width() == 300
-    assert pane.height() == 400
+    assert not pane.hasHeightForWidth()
+    assert pane.width() == 520
+    assert pane.height() == 760
     assert pane.video.aspectRatioMode() == Qt.AspectRatioMode.KeepAspectRatio
     assert not pane.progress_slider.isEnabled()
-
-    pane.resize(450, pane.heightForWidth(450))
-    qt_app.processEvents()
-    assert pane.width() == 450
-    assert pane.height() == 600
     pane.shutdown()
     assert pane.player.videoOutput() is None
     assert pane.player.audioOutput() is None
     pane.close()
+
+
+def test_queue_preview_switches_from_sampled_upscale_frame_to_looping_final_video(qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Queue preview shows sampled live frames, then loops a completed output."""
+
+    del qt_app
+    output = tmp_path / "running.mp4"
+    output.touch()
+    frame = tmp_path / "frame-000000016.png"
+    frame.touch()
+    running = _snapshot(tmp_path, "running", JobState.RUNNING, None, revision=1, progress=ProgressEvent(PipelineStage.UPSCALE, 16, 48, "Upscaling frame 16 of 48", frame))
+    model = JobListModel(FakeQueue((running,)), QueueSnapshotBridge())  # type: ignore[arg-type]
+    window = MainWindow(model, ApplicationSettings(preview_muted=False, preview_volume=42))
+    window.queue_table.setCurrentIndex(model.index(0, 0))
+    preview = window.queue_preview
+
+    assert isinstance(preview, QueuePreviewPane)
+    assert preview.media.currentWidget() is preview.frame_preview
+    assert preview.player.source().isEmpty()
+    assert preview.status_label.text() == "Live upscaled frame 16 (updates every 16 frames)."
+    assert not preview.controls.isVisible()
+    preview._frame_loaded(QImage(4, 3, QImage.Format.Format_RGB32), preview._frame_generation)  # pylint: disable=protected-access
+    assert preview.frame_preview.pixmap() is not None
+
+    completed = _snapshot(tmp_path, "running", JobState.COMPLETED, None, revision=2)
+    model._apply_snapshot(completed)  # pylint: disable=protected-access
+    assert [button.objectName() for button in preview.findChildren(QToolButton)] == [
+        "queuePreviewPlayPauseButton",
+        "queuePreviewFirstFrameButton",
+        "queuePreviewLastFrameButton",
+    ]
+    assert preview.media.currentWidget() is preview.video
+    assert preview.player.source().toLocalFile() == str(output)
+    assert preview.player.loops() == QMediaPlayer.Loops.Infinite
+    assert preview._playback_requested  # pylint: disable=protected-access
+    assert preview.audio.isMuted() is False
+    assert preview.audio.volume() == pytest.approx(0.42)
+    preview._duration_changed(10_000)  # pylint: disable=protected-access
+    preview._position_changed(2_500)  # pylint: disable=protected-access
+    assert preview.progress_slider.value() == 2_500
+    assert preview.time_label.text() == "0:02 / 0:10"
+    seek_positions: list[int] = []
+    monkeypatch.setattr(preview.player, "setPosition", seek_positions.append)
+    preview.progress_slider.setValue(7_500)
+    assert seek_positions == [7_500]
+    monkeypatch.setattr(preview.player, "duration", lambda: 10_000)
+    preview.go_to_first_frame()
+    assert seek_positions == [7_500, 0]
+    assert preview.last_frame_wait.indicator.text() == "⌛\nLoading first frame…"
+    assert not preview.last_frame_wait.isHidden()
+    preview._position_changed(0)  # pylint: disable=protected-access
+    assert preview.last_frame_wait.isHidden()
+    preview.go_to_last_frame()
+    assert seek_positions == [7_500, 0, 9_999]
+    assert not preview.last_frame_wait.isHidden()
+    preview._position_changed(9_999)  # pylint: disable=protected-access
+    assert preview.last_frame_wait.isHidden()
+
+    window.close()
 
 
 def test_source_preview_keeps_native_rotation_behavior(qt_app: QApplication) -> None:
@@ -632,41 +714,35 @@ def test_fullscreen_shortcut_registry_is_unique_complete_and_layout_tolerant() -
 def test_fullscreen_preview_entry_points_and_keyboard_help(qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Fullscreen preview supports row/pane entry, navigation, help, and exit."""
 
-    del qt_app
     window = MainWindow(JobListModel(FakeQueue(), QueueSnapshotBridge()), ApplicationSettings())  # type: ignore[arg-type]
     paths = (tmp_path / "first.mov", tmp_path / "second.mov", tmp_path / "third.mov")
     window.editor.add_inputs(paths)
     window.editor.inputs.setCurrentRow(1)
+    window.show()
+    qt_app.processEvents()
     frozen_paths = window.editor.input_paths()
 
     playback_calls: list[str] = []
     monkeypatch.setattr(window.source_preview, "_toggle_playback", lambda: playback_calls.append("toggle"))
     row = window.editor.inputs.itemWidget(window.editor.inputs.item(2))
     assert row is not None
-    row.findChild(QToolButton, "sourceClipFullscreenButton").click()  # type: ignore[union-attr]
+    fullscreen_button = row.findChild(QToolButton, "sourceClipFullscreenButton")
+    assert fullscreen_button is not None
+    QTest.mouseClick(fullscreen_button, Qt.MouseButton.LeftButton)
+    qt_app.processEvents()
     dialog = window.source_preview._fullscreen  # pylint: disable=protected-access
     assert dialog is not None
     assert window.editor.inputs.currentRow() == 2
     assert window.source_preview.player.source().toLocalFile() == str(paths[2])
     assert window.editor.input_paths() == frozen_paths
-    assert not dialog.controls.isVisible()
-    assert not dialog.exit_button.isVisible()
-    assert dialog.exit_button.accessibleName() == "Close fullscreen preview"
-    assert dialog.exit_button.size() == dialog.help_button.size() == window.source_preview.fullscreen_button.size()
-    assert dialog.exit_button.font().pointSizeF() == pytest.approx(QApplication.font().pointSizeF() * 2)
-    assert dialog._hide_timer.interval() == 2500  # pylint: disable=protected-access
+    assert dialog.findChildren(QToolButton) == []
+    assert dialog.findChildren(QSlider) == []
     assert any(label.text() == SHORTCUT_HELP for label in dialog.help_panel.findChildren(QLabel))
-    window.source_preview._playback_state_changed(QMediaPlayer.PlaybackState.PlayingState)  # pylint: disable=protected-access
-    assert dialog.play_button.text() == "Ⅱ"
-    assert dialog.play_button.accessibleName() == "Pause preview"
-    window.source_preview._playback_state_changed(QMediaPlayer.PlaybackState.PausedState)  # pylint: disable=protected-access
-    assert dialog.play_button.text() == "▶"
-    assert dialog.play_button.accessibleName() == "Play preview"
     dialog.video.setFocus()
     QTest.keyClick(dialog.video, Qt.Key.Key_K)
     assert playback_calls == ["toggle"]
-    dialog.play_button.setFocus()
-    QTest.keyClick(dialog.play_button, Qt.Key.Key_Space)
+    dialog.setFocus()
+    QTest.keyClick(dialog, Qt.Key.Key_Space)
     assert playback_calls == ["toggle", "toggle"]
 
     previous: list[str] = []
@@ -677,16 +753,10 @@ def test_fullscreen_preview_entry_points_and_keyboard_help(qt_app: QApplication,
     dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_L, Qt.KeyboardModifier.NoModifier, "l"))
     assert previous == ["previous"]
     assert next_clip == ["next"]
-    assert not dialog.controls.isVisible()
     dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_X, Qt.KeyboardModifier.NoModifier, "x"))
-    assert dialog.controls.isVisible()
-    assert dialog.exit_button.isVisible()
-    dialog._hide_controls()  # pylint: disable=protected-access
-    assert not dialog.controls.isVisible()
-    assert not dialog.exit_button.isVisible()
+    assert dialog.findChildren(QToolButton) == []
     dialog.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Shift, Qt.KeyboardModifier.ShiftModifier, ""))
     dialog.keyReleaseEvent(QKeyEvent(QKeyEvent.Type.KeyRelease, Qt.Key.Key_Shift, Qt.KeyboardModifier.NoModifier, ""))
-    assert not dialog.controls.isVisible()
     QTest.keyClick(dialog.video, Qt.Key.Key_Slash, Qt.KeyboardModifier.ShiftModifier)
     assert dialog.help_panel.isVisible()
     QApplication.processEvents()
@@ -702,7 +772,6 @@ def test_fullscreen_preview_entry_points_and_keyboard_help(qt_app: QApplication,
     QTest.keyClick(dialog.video, Qt.Key.Key_Question)
     assert not dialog.help_panel.isVisible()
     QTest.keyClick(dialog, Qt.Key.Key_G)
-    assert dialog.controls.isVisible()
     QTest.keyClick(dialog.video, Qt.Key.Key_K)
     assert playback_calls == ["toggle", "toggle", "toggle"]
     for _ in range(10):

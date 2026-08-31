@@ -17,6 +17,7 @@ from advanced_ai_video_tools.video.frames import FRAME_FILENAME_TEMPLATE, FrameI
 ProgressCallback = Callable[[ProgressEvent], None]
 DEFAULT_UPSCALE_TIMEOUT_SECONDS = 24 * 60 * 60
 UPSCALE_PROGRESS_POLL_SECONDS = 1.0
+LIVE_PREVIEW_FRAME_INTERVAL = 16
 
 
 @dataclass(frozen=True)
@@ -85,9 +86,9 @@ class UpscalingExecutor:
         self._command_timeout_seconds = command_timeout_seconds
 
     @staticmethod
-    def _emit(callback: ProgressCallback | None, completed: int, total: int, message: str) -> None:
+    def _emit(callback: ProgressCallback | None, completed: int, total: int, message: str, preview_image_path: Path | None = None) -> None:
         if callback is not None:
-            callback(ProgressEvent(PipelineStage.UPSCALE, completed, total, message))
+            callback(ProgressEvent(PipelineStage.UPSCALE, completed, total, message, preview_image_path))
 
     @staticmethod
     def _attempt(tile_size: int, command: Sequence[str], result: ProcessResult | ProcessError) -> UpscaleAttempt:
@@ -110,6 +111,16 @@ class UpscalingExecutor:
         except OSError:
             return 0
 
+    @staticmethod
+    def _sampled_preview_frame(directory: Path, completed: int) -> Path | None:
+        """Return the latest completed sixteen-frame sample for the queue UI."""
+
+        sample = completed // LIVE_PREVIEW_FRAME_INTERVAL * LIVE_PREVIEW_FRAME_INTERVAL
+        if sample == 0:
+            return None
+        candidate = directory / f"frame-{sample:09d}.png"
+        return candidate if candidate.is_file() and not candidate.is_symlink() else None
+
     def _monitor_output_progress(self, directory: Path, total: int, callback: ProgressCallback, stop: Event) -> None:
         """Report observed output-frame counts while the child process runs."""
 
@@ -118,7 +129,7 @@ class UpscalingExecutor:
             count = min(total, self._count_output_frames(directory))
             if count > observed:
                 observed = count
-                self._emit(callback, count, total, f"Upscaling frame {count} of {total}")
+                self._emit(callback, count, total, f"Upscaling frame {count} of {total}", self._sampled_preview_frame(directory, count))
 
     # The bounded retry/error branches mirror the pipeline's explicit stage contract.
     # pylint: disable=too-many-branches,too-many-statements
@@ -174,6 +185,6 @@ class UpscalingExecutor:
                     attempts.append(self._attempt(tile_size, command, error))
                 diagnostic = error.stderr_tail if isinstance(error, ProcessError) else ""
                 raise UpscalingFailed(f"Upscaling failed during {tile_label}: {error}. Workspace retained at {workspace.path}", workspace.path, attempts, diagnostic) from error
-            self._emit(progress, output_count, plan.expected_frame_count, f"Upscaled and verified {output_count} frames")
+            self._emit(progress, output_count, plan.expected_frame_count, f"Upscaled and verified {output_count} frames", self._sampled_preview_frame(plan.output_directory, output_count))
             return UpscalingResult(plan.output_directory, plan.output_directory / FRAME_FILENAME_TEMPLATE, output_count, plan.input_width * scale, plan.input_height * scale, scale, False, extracted.audio_source_path, tuple(attempts), workspace.identifier)
         raise AssertionError("bounded Real-ESRGAN attempts exhausted without a terminal result")

@@ -21,7 +21,7 @@ from advanced_ai_video_tools.system.settings import ApplicationSettings
 
 _VIDEO_SUFFIXES = frozenset({".mov", ".mp4", ".mkv", ".m4v"})
 EDITOR_SETTINGS_WIDTH = 304
-SOURCE_CLIP_LIST_WIDTH = 823
+SOURCE_CLIP_LIST_WIDTH = 620
 SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH = 320
 SOURCE_CLIP_ROW_HEIGHT = 40
 SOURCE_CLIP_ACTION_ICON_SIZE = 16
@@ -61,6 +61,30 @@ def _minus_circle_icon() -> QIcon:
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.drawEllipse(1, 1, SOURCE_CLIP_ACTION_ICON_SIZE - 2, SOURCE_CLIP_ACTION_ICON_SIZE - 2)
     painter.drawLine(4, SOURCE_CLIP_ACTION_ICON_SIZE // 2, SOURCE_CLIP_ACTION_ICON_SIZE - 4, SOURCE_CLIP_ACTION_ICON_SIZE // 2)
+    painter.end()
+    return QIcon(icon)
+
+
+def _fullscreen_icon() -> QIcon:
+    """Create the app-owned monochrome fullscreen row-action icon."""
+
+    icon = QPixmap(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE)
+    icon.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(icon)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(QColor(OUTPUT_DIRECTORY_ICON_COLOR))
+    near_edge = 2
+    near_center = 6
+    far_center = SOURCE_CLIP_ACTION_ICON_SIZE - near_center
+    far_edge = SOURCE_CLIP_ACTION_ICON_SIZE - near_edge
+    painter.drawLine(near_edge, near_center, near_edge, near_edge)
+    painter.drawLine(near_edge, near_edge, near_center, near_edge)
+    painter.drawLine(far_center, near_edge, far_edge, near_edge)
+    painter.drawLine(far_edge, near_edge, far_edge, near_center)
+    painter.drawLine(near_edge, far_center, near_edge, far_edge)
+    painter.drawLine(near_edge, far_edge, near_center, far_edge)
+    painter.drawLine(far_center, far_edge, far_edge, far_edge)
+    painter.drawLine(far_edge, far_center, far_edge, far_edge)
     painter.end()
     return QIcon(icon)
 
@@ -348,14 +372,11 @@ class JobEditor(QWidget):
             row_layout.addWidget(filename, 1)
             fullscreen_button = QToolButton()
             fullscreen_button.setObjectName("sourceClipFullscreenButton")
-            fullscreen_button.setText("⛶")
+            fullscreen_button.setIcon(_fullscreen_icon())
             fullscreen_button.setAccessibleName(f"Start fullscreen preview of {path.name}")
             fullscreen_button.setToolTip(f"Start fullscreen preview of {path.name}")
+            fullscreen_button.setIconSize(QSize(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE))
             fullscreen_button.setFixedSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
-            fullscreen_button.setStyleSheet("QToolButton { padding: 0px; }")
-            fullscreen_font = fullscreen_button.font()
-            fullscreen_font.setPointSizeF(max(1.0, fullscreen_font.pointSizeF() * 2))
-            fullscreen_button.setFont(fullscreen_font)
             fullscreen_button.clicked.connect(lambda _checked=False, current_item=item: self._request_fullscreen(current_item))
             row_layout.addWidget(fullscreen_button)
             remove_button = QToolButton()

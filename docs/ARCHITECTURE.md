@@ -40,21 +40,28 @@ per-job stream-drop acknowledgement, queue submission, and non-safety preference
 persistence. Its external-tools editor supports native browsing and reset-to-discovery controls, validates executable launches, model assets, and Vulkan inference off the presentation thread, and atomically persists only a successful override set. The
 implemented boundaries are:
 
-The Phase 1 presentation shell uses a single dark-themed window with a two-view
-navigation rail, a far-right selected-source `QMediaPlayer`/`QVideoWidget`
-preview, and a user-resizable bottom `Global Messages`/`Job Messages` splitter.
-Preview state is presentation-only and accepts existing local editor files; queue
-requests remain frozen typed values. Session messages are timestamped in memory,
-receive queued snapshots through Qt signals, and never expose exact subprocess
-command lines. The selected-source preview can move its existing video widget
-into a borderless fullscreen dialog without creating a second player or proxy
-media. The dialog owns only presentation controls, an auto-hiding control bar,
-and a keyboard-help overlay; its `0`/`9`, `j`/`l`, `Space`/`k`, `Shift-P`/`Shift-N`,
-`Esc`, and `?` actions remain outside processing intent. One dialog-scoped
-application event filter resolves key presses through an immutable shortcut
-registry, consumes matching key releases before focused Qt controls can
-double-activate, and generates the visible help text from that same registry.
-Playback commands track requested state synchronously because native
+The presentation shell uses a single dark-themed window with a two-view
+navigation rail. A shared left-side vertical splitter contains the active
+Job-Creation or Queue-Monitoring surface above the user-resizable `Global
+Messages`/`Job Messages` tabs, while a tall far-right preview column spans the
+same near-full application height. Job Creation shows the selected local source
+through `QMediaPlayer`/`QVideoWidget`; Queue Monitoring shows only the selected
+completed job's published local output through an independent looping player.
+For the selected running job during `UPSCALE`, the queue preview asynchronously
+decodes only the latest measured local `upscaled/frame-<multiple of 16>.png`
+sample; it retains that latest decoded image through later active stages. The
+pipeline emits that optional sample path as part of the immutable typed progress
+event and never waits for, polls, or otherwise depends on GUI presentation.
+Preview state is presentation-only and queue requests remain frozen typed values.
+Session messages are timestamped in memory, receive queued snapshots through Qt
+signals, and never expose exact subprocess command lines. The selected-source
+preview can move its existing video widget into a borderless fullscreen dialog
+without creating a second player or proxy media. Fullscreen has no clickable
+controls; its `0`/`9`, `j`/`l`, `Space`/`k`, `Shift-P`/`Shift-N`, `Esc`, and `?`
+actions remain outside processing intent. One dialog-scoped application event
+filter resolves key presses through an immutable shortcut registry, consumes
+matching key releases, and generates the visible help text from that same
+registry. Playback commands track requested state synchronously because native
 `QMediaPlayer` state notifications are asynchronous. Shortcut help uses a
 non-activating frameless tool dialog rather than a sibling video widget, keeping
 opaque white text reliably above the native video surface while a 50%-opaque

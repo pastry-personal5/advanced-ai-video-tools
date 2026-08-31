@@ -27,6 +27,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Reworked Job Creation and Queue Monitoring around a near-full-height
+  far-right preview column and a narrower shared left-side message panel.
+- Added Queue Monitoring playback preview for the selected completed job's
+  published local output, with play/pause, first/last-frame, and timeline
+  controls; nonterminal, missing, and partial outputs remain unavailable.
+- Evolved Queue Monitoring's preview into a multipurpose Queue Preview: it
+  asynchronously shows the selected running job's latest upscaled PNG sample
+  at each 16-frame interval, then automatically loops the published final
+  video when that job completes.
+- Added a centered, native-video-safe loading hint while Queue Preview seeks a
+  completed final video to its first or last frame.
+- Fixed source-row fullscreen actions on native macOS by constructing the help
+  overlay before video-widget reparenting can synchronously deliver the
+  fullscreen dialog's resize event. The handler also synchronizes the selected
+  source directly before opening.
+- Removed all clickable fullscreen-preview controls and the auto-hiding control
+  bar; the documented keyboard shortcuts and help dialog are now the only
+  fullscreen interaction path.
+- Replaced the bright text glyph for each clip row's fullscreen-preview action
+  with a centered, muted-gray app-owned icon matching the adjacent row actions.
 - Fixed selected-job monitoring progress bars showing stale pipeline progress
   while a job is cancelling or after it has been cancelled.
 - Made fullscreen preview keyboard playback deterministic under rapid input by

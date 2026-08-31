@@ -10,7 +10,7 @@ import pytest
 
 from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, PipelineStage, ProgressEvent, Rational, ToolInfo, Toolchain
 from advanced_ai_video_tools.services.frame_extraction import FrameExtractionResult
-from advanced_ai_video_tools.services.upscaling import UpscalingCancelled, UpscalingExecutor, UpscalingFailed
+from advanced_ai_video_tools.services.upscaling import LIVE_PREVIEW_FRAME_INTERVAL, UpscalingCancelled, UpscalingExecutor, UpscalingFailed
 from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceManager
 from advanced_ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult, SubprocessRunner
 from advanced_ai_video_tools.upscaling.realesrgan import MEMORY_RETRY_TILE_SIZES, REAL_IMAGE_MODEL
@@ -96,6 +96,23 @@ def test_upscale_success_uses_one_directory_invocation_and_retains_audio(tmp_pat
     assert len(runner.commands) == 1
     assert result.attempts[0].tile_size == 0 and result.attempts[0].succeeded
     assert [(event.stage, event.completed, event.total) for event in events] == [(PipelineStage.UPSCALE, 0, 3), (PipelineStage.UPSCALE, 3, 3)]
+
+
+def test_upscale_live_preview_uses_the_latest_sixteen_frame_sample(tmp_path: Path) -> None:
+    """The queue can receive only completed image samples at fixed intervals."""
+
+    directory = tmp_path / "upscaled"
+    directory.mkdir()
+    first_sample = directory / "frame-000000016.png"
+    latest_sample = directory / "frame-000000032.png"
+    first_sample.write_bytes(_png_header(128, 72))
+    latest_sample.write_bytes(_png_header(128, 72))
+
+    assert LIVE_PREVIEW_FRAME_INTERVAL == 16
+    assert UpscalingExecutor._sampled_preview_frame(directory, 15) is None  # pylint: disable=protected-access
+    assert UpscalingExecutor._sampled_preview_frame(directory, 16) == first_sample  # pylint: disable=protected-access
+    assert UpscalingExecutor._sampled_preview_frame(directory, 31) == first_sample  # pylint: disable=protected-access
+    assert UpscalingExecutor._sampled_preview_frame(directory, 32) == latest_sample  # pylint: disable=protected-access
 
 
 def test_upscale_skip_reuses_verified_extracted_frames_without_process(tmp_path: Path) -> None:

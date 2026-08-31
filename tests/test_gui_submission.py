@@ -18,6 +18,7 @@ import yaml
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QSize, QThread, QUrl, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtGui import QColor  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QLabel, QListWidget, QPushButton, QScrollArea, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
@@ -270,6 +271,40 @@ def test_editor_uses_shared_spacing_and_control_metrics(qt_app: QApplication, tm
     assert "border-radius: 8px" in qt_app.styleSheet()
     assert "border-radius: 6px" in qt_app.styleSheet()
     assert editor.target_height.style().metaObject().className() in {"QStyleSheetStyle", "_ReadableSpinBoxStyle"}
+    editor.close()
+
+
+def test_source_row_fullscreen_action_matches_adjacent_icons(qt_app: QApplication, tmp_path: Path) -> None:
+    """The fullscreen row action shares the adjacent actions' subdued treatment."""
+
+    apply_dark_theme(qt_app)
+    source = tmp_path / "source.mov"
+    source.touch()
+    editor = JobEditor(ApplicationSettings())
+    editor.add_inputs((source,))
+    fullscreen_button = editor.findChild(QToolButton, "sourceClipFullscreenButton")
+    remove_button = editor.findChild(QToolButton, "sourceClipRemoveButton")
+    menu_button = editor.findChild(QToolButton, "sourceClipMenuButton")
+    assert fullscreen_button is not None
+    assert remove_button is not None
+    assert menu_button is not None
+    for button in (fullscreen_button, remove_button, menu_button):
+        assert button.size() == QSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
+        assert button.iconSize() == QSize(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE)
+        assert not button.icon().isNull()
+        assert button.styleSheet() == ""
+
+    assert fullscreen_button.text() == ""
+    fullscreen_image = fullscreen_button.icon().pixmap(QSize(SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE)).toImage()
+    fullscreen_pixels = [fullscreen_image.pixelColor(column, row) for row in range(fullscreen_image.height()) for column in range(fullscreen_image.width()) if fullscreen_image.pixelColor(column, row).alpha() > 0]
+    expected_color = QColor(OUTPUT_DIRECTORY_ICON_COLOR)
+    assert fullscreen_pixels
+    assert all(max(abs(pixel.red() - expected_color.red()), abs(pixel.green() - expected_color.green()), abs(pixel.blue() - expected_color.blue())) <= 8 for pixel in fullscreen_pixels)
+    assert max(pixel.lightness() for pixel in fullscreen_pixels) < 205
+    visible_columns = [column for column in range(fullscreen_image.width()) if any(fullscreen_image.pixelColor(column, row).alpha() > 0 for row in range(fullscreen_image.height()))]
+    visible_rows = [row for row in range(fullscreen_image.height()) if any(fullscreen_image.pixelColor(column, row).alpha() > 0 for column in range(fullscreen_image.width()))]
+    assert visible_columns[0] == fullscreen_image.width() - visible_columns[-1] - 1
+    assert visible_rows[0] == fullscreen_image.height() - visible_rows[-1] - 1
     editor.close()
 
 
