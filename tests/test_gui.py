@@ -231,6 +231,10 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     assert not window.queue_table.showGrid()
     assert window.queue_table.horizontalHeader().sectionResizeMode(1).name == "Stretch"
     assert window.queue_table.horizontalHeader().sectionResizeMode(2).name == "Fixed"
+    assert window.move_job_up_button.font().pointSize() == 9
+    assert window.move_job_down_button.font().pointSize() == 9
+    assert window.move_job_up_button.height() == 28
+    assert window.move_job_down_button.height() == 28
     job_queue_group = window.findChild(QGroupBox, "queueGroup")
     assert job_queue_group is not None
     assert job_queue_group.title() == "Job Queue"

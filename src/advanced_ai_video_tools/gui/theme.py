@@ -275,6 +275,14 @@ QPushButton#submitJobButton:disabled {{
     color: #c7c9cc;
 }}
 
+QPushButton#moveJobUpButton,
+QPushButton#moveJobDownButton {{
+    min-height: 26px;
+    max-height: 26px;
+    font-size: 9pt;
+    padding: 0 10px;
+}}
+
 QToolButton#chooseOutputButton,
 QToolButton#sourceClipFullscreenButton,
 QToolButton#sourceClipRemoveButton,

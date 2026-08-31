@@ -136,6 +136,8 @@ class MainWindow(QMainWindow):
         self.move_job_up_button.setObjectName("moveJobUpButton")
         self.move_job_down_button = QPushButton("Move Down")
         self.move_job_down_button.setObjectName("moveJobDownButton")
+        for reorder_button in (self.move_job_up_button, self.move_job_down_button):
+            reorder_button.setFixedHeight(26)
         self.cancel_selected_job_button = QPushButton("Cancel Job")
         self.cancel_selected_job_button.setObjectName("cancelSelectedJobButton")
         details = QGroupBox("Selected Job")
