@@ -6,7 +6,10 @@ This document is the authoritative technical overview for Advanced AI Video Tool
 
 Version 1.0.0 is the completed release baseline. The active development goal is version 2. Until a version 2 design decision explicitly supersedes a version 1 contract, the implemented version 1 behavior in this document remains binding. The target change alone does not authorize speculative features, compatibility expansion, or changes to media policy.
 
-The v2 roadmap lives in [v2/plans.md](v2/plans.md), shared execution rules live in [v2/implement.md](v2/implement.md), Phase 1 — Enhance GUI is complete, and [Phase 2 — Rename Project](v2/2-rename-project.md) is the current planning phase. Planning documents describe intended work; this architecture document remains authoritative for implemented system behavior.
+The v2 roadmap lives in [v2/plans.md](v2/plans.md) and shared execution rules
+live in [v2/implement.md](v2/implement.md). Phases 1 through 5 are complete;
+Phase 6 is in progress. Planning documents describe intended work; this
+architecture document remains authoritative for implemented system behavior.
 
 ## Implementation status
 
@@ -45,13 +48,17 @@ navigation rail. A shared left-side vertical splitter contains the active
 Job-Creation or Queue-Monitoring surface above the user-resizable `Global
 Messages`/`Job Messages` tabs, while a tall far-right preview column spans the
 same near-full application height. Job Creation shows the selected local source
-through `QMediaPlayer`/`QVideoWidget`; Queue Monitoring shows only the selected
-completed job's published local output through an independent looping player.
-For the selected running job during `UPSCALE`, the queue preview asynchronously
-decodes only the latest measured local `upscaled/frame-<multiple of 16>.png`
-sample; it retains that latest decoded image through later active stages. The
-pipeline emits that optional sample path as part of the immutable typed progress
-event and never waits for, polls, or otherwise depends on GUI presentation.
+through `QMediaPlayer`/`QVideoWidget`; Queue Monitoring presents its immutable
+queue model through Active, Up Next, and History presentation regions alongside
+the `Original`, `Upscaled`, and `Final Video` tabs in an independent looping
+player. For
+the selected running job during `UPSCALE`, the first two tabs asynchronously
+decode their matched first local frame as soon as it is ready, then the latest
+measured local `frame-<multiple of 16>.png` samples; Final Video is empty until
+the job completes. The pipeline emits the
+optional paired sample paths as part of the immutable typed progress event and never waits for, polls, or
+otherwise depends on GUI presentation. On completion, Final Video is selected
+and loops the published local output.
 Preview state is presentation-only and queue requests remain frozen typed values.
 Session messages are timestamped in memory, receive queued snapshots through Qt
 signals, and never expose exact subprocess command lines. The selected-source
@@ -66,6 +73,12 @@ registry. Playback commands track requested state synchronously because native
 non-activating frameless tool dialog rather than a sibling video widget, keeping
 opaque white text reliably above the native video surface while a 50%-opaque
 background preserves visual context at the fullscreen view's right-center.
+When the GUI is launched from a terminal, a Qt-timer signal bridge translates
+`SIGINT`/Ctrl+C into that window's normal close lifecycle; `aboutToQuit` then
+uses the existing runtime shutdown path to cancel pending and active queue work,
+join its worker, and release GUI services before process exit. The bridge keeps
+the cooperative handler installed through cleanup, so repeated interrupts cannot
+abort that sequence with `KeyboardInterrupt`.
 
 - `core.models`: immutable job intent, exact rationals, typed stream inventory,
   issue codes, concat strategy, and frozen execution plans

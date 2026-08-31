@@ -8,20 +8,52 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import QModelIndex, Qt, Slot
+from PySide6.QtCore import QModelIndex, QSignalBlocker, Qt, Slot
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QAbstractItemView, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QStackedWidget, QTableView, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QSplitterHandle, QStackedWidget, QTableView, QToolButton, QVBoxLayout, QWidget
 
 from advanced_ai_video_tools.core.models import JobState, PipelineStage, Toolchain
 from advanced_ai_video_tools.gui.editor import JobEditor
-from advanced_ai_video_tools.gui.jobs import JobListModel, JobRole
+from advanced_ai_video_tools.gui.jobs import JobListModel, JobRole, QueueRegionProxyModel
 from advanced_ai_video_tools.gui.identity import GUI_DISPLAY_NAME
 from advanced_ai_video_tools.gui.messages import MessageEvent, MessageWidget
 from advanced_ai_video_tools.gui.preview import QueuePreviewPane, SourcePreviewPane
 from advanced_ai_video_tools.gui.submission import JobSubmissionController
-from advanced_ai_video_tools.gui.theme import CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, SPACE_3, SPACE_4
+from advanced_ai_video_tools.gui.theme import CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_1, SPACE_2, SPACE_3, SPACE_4
 from advanced_ai_video_tools.gui.tool_settings import ToolSettingsDialog, ToolSettingsValidator
 from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
+
+
+class _ModernSplitterHandle(QSplitterHandle):
+    """Paint a quiet divider with a discoverable, hover-only grabber."""
+
+    def __init__(self, orientation: Qt.Orientation, parent: QSplitter) -> None:
+        super().__init__(orientation, parent)
+        self.setMouseTracking(True)
+        self.setCursor(Qt.CursorShape.SplitVCursor)
+
+    def paintEvent(self, _event: object) -> None:  # pylint: disable=invalid-name
+        """Draw the divider line and its compact interactive grabber."""
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        center_y = self.height() // 2
+        painter.setPen(QColor("#303134"))
+        painter.drawLine(0, center_y, self.width(), center_y)
+        grabber_color = QColor("#5f6368" if self.underMouse() else "#45474b")
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(grabber_color)
+        grabber_width = min(56, max(32, self.width() // 4))
+        painter.drawRoundedRect((self.width() - grabber_width) // 2, center_y - 2, grabber_width, 4, 2, 2)
+
+
+class _ModernContentMessageSplitter(QSplitter):
+    """Content/message splitter using the application's lightweight handle."""
+
+    def createHandle(self) -> QSplitterHandle:  # pylint: disable=invalid-name
+        """Create the custom handle used between content and messages."""
+
+        return _ModernSplitterHandle(self.orientation(), self)
 
 
 class MainWindow(QMainWindow):
@@ -79,6 +111,9 @@ class MainWindow(QMainWindow):
         job_queue_layout.setContentsMargins(SPACE_3, SPACE_4, SPACE_3, SPACE_3)
         job_queue_layout.setSpacing(SPACE_2)
         job_queue_layout.addWidget(self.queue_table)
+        # Retain the original flat table as a compatibility selection surface;
+        # the visible monitoring layout below presents filtered regions.
+        job_queue_group.setVisible(False)
         self.selected_job_message = QLabel("No jobs have been submitted.")
         self.selected_job_message.setObjectName("selectedJobMessage")
         self.selected_job_message.setWordWrap(True)
@@ -106,9 +141,9 @@ class MainWindow(QMainWindow):
         details = QGroupBox("Selected Job")
         details.setObjectName("selectedJobDetails")
         details_layout = QFormLayout(details)
-        details_layout.setContentsMargins(SPACE_3, SPACE_4, SPACE_3, SPACE_3)
-        details_layout.setHorizontalSpacing(SPACE_3)
-        details_layout.setVerticalSpacing(SPACE_2)
+        details_layout.setContentsMargins(SPACE_2, SPACE_2, SPACE_2, SPACE_2)
+        details_layout.setHorizontalSpacing(SPACE_2)
+        details_layout.setVerticalSpacing(SPACE_1)
         self.job_name_value = QLabel("No job selected")
         self.job_name_value.setObjectName("selectedJobName")
         self.job_state_value = QLabel("No job selected")
@@ -121,6 +156,37 @@ class MainWindow(QMainWindow):
         details_layout.addRow("Message", self.selected_job_message)
         details_layout.addRow("Output", self.selected_job_output)
 
+        self.region_views: dict[str, QTableView] = {}
+        self.region_proxies: dict[str, QueueRegionProxyModel] = {}
+        region_groups: dict[str, QGroupBox] = {}
+        for region, title in (
+            ("active", "Active"),
+            ("up_next", "Up Next"),
+            ("history", "History"),
+        ):
+            proxy = QueueRegionProxyModel(region, self)
+            proxy.setSourceModel(model)
+            view = QTableView()
+            self._configure_region_view(view, f"queue{title.replace(' ', '')}View", f"{title} jobs")
+            if region != "history":
+                view.setColumnHidden(2, True)
+            if region == "active":
+                view.setMaximumHeight(88)
+            elif region == "up_next":
+                view.setMaximumHeight(150)
+            view.setModel(proxy)
+            self.region_views[region] = view
+            self.region_proxies[region] = proxy
+            group = QGroupBox(title)
+            group.setObjectName(f"queue{title.replace(' ', '')}Group")
+            group_layout = QVBoxLayout(group)
+            group_layout.setContentsMargins(SPACE_2, SPACE_2, SPACE_2, SPACE_2)
+            group_layout.setSpacing(SPACE_1)
+            group_layout.addWidget(view)
+            region_groups[region] = group
+
+        self.region_groups = region_groups
+
         creation_page = QWidget()
         creation_layout = QVBoxLayout(creation_page)
         creation_layout.setContentsMargins(0, 0, 0, 0)
@@ -129,15 +195,35 @@ class MainWindow(QMainWindow):
         monitoring_layout = QVBoxLayout(monitoring_page)
         monitoring_layout.setContentsMargins(0, 0, 0, 0)
         monitoring_layout.setSpacing(SPACE_3)
-        monitoring_layout.addWidget(job_queue_group, 1)
+        monitoring_layout.addWidget(job_queue_group)
+        self.queue_region_workspace = QWidget()
+        self.queue_region_workspace.setObjectName("queueRegionWorkspace")
+        region_workspace_layout = QHBoxLayout(self.queue_region_workspace)
+        region_workspace_layout.setContentsMargins(0, 0, 0, 0)
+        region_workspace_layout.setSpacing(SPACE_3)
+        left_region_column = QWidget()
+        left_region_column.setObjectName("queueLeftRegionColumn")
+        left_region_layout = QVBoxLayout(left_region_column)
+        left_region_layout.setContentsMargins(0, 0, 0, 0)
+        left_region_layout.setSpacing(SPACE_3)
+        left_region_layout.addWidget(region_groups["active"])
+        up_next_header = QHBoxLayout()
+        up_next_header.setContentsMargins(0, 0, 0, 0)
+        up_next_header.addStretch(1)
+        up_next_header.addWidget(self.move_job_up_button)
+        up_next_header.addWidget(self.move_job_down_button)
+        up_next_layout = region_groups["up_next"].layout()
+        up_next_layout.insertLayout(0, up_next_header)
+        left_region_layout.addWidget(region_groups["up_next"], 1)
+        region_workspace_layout.addWidget(left_region_column, 1)
+        region_workspace_layout.addWidget(region_groups["history"], 1)
+        monitoring_layout.addWidget(self.queue_region_workspace, 1)
         monitoring_layout.addWidget(details)
         monitoring_layout.addWidget(self.selected_job_overall_progress)
         monitoring_layout.addWidget(self.selected_job_stage_progress)
         controls = QHBoxLayout()
         controls.setContentsMargins(0, 0, 0, 0)
         controls.setSpacing(SPACE_2)
-        controls.addWidget(self.move_job_up_button)
-        controls.addWidget(self.move_job_down_button)
         controls.addStretch(1)
         controls.addWidget(self.cancel_selected_job_button)
         monitoring_layout.addLayout(controls)
@@ -167,8 +253,9 @@ class MainWindow(QMainWindow):
         self.message_tabs = self.message_widget.tabs
         self.global_messages = self.message_widget.global_messages
         self.job_messages = self.message_widget.job_messages
-        self.content_message_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.content_message_splitter = _ModernContentMessageSplitter(Qt.Orientation.Vertical)
         self.content_message_splitter.setObjectName("contentMessageSplitter")
+        self.content_message_splitter.setHandleWidth(12)
         self.content_message_splitter.setChildrenCollapsible(False)
         self.content_message_splitter.addWidget(self.view_stack)
         self.content_message_splitter.addWidget(self.message_widget)
@@ -195,8 +282,12 @@ class MainWindow(QMainWindow):
 
         self.queue_table.selectionModel().currentChanged.connect(self._selection_changed)
         self.queue_table.clicked.connect(self._handle_queue_cell_click)
+        for region, view in self.region_views.items():
+            view.selectionModel().currentChanged.connect(lambda current, previous, selected_view=view: self._region_selection_changed(selected_view, current, previous))
+            view.clicked.connect(lambda index, selected_region=region: self._handle_region_cell_click(selected_region, index))
         model.dataChanged.connect(self._refresh_after_model_change)
         model.rowsInserted.connect(self._select_first_inserted_job)
+        model.rowsRemoved.connect(self._rows_removed)
         model.modelReset.connect(self._refresh_selected_job)
         model.snapshot_changed.connect(self._handle_queue_snapshot)
         self.cancel_selected_job_button.clicked.connect(self._cancel_selected_job)
@@ -206,6 +297,7 @@ class MainWindow(QMainWindow):
         self.editor.inputs.currentRowChanged.connect(self._update_preview_for_source_selection)
         self.editor.inputs.model().rowsInserted.connect(lambda *_: self._update_preview_for_source_selection(self.editor.inputs.currentRow()))
         self.editor.inputs.model().rowsRemoved.connect(lambda *_: self._update_preview_for_source_selection(self.editor.inputs.currentRow()))
+        self.editor.output_directory.editingFinished.connect(self._persist_output_directory_preference)
         self.source_preview.previous_requested.connect(lambda: self._move_source_selection(-1))
         self.source_preview.next_requested.connect(lambda: self._move_source_selection(1))
         self.source_preview.first_frame_requested.connect(self.source_preview.go_to_first_frame)
@@ -229,6 +321,27 @@ class MainWindow(QMainWindow):
             tool_validator.succeeded.connect(self._report_validated_tools)
             tool_validator.failed.connect(lambda _overrides, message: self._append_global_message(f"External-tool validation failed: {message}"))
         self._refresh_selected_job()
+
+    @staticmethod
+    def _configure_region_view(view: QTableView, object_name: str, accessible_name: str) -> None:
+        """Apply the compact, text-first table treatment to one queue region."""
+
+        view.setObjectName(object_name)
+        view.setAccessibleName(accessible_name)
+        view.setShowGrid(False)
+        view.verticalHeader().setVisible(False)
+        view.verticalHeader().setDefaultSectionSize(36)
+        view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        view.setAlternatingRowColors(True)
+        header = view.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(0, 110)
+        header.resizeSection(2, 92)
+        header.setStretchLastSection(False)
 
     @staticmethod
     def _navigation_button(glyph: str, label: str, object_name: str) -> QToolButton:
@@ -380,7 +493,53 @@ class MainWindow(QMainWindow):
 
     @Slot(QModelIndex, QModelIndex)
     def _selection_changed(self, _current: QModelIndex, _previous: QModelIndex) -> None:
+        self._sync_region_selection()
         self._refresh_selected_job(activate_job_tab=True)
+
+    @Slot(QTableView, QModelIndex, QModelIndex)
+    def _region_selection_changed(self, view: QTableView, current: QModelIndex, _previous: QModelIndex) -> None:
+        """Map a visible region selection back to the authoritative table."""
+
+        if not current.isValid():
+            return
+        proxy = view.model()
+        if not isinstance(proxy, QueueRegionProxyModel):
+            return
+        source_index = proxy.mapToSource(current)
+        if source_index.isValid():
+            self.queue_table.setCurrentIndex(source_index)
+
+    def _sync_region_selection(self) -> None:
+        """Reflect the canonical selection in whichever region owns it."""
+
+        current = self.queue_table.currentIndex()
+        if not current.isValid():
+            return
+        job_id = self._model.data(current, int(JobRole.JOB_ID))
+        for view in self.region_views.values():
+            proxy = view.model()
+            if not isinstance(proxy, QueueRegionProxyModel):
+                continue
+            target = QModelIndex()
+            for row in range(proxy.rowCount()):
+                candidate = proxy.index(row, 0)
+                if proxy.data(candidate, int(JobRole.JOB_ID)) == job_id:
+                    target = candidate
+                    break
+            blocker = QSignalBlocker(view.selectionModel())
+            view.setCurrentIndex(target)
+            del blocker
+
+    @Slot(str, QModelIndex)
+    def _handle_region_cell_click(self, region: str, index: QModelIndex) -> None:
+        """Handle contextual terminal removal in the visible History region."""
+
+        if region != "history" or index.column() != 2:
+            return
+        view = self.region_views[region]
+        proxy = view.model()
+        if isinstance(proxy, QueueRegionProxyModel):
+            self._model.remove(proxy.mapToSource(index))
 
     @Slot(QModelIndex)
     def _handle_queue_cell_click(self, index: QModelIndex) -> None:
@@ -391,12 +550,19 @@ class MainWindow(QMainWindow):
 
     @Slot(QModelIndex, QModelIndex, list)
     def _refresh_after_model_change(self, _first: QModelIndex, _last: QModelIndex, _roles: list[int]) -> None:
+        self._sync_region_selection()
+        self._refresh_selected_job()
+
+    @Slot(QModelIndex, int, int)
+    def _rows_removed(self, _parent: QModelIndex, _first: int, _last: int) -> None:
+        self._sync_region_selection()
         self._refresh_selected_job()
 
     @Slot(QModelIndex, int, int)
     def _select_first_inserted_job(self, _parent: QModelIndex, first: int, _last: int) -> None:
         if not self.queue_table.currentIndex().isValid():
             self.queue_table.setCurrentIndex(self._model.index(first, 0))
+        self._sync_region_selection()
         self._refresh_selected_job()
 
     def _clear_selection_details(self) -> None:
@@ -477,17 +643,18 @@ class MainWindow(QMainWindow):
             self._queue_preview_job_id = job_id
             self.queue_preview.show_final_output(Path(output_path))
         elif state == JobState.RUNNING.value and progress is not None and progress.stage is PipelineStage.UPSCALE:
-            preview_path = progress.preview_image_path
-            if preview_path is None:
+            original_preview_path = progress.original_preview_image_path
+            upscaled_preview_path = progress.upscaled_preview_image_path
+            if original_preview_path is None and upscaled_preview_path is None:
                 self._queue_preview_job_id = None
-                self.queue_preview.clear("Live upscaled frames appear every 16 frames.")
+                self.queue_preview.clear("Live samples appear every 16 frames.")
             else:
                 self._queue_preview_job_id = job_id
-                self.queue_preview.show_upscaled_frame(preview_path, progress.completed // 16 * 16)
+                self.queue_preview.show_sampled_frames(original_preview_path, upscaled_preview_path)
         elif state == JobState.RUNNING.value:
-            if self._queue_preview_job_id != job_id or not self.queue_preview.showing_live_frame:
+            if self._queue_preview_job_id != job_id or not self.queue_preview.has_live_samples:
                 self._queue_preview_job_id = None
-                self.queue_preview.clear("Live upscaled frames appear during the upscaling stage.")
+                self.queue_preview.clear("Live samples appear during the upscaling stage.")
         else:
             self._queue_preview_job_id = None
             self.queue_preview.clear("Select a running or completed job to preview its output.")
@@ -548,8 +715,29 @@ class MainWindow(QMainWindow):
         self._settings = updated
         self.queue_preview.set_audio_preferences(muted, volume)
 
+    @Slot()
+    def _persist_output_directory_preference(self) -> None:
+        """Persist the output directory when the draft field is committed."""
+
+        if self._settings_store is None:
+            return
+        raw_output = self.editor.output_directory.text().strip()
+        output_directory = Path(raw_output) if raw_output else None
+        if output_directory == self._settings.recent_output_directory:
+            return
+        updated = replace(self._settings, recent_output_directory=output_directory)
+        try:
+            self._settings_store.save(updated)
+        except SettingsError as error:
+            self._append_global_message(f"Output directory preference could not be saved: {error}")
+            return
+        self._settings = updated
+        if self._submission is not None:
+            self._submission.apply_settings(updated)
+
     def closeEvent(self, event: object) -> None:  # pylint: disable=invalid-name
         """Record session shutdown before Qt releases the window."""
+        self._persist_output_directory_preference()
         self.source_preview.shutdown()
         self.queue_preview.shutdown()
         if not self._global_shutdown_recorded:

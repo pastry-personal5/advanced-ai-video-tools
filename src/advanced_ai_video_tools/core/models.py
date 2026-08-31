@@ -312,12 +312,13 @@ class ProgressEvent:
     completed: int
     total: int | None
     message: str
-    preview_image_path: Path | None = None
+    original_preview_image_path: Path | None = None
+    upscaled_preview_image_path: Path | None = None
 
     def __post_init__(self) -> None:
         if self.completed < 0:
             raise ValueError("completed progress cannot be negative")
         if self.total is not None and (self.total < 0 or self.completed > self.total):
             raise ValueError("completed progress must be within the measured total")
-        if self.preview_image_path is not None and self.stage is not PipelineStage.UPSCALE:
+        if (self.original_preview_image_path is not None or self.upscaled_preview_image_path is not None) and self.stage is not PipelineStage.UPSCALE:
             raise ValueError("preview images are only valid for upscale progress")

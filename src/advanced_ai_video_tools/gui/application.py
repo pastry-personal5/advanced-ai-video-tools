@@ -5,12 +5,14 @@
 
 from __future__ import annotations
 
+import signal
 from dataclasses import dataclass
 from pathlib import Path
+from types import FrameType
 
 from loguru import logger
 
-from PySide6.QtCore import QCoreApplication, QLockFile, QStandardPaths
+from PySide6.QtCore import QCoreApplication, QLockFile, QStandardPaths, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from advanced_ai_video_tools.gui.jobs import JobListModel, QueueSnapshotBridge
@@ -34,6 +36,56 @@ def _single_instance_lock() -> QLockFile:
     lock = QLockFile(str(directory / IDENTITY.gui_lock_filename))
     lock.setStaleLockTime(30_000)
     return lock
+
+
+class _GuiSigintBridge:
+    """Route terminal Ctrl+C through the GUI's normal close lifecycle."""
+
+    def __init__(self, application: QApplication, window: MainWindow) -> None:
+        self._application = application
+        self._window = window
+        self._timer = QTimer(application)
+        self._timer.setInterval(100)
+        self._timer.timeout.connect(self._close_when_requested)
+        self._previous_handler: object | None = None
+        self._installed = False
+        self._shutdown_requested = False
+        self._shutdown_started = False
+
+    def install(self) -> None:
+        """Install a SIGINT flag handler and keep Python signal delivery active."""
+
+        if self._installed:
+            return
+        self._previous_handler = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, self._request_shutdown)
+        self._installed = True
+        self._timer.start()
+
+    def uninstall(self) -> None:
+        """Restore the caller's SIGINT behavior after the Qt event loop exits."""
+
+        if not self._installed:
+            return
+        self._timer.stop()
+        signal.signal(signal.SIGINT, self._previous_handler)  # type: ignore[arg-type]
+        self._installed = False
+
+    def _request_shutdown(self, _signum: int, _frame: FrameType | None) -> None:
+        """Record SIGINT only; Qt performs window work from its event loop."""
+
+        self._shutdown_requested = True
+
+    def _close_when_requested(self) -> None:
+        """Close the window once so Qt emits its usual graceful-exit signals."""
+
+        if not self._shutdown_requested or self._shutdown_started:
+            return
+        self._shutdown_started = True
+        self._timer.stop()
+        logger.info("Received Ctrl+C; requesting graceful GUI shutdown")
+        self._window.close()
+        self._application.quit()
 
 
 @dataclass
@@ -106,10 +158,20 @@ def run_gui(arguments: list[str] | None = None) -> int:
         QMessageBox.critical(None, GUI_DISPLAY_NAME, f"Could not load application settings:\n{error}")
         instance_lock.unlock()
         return 1
+    sigint_bridge = _GuiSigintBridge(application, runtime.window)
     application.aboutToQuit.connect(runtime.shutdown)
-    runtime.window.show()
     try:
+        sigint_bridge.install()
+        runtime.window.show()
         return application.exec()
     finally:
-        runtime.shutdown()
-        instance_lock.unlock()
+        # Leave the cooperative handler installed until every worker and
+        # preview resource has finished its own shutdown. A second Ctrl+C must
+        # never restore Python's abrupt KeyboardInterrupt behavior mid-cleanup.
+        try:
+            runtime.shutdown()
+        finally:
+            try:
+                sigint_bridge.uninstall()
+            finally:
+                instance_lock.unlock()

@@ -1,5 +1,8 @@
 # GUI UX Review
 
+> Archived 2026-08-31. This is historical proposal material; current decisions
+> and implementation status are maintained in `docs/v2` and `docs/ARCHITECTURE.md`.
+
 ## Review status
 
 - Review type: Information architecture, visual design, and interaction design
@@ -17,30 +20,30 @@ creates avoidable interpretation or interaction cost, and which enhancements
 would provide the most value without changing the media pipeline or safety
 contracts.
 
-The separate [Job Queue Job-List Design Review](job-queue-design-review.md)
+The separate [Job Queue Job-List Design Review](2026-08-29-job-queue-design-review.md)
 contains a deeper proposal for Queue Monitoring. This review references that
 proposal but does not duplicate its full design.
 
 ## Evidence reviewed
 
-- [`gui/window.py`](../src/advanced_ai_video_tools/gui/window.py): application
+- [`gui/window.py`](../../src/advanced_ai_video_tools/gui/window.py): application
   shell, navigation, Queue Monitoring, selection, progress, and actions
-- [`gui/editor.py`](../src/advanced_ai_video_tools/gui/editor.py): source list,
+- [`gui/editor.py`](../../src/advanced_ai_video_tools/gui/editor.py): source list,
   per-row actions, settings, and preflight entry
-- [`gui/preview.py`](../src/advanced_ai_video_tools/gui/preview.py): embedded and
+- [`gui/preview.py`](../../src/advanced_ai_video_tools/gui/preview.py): embedded and
   fullscreen preview, playback controls, shortcuts, help, and lifecycle
-- [`gui/messages.py`](../src/advanced_ai_video_tools/gui/messages.py): Global
+- [`gui/messages.py`](../../src/advanced_ai_video_tools/gui/messages.py): Global
   Messages and Job Messages presentation
-- [`gui/submission.py`](../src/advanced_ai_video_tools/gui/submission.py):
+- [`gui/submission.py`](../../src/advanced_ai_video_tools/gui/submission.py):
   preflight review and queue-submission flow
-- [`gui/tool_settings.py`](../src/advanced_ai_video_tools/gui/tool_settings.py):
+- [`gui/tool_settings.py`](../../src/advanced_ai_video_tools/gui/tool_settings.py):
   Preferences and external-tool validation
-- [`gui/theme.py`](../src/advanced_ai_video_tools/gui/theme.py): spacing,
+- [`gui/theme.py`](../../src/advanced_ai_video_tools/gui/theme.py): spacing,
   typography, colors, controls, tables, and progress styling
-- [`tests/test_gui.py`](../tests/test_gui.py) and related GUI tests: observable
+- [`tests/test_gui.py`](../../tests/test_gui.py) and related GUI tests: observable
   behavior and accessibility contracts
-- [Phase 1 GUI audit](v2/1-enhance-gui-audit.md) and
-  [presentation architecture](v2/1-enhance-gui-presentation-architecture.md):
+- [Phase 1 GUI audit](../v2/1-enhance-gui-audit.md) and
+  [presentation architecture](../v2/1-enhance-gui-presentation-architecture.md):
   approved design intent and boundaries
 
 ## Reference framework
@@ -161,7 +164,7 @@ forcing disruptive context changes.
 The current flat table presents active, pending, and terminal jobs as equivalent
 rows even though their meaning and actions differ. Adopt the three-region
 Active / Up Next / History proposal in the
-[queue design review](job-queue-design-review.md). It can remain a presentation
+[queue design review](2026-08-29-job-queue-design-review.md). It can remain a presentation
 over the same typed snapshots and Qt model/view boundary.
 
 #### Medium priority: source-row actions compete with source identity

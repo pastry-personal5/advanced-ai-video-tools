@@ -22,10 +22,13 @@ def test_rational_rejects_zero_denominator() -> None:
         Rational(1, 0)
 
 
-def test_progress_preview_image_is_limited_to_upscale_events() -> None:
-    """Only measured upscale progress may expose a sampled frame to the GUI."""
+def test_progress_preview_images_are_limited_to_upscale_events() -> None:
+    """Only measured upscale progress may expose paired sampled frames to the GUI."""
 
-    image = Path("frame-000000016.png")
-    assert ProgressEvent(PipelineStage.UPSCALE, 16, 32, "Upscaling", image).preview_image_path == image
+    original = Path("original-frame-000000016.png")
+    upscaled = Path("upscaled-frame-000000016.png")
+    event = ProgressEvent(PipelineStage.UPSCALE, 16, 32, "Upscaling", original, upscaled)
+    assert event.original_preview_image_path == original
+    assert event.upscaled_preview_image_path == upscaled
     with pytest.raises(ValueError, match="upscale"):
-        ProgressEvent(PipelineStage.ENCODE, 16, 32, "Encoding", image)
+        ProgressEvent(PipelineStage.ENCODE, 16, 32, "Encoding", original)

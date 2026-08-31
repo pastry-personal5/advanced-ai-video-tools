@@ -124,22 +124,43 @@ QGroupBox#selectedJobDetails {{
     border-color: #50535a;
 }}
 
+QGroupBox#selectedJobDetails::title {{
+    left: {SPACE_2}px;
+    font-size: 10pt;
+    font-weight: 600;
+}}
+
+QGroupBox#selectedJobDetails QLabel {{
+    font-size: 10pt;
+}}
+
 QGroupBox#sourcePreviewPane,
-QGroupBox#queuePreviewPane {{
+QGroupBox#queuePreviewPane,
+QGroupBox#queueActiveGroup,
+QGroupBox#queueUpNextGroup,
+QGroupBox#queueHistoryGroup {{
     background: #252629;
     border: 1px solid #50535a;
     border-radius: {SURFACE_RADIUS}px;
 }}
 
 QGroupBox#sourcePreviewPane::title,
-QGroupBox#queuePreviewPane::title {{
+QGroupBox#queuePreviewPane::title,
+QGroupBox#queueActiveGroup::title,
+QGroupBox#queueUpNextGroup::title,
+QGroupBox#queueHistoryGroup::title {{
+    subcontrol-origin: margin;
+    left: {SPACE_3}px;
+    padding: 0 {SPACE_1}px;
+    color: #f1f3f4;
     font-size: 13pt;
     font-weight: 600;
 }}
 
 QVideoWidget#sourcePreviewVideo,
 QVideoWidget#queuePreviewVideo,
-QLabel#queuePreviewFrame {{
+QLabel#queuePreviewOriginalFrame,
+QLabel#queuePreviewUpscaledFrame {{
     background: #17181a;
     border: 1px solid #3c4043;
     border-radius: {CONTROL_RADIUS}px;
@@ -166,10 +187,6 @@ QLabel#fullscreenPreviewHelpTitle {{
 QLabel#fullscreenPreviewHelpText {{
     color: #ffffff;
     font-family: monospace;
-}}
-
-QLabel#queuePreviewStatus {{
-    color: #b8bcc2;
 }}
 
 QDialog#queuePreviewLastFrameWait {{
@@ -304,10 +321,49 @@ QTableView#queueTable::item {{
     padding: 0 {SPACE_2}px;
 }}
 
-QHeaderView::section {{
-    background: #303134;
+QTableView#queueActiveView,
+QTableView#queueUpNextView,
+QTableView#queueHistoryView {{
+    padding: 0;
+    background: #17181a;
+    font-size: 10pt;
+    border: 1px solid #45474b;
+    border-radius: 0px;
+}}
+
+QTableView#queueActiveView:focus,
+QTableView#queueUpNextView:focus,
+QTableView#queueHistoryView:focus {{
+    border: 1px solid #45474b;
+    border-radius: 0px;
+}}
+
+QTableView#queueActiveView::item,
+QTableView#queueUpNextView::item,
+QTableView#queueHistoryView::item {{
+    padding: 0 {SPACE_1}px;
+}}
+
+QTableView#queueActiveView QHeaderView::section,
+QTableView#queueUpNextView QHeaderView::section,
+QTableView#queueHistoryView QHeaderView::section {{
+    background: #2a2b2e;
+    padding: {SPACE_1}px;
+    font-size: 9pt;
+}}
+
+QHeaderView {{
+    background: #2a2b2e;
     border: none;
     border-bottom: 1px solid #5f6368;
+    border-radius: 0px;
+}}
+
+QHeaderView::section {{
+    background: #2a2b2e;
+    border: none;
+    border-right: 1px solid #45474b;
+    border-radius: 0px;
     padding: {SPACE_2}px;
     color: #e8eaed;
     font-weight: 600;
@@ -319,6 +375,7 @@ QHeaderView::section:first {{
 
 QHeaderView::section:last {{
     padding-right: 0;
+    border-right: none;
 }}
 
 QProgressBar {{
@@ -375,12 +432,8 @@ QScrollBar::sub-line:vertical {{
     height: 0;
 }}
 
-QSplitter::handle {{
-    background: #45474b;
-}}
-
-QSplitter::handle:hover {{
-    background: #8ab4f8;
+QSplitter#contentMessageSplitter {{
+    background: transparent;
 }}
 """
 

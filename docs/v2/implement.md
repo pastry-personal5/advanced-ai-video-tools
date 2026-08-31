@@ -91,4 +91,4 @@ Tests must remain independent of a GPU, network, large model files, and long vid
 
 ## Current execution pointer
 
-Proceed from the current phase in [plans.md](plans.md). Phase 1 — Enhance GUI, Phase 2 — Rename Project, Phase 3 — Stabilization, and Phase 4 — Refactoring are complete. Phase 5 — GUI Enhancement Including Fullscreen Preview implementation is complete and in verification; Phase 6 — Stabilization and Release remains provisional.
+Proceed from the current phase in [plans.md](plans.md). Phases 1 through 5 are complete. Phase 6 — Information Architecture Update and GUI Enhancement is in progress; Phase 7 — Stabilization and Release remains proposed.

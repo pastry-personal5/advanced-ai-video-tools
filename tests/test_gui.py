@@ -1,11 +1,12 @@
 """Headless tests for Qt queue bridging, model roles, and the window shell."""
 
 # Pytest injects fixtures through same-named function parameters.
-# pylint: disable=redefined-outer-name
+# pylint: disable=redefined-outer-name,too-many-lines
 
 from __future__ import annotations
 
 import os
+import signal
 import threading
 import time
 from collections.abc import Callable
@@ -23,12 +24,12 @@ from PySide6.QtTest import QTest  # noqa: E402  # pylint: disable=wrong-import-p
 from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QPushButton, QSlider, QSplitter, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from advanced_ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
-from advanced_ai_video_tools.gui.application import create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.application import _GuiSigintBridge, create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.editor import SOURCE_CLIP_LIST_WIDTH  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.preview import FULLSCREEN_HELP_MARGIN, FULLSCREEN_SHORTCUTS, PREVIEW_PANE_MINIMUM_WIDTH, SHORTCUT_HELP, VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, FullscreenCommand, QueuePreviewPane, SourcePreviewPane, resolve_fullscreen_shortcut  # noqa: E402  # pylint: disable=wrong-import-position
-from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, SPACE_3, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot  # noqa: E402  # pylint: disable=wrong-import-position
@@ -66,8 +67,16 @@ def test_gui_theme_is_always_dark(qt_app: QApplication) -> None:
     assert f"border-radius: {CONTROL_RADIUS}px" in qt_app.styleSheet()
     assert "QProgressBar::chunk" in qt_app.styleSheet()
     assert "border-radius: 0px;" in qt_app.styleSheet()
+    assert "QSplitter#contentMessageSplitter" in qt_app.styleSheet()
+    assert "QSplitter::handle:hover" not in qt_app.styleSheet()
     assert "QHeaderView::section:first" in qt_app.styleSheet()
     assert "QHeaderView::section:last" in qt_app.styleSheet()
+    assert "QHeaderView {\n    background: #2a2b2e;\n    border: none;\n    border-bottom: 1px solid #5f6368;\n    border-radius: 0px;\n}" in qt_app.styleSheet()
+    assert "border-right: 1px solid #45474b;" in qt_app.styleSheet()
+    assert "QTableView#queueActiveView QHeaderView::section" in qt_app.styleSheet()
+    assert "background: #2a2b2e;" in qt_app.styleSheet()
+    assert "QTableView#queueActiveView:focus" in qt_app.styleSheet()
+    assert "QTableView#queueActiveView,\nQTableView#queueUpNextView,\nQTableView#queueHistoryView {\n    padding: 0;\n    background: #17181a;\n    font-size: 10pt;\n    border: 1px solid #45474b;\n    border-radius: 0px;\n}" in qt_app.styleSheet()
     assert "QDialog#fullscreenPreviewHelpPanel" in qt_app.styleSheet()
     assert "background: rgba(37, 38, 41, 128);" in qt_app.styleSheet()
     assert f"min-height: {CONTROL_HEIGHT - 2}px" in qt_app.styleSheet()
@@ -241,12 +250,56 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     assert window.cancel_selected_job_button.isEnabled()
     assert window.findChild(QLabel, "jobActionSummary") is None
     assert window.findChild(QLabel, "logPathLabel") is None
+    selected_details = window.findChild(QGroupBox, "selectedJobDetails")
+    assert selected_details is not None
+    assert selected_details.layout().contentsMargins().left() == SPACE_2
+    assert selected_details.layout().verticalSpacing() == 4
     window.cancel_selected_job_button.click()
     assert queue.cancelled == ["first"]
 
     window.queue_table.setCurrentIndex(model.index(1, 0))
     qt_app.processEvents()
     assert not window.move_job_up_button.isEnabled()
+    window.close()
+
+
+def test_queue_monitoring_groups_active_pending_and_history_regions(qt_app: QApplication, tmp_path: Path) -> None:
+    """Visible queue regions share one model and preserve canonical selection."""
+
+    active = _snapshot(tmp_path, "active", JobState.RUNNING, None, revision=1)
+    pending = _snapshot(tmp_path, "pending", JobState.QUEUED, 0, revision=1)
+    failed = _snapshot(tmp_path, "failed", JobState.FAILED, None, revision=1)
+    model = JobListModel(FakeQueue((active, pending, failed)), QueueSnapshotBridge())  # type: ignore[arg-type]
+    window = MainWindow(model, ApplicationSettings())
+    window.show()
+    window.queue_monitoring_button.click()
+    qt_app.processEvents()
+
+    assert window.region_proxies["active"].rowCount() == 1
+    assert window.region_proxies["up_next"].rowCount() == 1
+    assert window.region_proxies["history"].rowCount() == 1
+    assert window.findChild(QLabel, "queueHistoryEmpty") is None
+    active_group = window.region_groups["active"]
+    up_next_group = window.region_groups["up_next"]
+    history_group = window.region_groups["history"]
+    assert "QGroupBox#queueActiveGroup,\nQGroupBox#queueUpNextGroup,\nQGroupBox#queueHistoryGroup" in qt_app.styleSheet()
+    assert "background: #252629;" in qt_app.styleSheet()
+    assert "border-radius: 8px;" in qt_app.styleSheet()
+    assert "QGroupBox#queueActiveGroup::title" in qt_app.styleSheet()
+    active_origin = active_group.mapTo(window.queue_region_workspace, active_group.rect().topLeft())
+    up_next_origin = up_next_group.mapTo(window.queue_region_workspace, up_next_group.rect().topLeft())
+    history_origin = history_group.mapTo(window.queue_region_workspace, history_group.rect().topLeft())
+    assert active_origin.x() == up_next_origin.x() < history_origin.x()
+    assert active_origin.y() < up_next_origin.y()
+    assert history_origin.y() == active_origin.y()
+    assert abs(history_group.height() - window.queue_region_workspace.height()) <= 1
+    assert abs((active_group.height() + up_next_group.height() + SPACE_3) - window.queue_region_workspace.height()) <= 1
+    pending_proxy = window.region_proxies["up_next"]
+    window.region_views["up_next"].setCurrentIndex(pending_proxy.index(0, 0))
+    qt_app.processEvents()
+    assert model.data(window.queue_table.currentIndex(), int(JobRole.JOB_ID)) == "pending"
+    assert window.job_name_value.text() == "pending.mov"
+    assert window.region_views["history"].verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded
     window.close()
 
 
@@ -391,6 +444,8 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     window.show()
     qt_app.processEvents()
     assert window.findChild(QSplitter, "contentMessageSplitter") is not None
+    assert window.content_message_splitter.handleWidth() == 12
+    assert window.content_message_splitter.handle(1).height() == 12
     assert window.findChild(QPushButton, "externalToolsButton") is None
     assert window.preferences_action.text() == "Preferences"
     assert [window.message_tabs.tabText(index) for index in range(2)] == ["Global Messages", "Job Messages"]
@@ -596,36 +651,57 @@ def test_source_preview_expands_without_forcing_a_pane_ratio(qt_app: QApplicatio
     pane.close()
 
 
-def test_queue_preview_switches_from_sampled_upscale_frame_to_looping_final_video(qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Queue preview shows sampled live frames, then loops a completed output."""
+def test_queue_preview_switches_from_paired_samples_to_looping_final_video(qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # pylint: disable=too-many-statements
+    """Queue preview exposes Original, Upscaled, then an autoplaying final video."""
 
     del qt_app
     output = tmp_path / "running.mp4"
     output.touch()
-    frame = tmp_path / "frame-000000016.png"
-    frame.touch()
-    running = _snapshot(tmp_path, "running", JobState.RUNNING, None, revision=1, progress=ProgressEvent(PipelineStage.UPSCALE, 16, 48, "Upscaling frame 16 of 48", frame))
+    original_frame = tmp_path / "original-frame-000000016.png"
+    upscaled_frame = tmp_path / "upscaled-frame-000000016.png"
+    original_frame.touch()
+    upscaled_frame.touch()
+    running = _snapshot(
+        tmp_path,
+        "running",
+        JobState.RUNNING,
+        None,
+        revision=1,
+        progress=ProgressEvent(
+            PipelineStage.UPSCALE,
+            16,
+            48,
+            "Upscaling frame 16 of 48",
+            original_frame,
+            upscaled_frame,
+        ),
+    )
     model = JobListModel(FakeQueue((running,)), QueueSnapshotBridge())  # type: ignore[arg-type]
     window = MainWindow(model, ApplicationSettings(preview_muted=False, preview_volume=42))
     window.queue_table.setCurrentIndex(model.index(0, 0))
     preview = window.queue_preview
 
     assert isinstance(preview, QueuePreviewPane)
-    assert preview.media.currentWidget() is preview.frame_preview
+    assert [preview.tabs.tabText(index) for index in range(preview.tabs.count())] == ["Original", "Upscaled", "Final Video"]
+    assert preview.tabs.currentWidget() is preview.original_tab
     assert preview.player.source().isEmpty()
-    assert preview.status_label.text() == "Live upscaled frame 16 (updates every 16 frames)."
     assert not preview.controls.isVisible()
-    preview._frame_loaded(QImage(4, 3, QImage.Format.Format_RGB32), preview._frame_generation)  # pylint: disable=protected-access
-    assert preview.frame_preview.pixmap() is not None
+    preview._frame_loaded(QImage(4, 3, QImage.Format.Format_RGB32), "original", preview._frame_generations["original"])  # pylint: disable=protected-access
+    assert preview.original_frame_preview.pixmap() is not None
+    preview.tabs.setCurrentWidget(preview.upscaled_tab)
+    preview._frame_loaded(QImage(4, 3, QImage.Format.Format_RGB32), "upscaled", preview._frame_generations["upscaled"])  # pylint: disable=protected-access
+    assert preview.upscaled_frame_preview.pixmap() is not None
+    preview.tabs.setCurrentWidget(preview.final_video_tab)
+    assert preview.player.source().isEmpty()
 
     completed = _snapshot(tmp_path, "running", JobState.COMPLETED, None, revision=2)
     model._apply_snapshot(completed)  # pylint: disable=protected-access
-    assert [button.objectName() for button in preview.findChildren(QToolButton)] == [
+    assert [button.objectName() for button in preview.findChildren(QToolButton) if button.objectName().startswith("queuePreview")] == [
         "queuePreviewPlayPauseButton",
         "queuePreviewFirstFrameButton",
         "queuePreviewLastFrameButton",
     ]
-    assert preview.media.currentWidget() is preview.video
+    assert preview.tabs.currentWidget() is preview.final_video_tab
     assert preview.player.source().toLocalFile() == str(output)
     assert preview.player.loops() == QMediaPlayer.Loops.Infinite
     assert preview._playback_requested  # pylint: disable=protected-access
@@ -925,6 +1001,19 @@ def test_preview_audio_preferences_restore_and_persist_without_job_impact(qt_app
     window.close()
 
 
+def test_output_directory_preference_persists_when_draft_is_closed(qt_app: QApplication, tmp_path: Path) -> None:
+    """A changed output directory survives closing without queuing a job."""
+
+    del qt_app
+    store = SettingsStore(tmp_path / "settings.yaml")
+    window = MainWindow(JobListModel(FakeQueue(), QueueSnapshotBridge()), ApplicationSettings(), settings_store=store)
+    selected = tmp_path / "exports"
+    window.editor.output_directory.setText(str(selected))
+    window.close()
+
+    assert store.load().recent_output_directory == selected
+
+
 def test_preview_pauses_when_processing_starts_without_automatic_resume(qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Processing start pauses preview once and completion never resumes it."""
 
@@ -961,6 +1050,29 @@ def test_runtime_loads_settings_and_owns_clean_queue_shutdown(qt_app: QApplicati
     assert runtime.window.findChild(QLabel, "subtitleLabel") is None
     runtime.window.close()
     runtime.shutdown()
+
+
+def test_gui_sigint_bridge_closes_through_the_normal_window_lifecycle(qt_app: QApplication) -> None:
+    """Terminal Ctrl+C closes the main window from Qt rather than interrupting it."""
+
+    model = JobListModel(FakeQueue(), QueueSnapshotBridge())  # type: ignore[arg-type]
+    window = MainWindow(model, ApplicationSettings())
+    window.show()
+    bridge = _GuiSigintBridge(qt_app, window)
+    previous_handler = signal.getsignal(signal.SIGINT)
+    bridge.install()
+    try:
+        os.kill(os.getpid(), signal.SIGINT)
+
+        assert _process_until(qt_app, lambda: bridge._shutdown_started)  # pylint: disable=protected-access
+        assert not window.isVisible()
+        assert bridge._shutdown_started  # pylint: disable=protected-access
+        os.kill(os.getpid(), signal.SIGINT)
+        assert bridge._shutdown_requested  # pylint: disable=protected-access
+    finally:
+        bridge.uninstall()
+        assert signal.getsignal(signal.SIGINT) == previous_handler
+        window.close()
 
 
 def test_single_instance_lock_rejects_second_owner(tmp_path: Path) -> None:

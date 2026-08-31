@@ -4,8 +4,8 @@
 
 - Development target: v2
 - Released baseline: v1.0.0
-- Current phase: [Phase 5 — GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md) (verification)
-- Last updated: 2026-08-29
+- Current phase: [Phase 6 — Information Architecture Update and GUI Enhancement](6-information-architecture-gui.md) (in progress)
+- Last updated: 2026-08-31
 
 ## Purpose
 
@@ -17,11 +17,6 @@ Version 2 evolves the released v1.0.0 application without weakening its validate
 After those product changes, v2 proceeds through quality and product phases: an
 initial stabilization pass, a deliberate refactoring pass, a fullscreen
 preview enhancement, and a final stabilization/release pass.
-
-Phase 1's GUI enhancement includes a single-window layout revision: a right-side
-source-clip preview and an integrated, tabbed message area along the bottom.
-
-The new project name, rename compatibility policy, and exact scope of later phases are not decided yet. Do not invent them during Phase 1.
 
 ## Planning principles
 
@@ -40,28 +35,19 @@ The new project name, rename compatibility policy, and exact scope of later phas
 | 2 | [Rename Project](2-rename-project.md) | Complete | Apply the approved identity across package, application, storage, documentation, and release artifacts with an explicit migration policy |
 | 3 | Stabilization | Complete | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
 | 4 | Refactoring | Complete | Improve code readability and maintainability without weakening approved behavior |
-| 5 | [GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md) | Verification | Complete the GUI enhancement with immersive fullscreen selected-source preview, keyboard playback, and clip-navigation controls |
-| 6 | Stabilization and release | Proposed | Re-verify behavior after the fullscreen-preview feature and produce the v2 release artifacts |
+| 5 | [GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md) | Complete | Complete the GUI enhancement with immersive fullscreen selected-source preview, keyboard playback, and clip-navigation controls |
+| 6 | [Information Architecture Update and GUI Enhancement](6-information-architecture-gui.md) | In progress | Adopt a three-region Queue Monitoring workspace and improve task hierarchy without changing queue or media behavior |
+| 7 | Stabilization and release | Proposed | Re-verify behavior after the fullscreen-preview feature and produce the v2 release artifacts |
 
-Phase 2 is complete after Phase 1. Phase 3 is complete under [Phase 3 — Stabilization](3-stabilization.md); Phase 4 is complete under [Phase 4 — Refactoring](4-refactoring.md). Phase 5 implementation is complete and remains in verification under [Phase 5 — GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md); Phase 6 remains provisional.
+Phases 1 through 5 are complete. Phase 6 is in progress; Phase 7
+remains proposed.
 
-## Cross-phase decisions still required
+## Cross-phase decisions
 
-### Project rename
+### Resolved project rename
 
-The complete decision checklist and migration plan are maintained in [Phase 2 — Rename Project](2-rename-project.md).
-
-- New product display name.
-- New Python distribution name and import-package name, if either will change.
-- New CLI command name and whether the old command remains as a deprecated alias.
-- macOS application identifier, bundle name, executable name, and signing identity.
-- Settings, logs, and cache migration from the existing Qt application paths.
-- Repository name and documentation-link migration.
-- Output filename prefix: retain `ai-video-` or replace it.
-- Copyright-holder name in the proprietary license.
-- Compatibility duration for old settings, commands, and generated project files.
-
-Approved Phase 2 identity decisions:
+The complete migration reference is [v1 to v2 identity migration](rename-migration.md).
+The approved Phase 2 identity decisions are:
 
 - Project/product display name: `Advanced AI Video Tools`.
 - Owner, copyright holder, developer, primary contact, and maintainer: `Pastry Personal 5`.
@@ -85,70 +71,22 @@ Approved Phase 2 identity decisions:
 - Distribution channel: outside the Mac App Store using Developer ID distribution via `.dmg`; signing/notarization execution remains a manual release action.
 - Target-hardware acceptance criteria (human release checklist; deferred for v2).
 
-### Phase 3 stabilization scope
-
-- Phase 3 is dedicated to performance, resource, exception, and error-handling checks before refactoring.
-- Detailed workloads, metrics, budgets, and pass/fail thresholds are proposed below and remain subject to owner approval.
-
-#### Proposed Phase 3 performance charter
-
-Use repeatable local fixtures on the supported Apple Silicon reference host. Record
-the median and p95 for timings, and compare post-change results with the same
-baseline rather than treating media throughput as an absolute promise.
-
-- **Startup:** measure process launch to visible main window for cold and warm starts; target ≤6 seconds cold and ≤3 seconds warm.
-- **GUI responsiveness:** measure input-to-visible-state latency while idle, previewing, validating, and monitoring a job; target p95 ≤100 ms idle and ≤250 ms during active work.
-- **Preview selection:** measure source-row selection to asynchronous media-source assignment and selection-to-first-frame for a supported fixture; target assignment ≤100 ms and first frame ≤2 seconds, without GUI-thread blocking.
-- **Queue submission:** measure Preflight activation to worker-start acknowledgement; target GUI return ≤100 ms and no long-running work on the presentation thread.
-- **Memory stability:** record RSS at startup, idle, preview playback, preflight, and each pipeline stage; after ten sequential jobs, allow no unexplained monotonic growth and no more than 10% growth over the first-job peak (with a 100 MB minimum tolerance).
-- **Resource ownership:** verify that every completed, failed, cancelled, and preview-failure path releases media outputs, worker threads, queue ownership, and temporary resources; repeated preview selection must not accumulate live players or outputs.
-- **Pipeline throughput:** no performance benchmark may invoke AI upscaling. Any future fixed-media throughput measurement must explicitly skip Real-ESRGAN and document that policy; report stage durations, total duration, CPU utilization, and peak RSS, with regression alerts at >10% versus baseline.
-- **Disk usage:** measure peak workspace size and retained failed-workspace size; successful and cancelled jobs must release temporary data according to policy, and cleanup should complete within 5 seconds after terminal state where no external process remains.
-- **Cancellation:** measure cancellation request to terminal queue state for queued and active jobs; target queued cancellation ≤1 second and active cancellation ≤10 seconds after the current child process exits.
-- **Shutdown:** measure window-close to joined preview/validator/queue workers; target ≤5 seconds with no live worker or child process remaining.
-- **Repeatability:** run each benchmark at least three times, record host/OS/tool/model versions, fixture properties, and whether the result is cold or warm; keep raw results out of the repository and retain only summarized evidence.
-
-#### Proposed Phase 3 exception and error-handling charter
-
-- **Boundary coverage:** exercise malformed settings, missing tools, invalid media, unsupported media, permission failures, insufficient disk space, queue rejection, worker exceptions, cancellation races, preview decode failures, and shutdown during active work.
-- **Containment:** every expected failure must terminate in a typed result or controlled Qt state; no exception may escape a worker thread, leave the GUI permanently busy, or terminate the process unexpectedly.
-- **User feedback:** each failure must provide a concise actionable GUI message, preserve the relevant job/source state, and identify the next legal action without exposing raw subprocess command lines.
-- **Diagnostics:** each failure must retain detailed local diagnostics with stable job/stage context, exception type, and a redacted actionable cause; repeated failures must not flood the GUI message history.
-- **Cleanup invariants:** fault injection must verify release of queue ownership, worker threads, media outputs, reservations, temporary directories, and partial publications on every failure and cancellation path.
-- **Recovery behavior:** after a failed validation, preview load, queued job, active job, or settings save, the application must remain usable for a subsequent valid operation without restart.
-- **Concurrency safety:** test exception delivery across worker-to-Qt boundaries and cancellation/error races; GUI state mutations must occur on the Qt thread and terminal jobs must be reported exactly once.
-- **Regression gate:** add failure-path tests for every corrected defect and require zero unexpected tracebacks, leaked workers, orphaned child processes, or stale busy indicators in the Phase 3 acceptance run.
-
-### Phase 4 refactoring scope
-
-- Phase 4 is approved to proceed from the bottom layer upward: foundational/core code,
-  application services, queue and pipeline orchestration, then GUI presentation.
-- Internal API renames are allowed when public CLI behavior, compatibility aliases,
-  media contracts, and documented user-facing behavior remain unchanged.
-- No numeric complexity budgets are required; each slice must still be small,
-  reviewable, typed, and covered by focused regression tests.
-- Phase 4 is refactoring-only. It must not add product features or change approved
-  behavior.
-- Phase 4 is dedicated to improving code readability and maintainability after Phase 3 stabilization.
-- Refactoring must preserve approved GUI behavior, CLI behavior, media-pipeline invariants, settings safety, queue semantics, and public compatibility unless a later decision explicitly changes them.
-- Prefer small independently validated slices over broad rewrites.
-- Consolidate duplicated logic, clarify module and class responsibilities, reduce deeply nested control flow, improve names and type signatures, isolate Qt presentation code from application services, and make lifecycle ownership explicit.
-- Polish variable names throughout the touched code: locals, parameters, attributes, signal payloads, and intermediate results should describe their domain meaning rather than implementation shorthand; preserve public names where compatibility requires them.
-- Reduce functions with excessive statements by extracting cohesive helper functions with explicit inputs and outputs; retain the current orchestration flow and signal/thread boundaries.
-- Use thin layers of abstraction around existing behavior—such as construction, validation, formatting, lifecycle transitions, and event mapping—without adding speculative frameworks, indirection, or new ownership models.
-- Keep each extraction reviewable: one responsibility per helper, typed boundaries, preserved exceptions, and focused regression coverage before broader movement.
-- Add or strengthen tests before moving behavior across boundaries; every refactoring slice must retain focused regression coverage and pass the full quality gate.
-- Do not combine Phase 4 with new product features, branding changes, media-policy changes, or speculative compatibility abstractions.
-- Detailed module targets will be selected in bottom-up implementation slices; no separate numeric complexity budget applies.
-
 ### Phase 5 GUI-enhancement scope
 
 The approved scope and acceptance criteria are maintained in [Phase 5 — GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md). The phase completes the GUI enhancement by extending only the existing selected-source, playback-only preview. It must not add preview editing, output processing, proxy generation, or changes to the media pipeline.
 
-### Phase 6 stabilization and release scope
+### Phase 6 information architecture and GUI-enhancement scope
 
-- Phase 6 retains the previously planned final stabilization and v2 release-artifact work.
-- Phase 6 begins only after Phase 5 is complete and its implementation, tests, and documentation are synchronized.
+The proposed scope and required decisions are maintained in [Phase 6 —
+Information Architecture Update and GUI Enhancement](6-information-architecture-gui.md).
+It may revise presentation hierarchy and interaction clarity only with explicit
+owner approval.
+
+### Phase 7 stabilization and release scope
+
+- Phase 7 retains the previously planned final stabilization and v2 release-artifact work.
+- Phase 7 begins only after Phases 5 and 6 are complete and their
+  implementation, tests, and documentation are synchronized.
 - Release work must re-verify fullscreen-preview behavior, including keyboard focus, help visibility, source navigation, player cleanup, and recovery from preview errors.
 
 ## Version 2 invariants
@@ -205,9 +143,15 @@ A phase is complete only when:
 | 2026-08-25 | Begin Phase 3 stabilization, including the proposed performance and exception/error-handling charter, while retaining opt-in native and benchmark checks. |
 | 2026-08-25 | Disable performance benchmarks that include AI upscaling; performance measurements are limited to native GUI presentation or explicitly non-upscaling media work. |
 | 2026-08-25 | Complete Phase 3 stabilization after the documented regression, native presentation, no-upscaling lifecycle/resource, and documentation checks. |
-| 2026-08-29 | Approve Phase 5 as a fullscreen selected-source preview enhancement; move final stabilization and release artifacts to Phase 6. |
+| 2026-08-29 | Approve Phase 5 as a fullscreen selected-source preview enhancement; move final stabilization and release artifacts to Phase 7. |
 | 2026-08-29 | Approve fullscreen preview bindings: `0` first frame, `9` last frame, `j` previous clip, `l` next clip, `Space`/`k` play-pause, `Shift-P` play previous clip, `Shift-N` play next clip, `Esc` close, and `?` shortcut help. |
 | 2026-08-29 | Approve two fullscreen entry points: an expand button in the preview pane and a `Start Fullscreen Preview` button at the right side of each source-clip list row; approve autoplay for `j` and `l`, and an auto-hiding fullscreen control bar revealed by pointer movement or keyboard input. |
 | 2026-08-29 | Complete Phase 5 fullscreen preview with shared-player ownership, approved keyboard shortcuts, help overlay, row and pane entry points, auto-hide controls, regression coverage, and full quality-gate validation. |
 | 2026-08-31 | Supersede the Phase 5 fullscreen control-bar decision: fullscreen selected-source preview is keyboard-only, with no clickable playback, seeking, help, or close controls. Rework both application views around a tall far-right preview column, keep the shared message tabs in a narrower left workspace, and add a Queue Monitoring preview for the selected completed job's published local output. |
 | 2026-08-31 | Evolve Queue Monitoring's preview into a selected-job multipurpose surface: display the latest upscaled local PNG sample at every measured 16-frame interval while `UPSCALE` is running, retain that image through later active stages, and autoplay the published final video indefinitely after completion. |
+| 2026-08-31 | Show the matched Original and Upscaled frame 1 in Queue Preview as soon as each file is ready, before continuing with the 16-frame sampling cadence. |
+| 2026-08-31 | Add proposed Phase 6 for an information-architecture update and presentation-only GUI enhancement; reserve implementation until Phase 5 completion and explicit design approval are complete. |
+| 2026-08-31 | Complete Phase 5 after the supported-macOS manual fullscreen acceptance check passed. |
+| 2026-08-31 | Use the archived 2026-08-29 job-queue design review as the Phase 6 planning baseline: adapt its Active, Up Next, and History workspace to the current far-right Queue Preview and shared message splitter, pending review-gate approval. |
+| 2026-08-31 | Preserve the far-right three-tab Queue Preview and the bottom integrated Global Messages/Job Messages area as fixed Phase 6 Queue Monitoring layout boundaries. Approve the Active/Up Next/History workspace, session-visible completed history, scrollable History at 1400 × 880, text-only status, and inline selected-job details. |
+| 2026-08-31 | Begin Phase 6 implementation with presentation-only Active, Up Next, and History proxy views over the existing queue model; preserve canonical selection, far-right Queue Preview, and bottom integrated messages. |

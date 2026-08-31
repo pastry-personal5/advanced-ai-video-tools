@@ -16,7 +16,7 @@ from PySide6.QtCore import QEvent, QObject, QPoint, QSignalBlocker, QSize, QThre
 from PySide6.QtGui import QColor, QFont, QImage, QImageReader, QKeyEvent, QPainter, QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
-from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QGroupBox, QHBoxLayout, QLabel, QSlider, QSizePolicy, QStackedWidget, QStyle, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QGroupBox, QHBoxLayout, QLabel, QSlider, QSizePolicy, QStyle, QTabWidget, QToolButton, QVBoxLayout, QWidget
 
 from advanced_ai_video_tools.gui.theme import SPACE_2, SPACE_3
 
@@ -664,13 +664,13 @@ class SourcePreviewPane(QGroupBox):
     audio_preferences_changed = Signal(bool, int)
 
 
-class UpscaledFrameLoader(QObject):
-    """Decode a sampled PNG away from the GUI thread."""
+class SampledFrameLoader(QObject):
+    """Decode one sampled original or upscaled PNG away from the GUI thread."""
 
-    frame_loaded = Signal(object, int)
+    frame_loaded = Signal(object, str, int)
 
-    @Slot(object, int, QSize)
-    def load(self, path: object, generation: int, target_size: QSize) -> None:
+    @Slot(object, str, int, QSize)
+    def load(self, path: object, kind: str, generation: int, target_size: QSize) -> None:
         """Read one local image and return a thread-safe QImage."""
 
         image = QImage()
@@ -680,7 +680,7 @@ class UpscaledFrameLoader(QObject):
             if source_size.isValid() and target_size.isValid():
                 reader.setScaledSize(source_size.scaled(target_size, Qt.AspectRatioMode.KeepAspectRatio))
             image = reader.read()
-        self.frame_loaded.emit(image, generation)
+        self.frame_loaded.emit(image, kind, generation)
 
 
 class QueuePreviewLastFrameWaitDialog(QDialog):
@@ -710,6 +710,27 @@ class QueuePreviewLastFrameWaitDialog(QDialog):
 class QueuePreviewPane(QGroupBox):
     """Show live sampled upscale frames or a looping published final video."""
 
+    @staticmethod
+    def _frame_label(object_name: str, accessible_name: str) -> QLabel:
+        """Create one tab-local image surface for sampled queue frames."""
+
+        label = QLabel()
+        label.setObjectName(object_name)
+        label.setAccessibleName(accessible_name)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setScaledContents(False)
+        return label
+
+    @staticmethod
+    def _frame_tab(label: QLabel) -> QWidget:
+        """Place one sampled-frame surface in a zero-margin tab page."""
+
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(label, 1)
+        return tab
+
     def __init__(self, parent: QWidget | None = None, *, muted: bool = True, volume: int = 100) -> None:
         # Declarative widget construction is intentionally kept together.
         # pylint: disable=too-many-statements
@@ -728,15 +749,8 @@ class QueuePreviewPane(QGroupBox):
         self.audio.setVolume(max(0, min(100, volume)) / 100)
         self.player.setAudioOutput(self.audio)
         self.player.setVideoOutput(self.video)
-        self.frame_preview = QLabel()
-        self.frame_preview.setObjectName("queuePreviewFrame")
-        self.frame_preview.setAccessibleName("Latest upscaled frame")
-        self.frame_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.frame_preview.setScaledContents(False)
-        self.status_label = QLabel("Select a running or completed job to preview its output.")
-        self.status_label.setObjectName("queuePreviewStatus")
-        self.status_label.setAccessibleName("Queue preview status")
-        self.status_label.setWordWrap(True)
+        self.original_frame_preview = self._frame_label("queuePreviewOriginalFrame", "Latest original frame")
+        self.upscaled_frame_preview = self._frame_label("queuePreviewUpscaledFrame", "Latest upscaled frame")
         self.progress_slider = QSlider(Qt.Orientation.Horizontal)
         self.progress_slider.setObjectName("queuePreviewProgressSlider")
         self.progress_slider.setAccessibleName("Final video preview progress")
@@ -766,31 +780,39 @@ class QueuePreviewPane(QGroupBox):
         controls.addWidget(self.first_frame_button)
         controls.addWidget(self.last_frame_button)
         controls.addStretch(1)
-        self.media = QStackedWidget()
-        self.media.setObjectName("queuePreviewMedia")
-        self.media.addWidget(self.video)
-        self.media.addWidget(self.frame_preview)
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("queuePreviewTabs")
+        self.tabs.setAccessibleName("Queue preview type")
+        self.original_tab = self._frame_tab(self.original_frame_preview)
+        self.upscaled_tab = self._frame_tab(self.upscaled_frame_preview)
+        self.final_video_tab = QWidget()
+        final_layout = QVBoxLayout(self.final_video_tab)
+        final_layout.setContentsMargins(0, 0, 0, 0)
+        final_layout.setSpacing(SPACE_2)
+        final_layout.addWidget(self.video, 1)
+        final_layout.addLayout(progress_row)
+        final_layout.addWidget(self.controls)
+        self.tabs.addTab(self.original_tab, "Original")
+        self.tabs.addTab(self.upscaled_tab, "Upscaled")
+        self.tabs.addTab(self.final_video_tab, "Final Video")
         self.last_frame_wait = QueuePreviewLastFrameWaitDialog(self)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(SPACE_3, SPACE_3 + SPACE_2, SPACE_3, SPACE_3)
         layout.setSpacing(SPACE_2)
-        layout.addWidget(self.status_label)
-        layout.addWidget(self.media, 1)
-        layout.addLayout(progress_row)
-        layout.addWidget(self.controls)
-        layout.setStretch(1, 1)
+        layout.addWidget(self.tabs, 1)
+        layout.setStretch(0, 1)
         self._path: Path | None = None
-        self._frame_path: Path | None = None
-        self._decoded_frame_path: Path | None = None
+        self._sample_paths: dict[str, Path | None] = {"original": None, "upscaled": None}
+        self._decoded_sample_paths: dict[str, Path | None] = {"original": None, "upscaled": None}
         self._mode = "empty"
         self._duration_ms = 0
         self._playback_requested = False
         self._pending_last_frame_position: int | None = None
         self._pending_first_frame = False
         self._hold_last_frame = False
-        self._frame_generation = 0
+        self._frame_generations: dict[str, int] = {"original": 0, "upscaled": 0}
         self._frame_loader_thread = QThread(self)
-        self._frame_loader = UpscaledFrameLoader()
+        self._frame_loader = SampledFrameLoader()
         self._frame_loader.moveToThread(self._frame_loader_thread)
         self.frame_load_requested.connect(self._frame_loader.load, Qt.ConnectionType.QueuedConnection)
         self._frame_loader.frame_loaded.connect(self._frame_loaded)
@@ -798,9 +820,7 @@ class QueuePreviewPane(QGroupBox):
         self._frame_loader_thread.start()
         self.player.setLoops(QMediaPlayer.Loops.Infinite)
         self._set_controls_enabled(False)
-        self.progress_slider.setVisible(False)
-        self.time_label.setVisible(False)
-        self.controls.setVisible(False)
+        self.tabs.currentChanged.connect(self._tab_changed)
         self.play_pause_button.clicked.connect(self._toggle_playback)
         self.first_frame_button.clicked.connect(self.go_to_first_frame)
         self.last_frame_button.clicked.connect(self.go_to_last_frame)
@@ -823,32 +843,23 @@ class QueuePreviewPane(QGroupBox):
         if path == self._path and self._mode == "video":
             self._request_playback(True)
             return
-        self._frame_generation += 1
+        self._clear_sample_frames()
         self._mode = "video"
         self._hold_last_frame = False
         self._hide_last_frame_wait()
-        self._frame_path = None
-        self._decoded_frame_path = None
-        self.media.setCurrentWidget(self.video)
-        self.progress_slider.setVisible(True)
-        self.time_label.setVisible(True)
-        self.controls.setVisible(True)
+        self._set_final_controls_visible(True)
+        self.tabs.setCurrentWidget(self.final_video_tab)
         self._request_playback(False)
         self.player.stop()
         self._reset_progress()
         self._path = path
-        self.status_label.clear()
-        self.status_label.setVisible(False)
         self.player.setSource(QUrl.fromLocalFile(str(path)))
         self._set_controls_enabled(True)
         self._request_playback(True)
 
-    def show_upscaled_frame(self, path: Path, frame_number: int) -> None:
-        """Display one sampled live upscale frame without affecting the job."""
+    def show_sampled_frames(self, original_path: Path | None, upscaled_path: Path | None) -> None:
+        """Store the latest paired live samples and refresh the selected frame tab."""
 
-        if frame_number <= 0:
-            self.clear("Waiting for the first sampled upscaled frame.")
-            return
         if self._mode != "frame":
             self._request_playback(False)
             self.player.stop()
@@ -857,25 +868,14 @@ class QueuePreviewPane(QGroupBox):
         self._mode = "frame"
         self._hold_last_frame = False
         self._path = None
-        self.media.setCurrentWidget(self.frame_preview)
-        self.progress_slider.setVisible(False)
-        self.time_label.setVisible(False)
-        self.controls.setVisible(False)
+        self._set_final_controls_visible(False)
         self._set_controls_enabled(False)
-        self.status_label.setText(f"Live upscaled frame {frame_number} (updates every 16 frames).")
-        self.status_label.setVisible(True)
-        if path == self._frame_path:
-            if self._decoded_frame_path != path:
-                self._frame_generation += 1
-                self._request_frame_load()
-            return
-        self._frame_path = path
-        self._decoded_frame_path = None
-        self._frame_generation += 1
-        self._request_frame_load()
+        self._set_sample_path("original", original_path)
+        self._set_sample_path("upscaled", upscaled_path)
+        self._refresh_active_frame()
 
-    def clear(self, message: str) -> None:
-        """Clear published-output playback and explain the empty state."""
+    def clear(self, _message: str) -> None:
+        """Clear published-output playback without reserving panel text space."""
 
         self._request_playback(False)
         self._hide_last_frame_wait()
@@ -883,18 +883,11 @@ class QueuePreviewPane(QGroupBox):
         self.player.stop()
         self.player.setSource(QUrl())
         self._path = None
-        self._frame_path = None
-        self._decoded_frame_path = None
-        self._frame_generation += 1
+        self._clear_sample_frames()
         self._mode = "empty"
         self._reset_progress()
         self._set_controls_enabled(False)
-        self.media.setCurrentWidget(self.video)
-        self.progress_slider.setVisible(False)
-        self.time_label.setVisible(False)
-        self.controls.setVisible(False)
-        self.status_label.setText(message)
-        self.status_label.setVisible(True)
+        self._set_final_controls_visible(False)
 
     def set_audio_preferences(self, muted: bool, volume: int) -> None:
         """Mirror the existing non-safety preview audio preferences."""
@@ -903,10 +896,17 @@ class QueuePreviewPane(QGroupBox):
         self.audio.setVolume(max(0, min(100, volume)) / 100)
 
     @property
-    def showing_live_frame(self) -> bool:
-        """Return whether this surface still presents a sampled upscale frame."""
+    def has_live_samples(self) -> bool:
+        """Return whether this surface retains either sampled running-job frame."""
 
-        return getattr(self, "_mode", "") == "frame" and getattr(self, "_frame_path", None) is not None
+        return self._mode == "frame" and any(self._sample_paths.values())
+
+    def _set_final_controls_visible(self, visible: bool) -> None:
+        """Keep video controls absent while Final Video has no completed media."""
+
+        self.progress_slider.setVisible(visible)
+        self.time_label.setVisible(visible)
+        self.controls.setVisible(visible)
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         for button in (self.play_pause_button, self.first_frame_button, self.last_frame_button):
@@ -996,7 +996,7 @@ class QueuePreviewPane(QGroupBox):
         """Center a native-surface-safe loading hint over Queue Preview."""
 
         self.last_frame_wait.adjustSize()
-        center = self.media.mapToGlobal(self.media.rect().center())
+        center = self.video.mapToGlobal(self.video.rect().center())
         self.last_frame_wait.move(center - self.last_frame_wait.rect().center())
         self.last_frame_wait.show()
         self.last_frame_wait.raise_()
@@ -1008,29 +1008,78 @@ class QueuePreviewPane(QGroupBox):
         self._pending_first_frame = False
         self.last_frame_wait.hide()
 
-    def _request_frame_load(self) -> None:
-        """Queue a decode scaled to the current presentation canvas."""
+    def _set_sample_path(self, kind: str, path: Path | None) -> None:
+        """Replace one measured frame identity and invalidate stale decoded data."""
 
-        if self._frame_path is None:
+        if path == self._sample_paths[kind]:
             return
-        self.frame_load_requested.emit(self._frame_path, self._frame_generation, self.frame_preview.size())
+        self._sample_paths[kind] = path
+        self._decoded_sample_paths[kind] = None
+        self._frame_generations[kind] += 1
+        if path is None:
+            self._frame_label_for(kind).clear()
 
-    @Slot(object, int)
-    def _frame_loaded(self, image: object, generation: int) -> None:
-        """Present only the latest successfully decoded asynchronous frame."""
+    def _clear_sample_frames(self) -> None:
+        """Discard all temporary-frame identities and visible pixmaps."""
 
-        if generation != self._frame_generation or self._mode != "frame" or not isinstance(image, QImage) or image.isNull():
+        for kind in ("original", "upscaled"):
+            self._sample_paths[kind] = None
+            self._decoded_sample_paths[kind] = None
+            self._frame_generations[kind] += 1
+            self._frame_label_for(kind).clear()
+
+    def _frame_label_for(self, kind: str) -> QLabel:
+        """Return the tab-local display surface for one approved sample kind."""
+
+        return self.original_frame_preview if kind == "original" else self.upscaled_frame_preview
+
+    def _active_frame_kind(self) -> str | None:
+        """Return the selected live-frame tab, if any."""
+
+        return ("original", "upscaled", None)[self.tabs.currentIndex()]
+
+    @Slot(int)
+    def _tab_changed(self, _index: int) -> None:
+        """Load the latest retained frame only for the user-selected tab."""
+
+        self._refresh_active_frame()
+
+    def _refresh_active_frame(self) -> None:
+        """Queue a decode for the active Original or Upscaled tab."""
+
+        if self._mode != "frame":
             return
-        self.frame_preview.setPixmap(QPixmap.fromImage(image))
-        self._decoded_frame_path = self._frame_path
+        kind = self._active_frame_kind()
+        if kind is not None:
+            self._request_frame_load(kind)
+
+    def _request_frame_load(self, kind: str) -> None:
+        """Queue one active-tab decode scaled to the visible frame canvas."""
+
+        path = self._sample_paths[kind]
+        if path is None:
+            return
+        self._frame_generations[kind] += 1
+        self.frame_load_requested.emit(path, kind, self._frame_generations[kind], self._frame_label_for(kind).size())
+
+    @Slot(object, str, int)
+    def _frame_loaded(self, image: object, kind: str, generation: int) -> None:
+        """Present only the latest successfully decoded active-tab frame."""
+
+        if kind not in self._sample_paths or generation != self._frame_generations[kind] or self._mode != "frame" or not isinstance(image, QImage) or image.isNull():
+            return
+        self._frame_label_for(kind).setPixmap(QPixmap.fromImage(image))
+        self._decoded_sample_paths[kind] = self._sample_paths[kind]
 
     def resizeEvent(self, event: object) -> None:  # pylint: disable=invalid-name
         """Reload the visible sampled frame at the new presentation size."""
 
         super().resizeEvent(event)  # type: ignore[arg-type]
-        if self.showing_live_frame:
-            self._frame_generation += 1
-            self._request_frame_load()
+        if self.has_live_samples:
+            kind = self._active_frame_kind()
+            if kind is not None:
+                self._frame_generations[kind] += 1
+                self._request_frame_load(kind)
         if self._pending_last_frame_position is not None:
             self._show_last_frame_wait()
 
@@ -1057,8 +1106,6 @@ class QueuePreviewPane(QGroupBox):
     def _preview_error(self, _error: QMediaPlayer.Error, _error_string: str) -> None:
         self._hide_last_frame_wait()
         self._request_playback(False)
-        self.status_label.setText("Final output preview unavailable.")
-        self.status_label.setVisible(True)
 
     def shutdown(self) -> None:
         """Stop playback and release native output-preview resources."""
@@ -1072,4 +1119,4 @@ class QueuePreviewPane(QGroupBox):
         self._frame_loader_thread.quit()
         self._frame_loader_thread.wait()
 
-    frame_load_requested = Signal(object, int, QSize)
+    frame_load_requested = Signal(object, str, int, QSize)

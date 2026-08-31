@@ -91,6 +91,6 @@ invariants must remain unchanged.
 
 ## Remaining work
 
-- Phase 5 GUI Enhancement Including Fullscreen Preview is in verification;
-  Phase 6 remains provisional and requires separate approval before release
+- Phase 5 GUI Enhancement Including Fullscreen Preview is complete; Phase 7
+  remains provisional and requires separate approval before release
   stabilization or artifact work begins.

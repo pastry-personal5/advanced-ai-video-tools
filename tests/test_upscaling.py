@@ -103,13 +103,17 @@ def test_upscale_live_preview_uses_the_latest_sixteen_frame_sample(tmp_path: Pat
 
     directory = tmp_path / "upscaled"
     directory.mkdir()
+    initial_sample = directory / "frame-000000001.png"
     first_sample = directory / "frame-000000016.png"
     latest_sample = directory / "frame-000000032.png"
+    initial_sample.write_bytes(_png_header(128, 72))
     first_sample.write_bytes(_png_header(128, 72))
     latest_sample.write_bytes(_png_header(128, 72))
 
     assert LIVE_PREVIEW_FRAME_INTERVAL == 16
-    assert UpscalingExecutor._sampled_preview_frame(directory, 15) is None  # pylint: disable=protected-access
+    assert UpscalingExecutor._sampled_preview_frame(directory, 0) is None  # pylint: disable=protected-access
+    assert UpscalingExecutor._sampled_preview_frame(directory, 1) == initial_sample  # pylint: disable=protected-access
+    assert UpscalingExecutor._sampled_preview_frame(directory, 15) == initial_sample  # pylint: disable=protected-access
     assert UpscalingExecutor._sampled_preview_frame(directory, 16) == first_sample  # pylint: disable=protected-access
     assert UpscalingExecutor._sampled_preview_frame(directory, 31) == first_sample  # pylint: disable=protected-access
     assert UpscalingExecutor._sampled_preview_frame(directory, 32) == latest_sample  # pylint: disable=protected-access

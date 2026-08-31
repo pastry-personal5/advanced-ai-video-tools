@@ -2,7 +2,7 @@
 
 ## Status
 
-Verification. Phase 5 adds fullscreen presentation for the existing selected-source
+Complete. Phase 5 adds fullscreen presentation for the existing selected-source
 preview. It is a GUI-only feature and does not change processing, preflight, or
 the typed job request.
 
@@ -65,10 +65,12 @@ the first `Esc` closes help and leaves fullscreen preview open.
   selected job's multipurpose Queue Preview.
 - The source-clip list is narrower than before so the source preview receives a
   larger share of the application width and near-full application height.
-- During a selected running job's `UPSCALE` stage, Queue Preview asynchronously
-  decodes and displays the latest completed local upscaled PNG at frames 16,
-  32, and every later multiple of 16. It retains that last image through later
-  running stages and never polls, blocks, or affects the worker.
+- Queue Preview provides **Original**, **Upscaled**, and **Final Video** tabs.
+  During a selected running job's `UPSCALE` stage, Original and Upscaled
+  asynchronously decode their matched first local PNG as soon as it is ready,
+  then the matched latest completed local PNG at frames 16, 32, and every later
+  multiple of 16. Final Video remains empty while the job runs; the
+  presentation never polls, blocks, or affects the worker.
 - On selected-job completion, Queue Preview switches to the published local
   final video, starts playback automatically, and loops indefinitely. It
   exposes play/pause, first frame, last frame, and a progress/seeking bar; it
@@ -78,8 +80,8 @@ the first `Esc` closes help and leaves fullscreen preview open.
   last frame…` hint until the native player reports that requested seek
   position; errors, source changes, and shutdown dismiss the hint.
 - Queued, validating, cancelling, failed, cancelled, and missing-output
-  selections display an explanatory empty state. Queue Preview never alters
-  processing intent or treats a partial encoded video as playable media.
+  selections leave Queue Preview visually empty. It never alters processing
+  intent or treats a partial encoded video as playable media.
 
 ## Approved boundaries and invariants
 
@@ -96,10 +98,11 @@ the first `Esc` closes help and leaves fullscreen preview open.
 - Fullscreen exposes no clickable playback, seeking, navigation, help, or close controls; keyboard shortcuts are the only fullscreen interaction path.
 - Fullscreen cleanup must release dialog/widget ownership cleanly and must not create a second live player or orphan a native video output.
 - The implementation remains within the supported macOS/PySide6 GUI target and does not add platform-specific unvalidated behavior.
-- Queue Preview loads only the selected job's measured sixteen-frame upscale
-  samples while it is running, or its local published path after completion. It
-  owns its own image loader and player and remains independent of pipeline
-  execution, preflight, and queue intent.
+- Queue Preview loads only the selected job's matched ready first
+  Original/Upscaled samples, then measured sixteen-frame samples while it is
+  running, or its local published path after completion. It owns its own image
+  loader and player and remains independent of pipeline execution, preflight,
+  and queue intent.
 
 ## Work breakdown
 
@@ -138,7 +141,7 @@ the first `Esc` closes help and leaves fullscreen preview open.
 - [x] Update README user guidance with the fullscreen control and keyboard shortcuts.
 - [x] Add the completed feature to `CHANGELOG.md` under `Unreleased`.
 - [x] Run focused GUI tests and `make check`.
-- [ ] Complete a supported macOS manual check for fullscreen presentation, keyboard handling, help, focus, display restoration, and shutdown cleanup.
+- [x] Complete a supported macOS manual check for fullscreen presentation, keyboard handling, help, focus, display restoration, and shutdown cleanup.
 - [x] Record implementation evidence, exact checks, manual limitations, and remaining risks below.
 
 ## Acceptance criteria
@@ -147,9 +150,12 @@ the first `Esc` closes help and leaves fullscreen preview open.
 - A user can select any source row and start that clip directly in fullscreen using the row action at the right.
 - Job Creation shows a tall far-right selected-source preview and the narrower
   shared message panel stays the same size after switching views.
-- Queue Monitoring shows a tall far-right Queue Preview: it displays the
-  selected running job's latest sampled upscaled frame every 16 frames, then
-  automatically loops that selected completed job's published final video.
+- Queue Monitoring shows a tall far-right Queue Preview with **Original**,
+  **Upscaled**, and **Final Video** tabs. During `UPSCALE`, the first two tabs
+  display the selected running job's matched ready first frame, then later
+  sampled frames every 16 frames; Final Video remains empty. Once completed,
+  Final Video is selected and automatically loops that job's published final
+  video.
 - The completed-video mode offers play/pause, first frame, last frame, and a
   progress/seeking bar without changing the job or output.
 - A delayed completed-video First Frame or Last Frame seek visibly reports its
@@ -172,8 +178,9 @@ the first `Esc` closes help and leaves fullscreen preview open.
 ## Out of scope
 
 - Previewing queued-job media, merged intermediates, partial encoded outputs,
-  or simulated processed output. The approved live 16-frame upscaled PNG sample
-  is the sole workspace-media exception.
+  or simulated processed output. The approved paired live initial and
+  16-frame original/upscaled PNG samples are the sole workspace-media
+  exception.
 - Trim points, timeline editing, filters, frame export, concat-boundary editing, and loop controls.
 - New media codecs, rotation handling, color handling, HDR handling, or processing-pipeline changes.
 - FFmpeg-generated preview proxies or Real-ESRGAN execution.
@@ -191,10 +198,11 @@ the first `Esc` closes help and leaves fullscreen preview open.
 - Reworked the main layout around a shared left-side content/message splitter
   and a near-full-height far-right preview stack; narrowed the source-clip list
   and kept the message widget's geometry stable between views.
-- Evolved the Queue Monitoring player into a multipurpose Queue Preview that
-  decodes only measured local upscaled PNG samples at 16-frame intervals for
-  the selected running job, then automatically loops its published local final
-  video after completion.
+- Evolved the Queue Monitoring player into a multipurpose Queue Preview with
+  Original, Upscaled, and Final Video tabs. It decodes matched measured local
+  original/upscaled PNG samples immediately for ready frame 1 and at 16-frame
+  intervals afterward for the selected running job, leaves Final Video empty
+  until completion, then automatically loops its published local final video.
 - Removed all fullscreen buttons, timeline controls, and auto-hiding control
   chrome; the existing keyboard registry and help dialog are now the only
   fullscreen interaction surfaces.
@@ -203,13 +211,17 @@ the first `Esc` closes help and leaves fullscreen preview open.
 - Consolidated keyboard handling into one immutable binding registry and one dialog-scoped dispatcher; help is generated from the registry, key releases are consumed once, and rapid playback toggles use synchronous requested state.
 - Preserved presentation-only behavior, ordered input intent, player error handling, processing pause, and shutdown cleanup.
 - Focused validation: `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache uv run pytest tests/test_gui.py -q` — 37 passed.
-- Full validation: `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache make check` — 253 passed, 2 native-only tests skipped; Black, Pylint, and pycodestyle passed.
+- Full validation: `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache make check` — 258 passed, 2 native-only tests skipped; Black, Pylint, and pycodestyle passed.
 - Fullscreen row-icon refinement validation: `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache uv run pytest tests/test_gui_submission.py::test_source_row_fullscreen_action_matches_adjacent_icons -q` — 1 passed; `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache make check` — 254 passed, 2 native-only tests skipped; Black, Pylint, and pycodestyle passed.
 - Tall preview-column and final-output-preview validation: `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache uv run pytest tests/test_gui.py -q` — 39 passed; `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache uv run pytest tests/test_gui_submission.py -q` — 19 passed; `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache make check` — 256 passed, 2 native-only tests skipped; Black, Pylint, and pycodestyle passed. Offscreen editor and queue render captures were also inspected at 1400 × 880.
-- Live-upscale-frame and looping-final-video validation: `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache uv run pytest tests/test_models.py tests/test_upscaling.py tests/test_gui.py -q` — 52 passed; `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache make check` — 258 passed, 2 native-only tests skipped; Black, Pylint, and pycodestyle passed.
+- Three-tab queue-preview validation: `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache uv run pytest tests/test_models.py tests/test_upscaling.py tests/test_gui.py -q` — 52 passed; `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache make check` — 258 passed, 2 native-only tests skipped; Black, Pylint, and pycodestyle passed.
 - Last-frame wait-feedback validation: `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache uv run pytest tests/test_gui.py -q` — 39 passed.
 - Source-row fullscreen activation validation: the focused fullscreen test uses
   a real mouse click on a shown row action. A native Cocoa reproduction exposed
   and verified the initialization-order fix: `dialog=True`, `visible=True`,
   `fullscreen=True`, and the active window was `fullscreenPreviewDialog`.
-- Native fullscreen presentation, keyboard focus, display restoration, and shutdown inspection remain the one pending manual check on the supported macOS target; this environment cannot perform native screen inspection.
+- Supported-macOS manual acceptance was reported as passed on 2026-08-31:
+  fullscreen opened from both entry points; every documented keyboard shortcut,
+  help-overlay stacking, keyboard focus, display restoration, fullscreen exit,
+  and application shutdown behaved correctly. No visual, focus, or playback
+  issue was reported.

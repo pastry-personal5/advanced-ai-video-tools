@@ -27,15 +27,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Routed terminal Ctrl+C through the GUI's normal close lifecycle, cancelling
+  queued and active work cooperatively and joining the queue worker before exit.
+- Matched the Active, Up Next, and History queue regions to Queue Preview's
+  rounded panel surfaces, borders, title typography, and spacing treatment.
+- Refined queue table headers (`Status`, `Job Name`, and `Remove`) with flat
+  square edges, clean section separators, and a consistent focused border.
 - Reworked Job Creation and Queue Monitoring around a near-full-height
   far-right preview column and a narrower shared left-side message panel.
 - Added Queue Monitoring playback preview for the selected completed job's
   published local output, with play/pause, first/last-frame, and timeline
   controls; nonterminal, missing, and partial outputs remain unavailable.
 - Evolved Queue Monitoring's preview into a multipurpose Queue Preview: it
-  asynchronously shows the selected running job's latest upscaled PNG sample
-  at each 16-frame interval, then automatically loops the published final
-  video when that job completes.
+  now offers Original, Upscaled, and Final Video tabs; it asynchronously shows
+  matched original and upscaled PNG samples as soon as frame 1 is ready and at
+  each later 16-frame interval while a job runs, keeps Final Video empty until
+  completion, then autoplays the published final video.
+- Began the Phase 6 Queue Monitoring information-architecture update with
+  presentation-only Active, Up Next, and History regions over the existing
+  queue model; the far-right three-tab preview and bottom message area remain
+  unchanged.
 - Added a centered, native-video-safe loading hint while Queue Preview seeks a
   completed final video to its first or last frame.
 - Fixed source-row fullscreen actions on native macOS by constructing the help

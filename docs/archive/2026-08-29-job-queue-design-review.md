@@ -1,5 +1,8 @@
 # Job Queue Job-List Design Review
 
+> Archived 2026-08-31. This is historical proposal material; current decisions
+> and implementation status are maintained in `docs/v2` and `docs/ARCHITECTURE.md`.
+
 ## Review status
 
 - Review type: Information architecture, visual design, and interaction design
@@ -9,15 +12,15 @@
 
 ## Evidence reviewed
 
-- [`gui/window.py`](../src/advanced_ai_video_tools/gui/window.py): monitoring
+- [`gui/window.py`](../../src/advanced_ai_video_tools/gui/window.py): monitoring
   layout, table configuration, selection, actions, and selected-job details
-- [`gui/jobs.py`](../src/advanced_ai_video_tools/gui/jobs.py): immutable queue
+- [`gui/jobs.py`](../../src/advanced_ai_video_tools/gui/jobs.py): immutable queue
   snapshots, table columns, accessibility text, and terminal-row actions
-- [`tests/test_gui.py`](../tests/test_gui.py): queue rendering, selection,
+- [`tests/test_gui.py`](../../tests/test_gui.py): queue rendering, selection,
   progress, cancellation, removal, and navigation coverage
-- [Phase 1 GUI audit](v2/1-enhance-gui-audit.md): approved Queue Monitoring
+- [Phase 1 GUI audit](../v2/1-enhance-gui-audit.md): approved Queue Monitoring
   wireframe and state behavior
-- [Phase 1 presentation architecture](v2/1-enhance-gui-presentation-architecture.md):
+- [Phase 1 presentation architecture](../v2/1-enhance-gui-presentation-architecture.md):
   Qt ownership, snapshot, focus, and accessibility boundaries
 
 ## Current experience

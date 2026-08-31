@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Protocol
 
 from loguru import logger
-from PySide6.QtCore import QAbstractTableModel, QByteArray, QModelIndex, QObject, Qt, QThread, Signal, Slot
+from PySide6.QtCore import QAbstractTableModel, QByteArray, QModelIndex, QObject, QSortFilterProxyModel, Qt, QThread, Signal, Slot
 
 from advanced_ai_video_tools.core.models import JobState
 from advanced_ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot
@@ -48,6 +48,36 @@ class JobRole(IntEnum):
 
 
 _TERMINAL_STATES = frozenset({JobState.CANCELLED, JobState.FAILED, JobState.COMPLETED})
+
+
+class QueueRegionProxyModel(QSortFilterProxyModel):
+    """Filter the authoritative queue model into one presentation region."""
+
+    _ACTIVE_STATES = frozenset({JobState.VALIDATING, JobState.RUNNING, JobState.CANCELLING})
+
+    def __init__(self, region: str, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._region = region
+        self.setDynamicSortFilter(True)
+
+    def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:  # pylint: disable=invalid-name
+        """Return whether one source snapshot belongs to this region."""
+
+        source = self.sourceModel()
+        if source is None:
+            return False
+        state = source.data(source.index(source_row, 0, source_parent), int(JobRole.STATE))
+        try:
+            state_value = JobState(str(state))
+        except ValueError:
+            return False
+        if self._region == "active":
+            return state_value in self._ACTIVE_STATES
+        if self._region == "up_next":
+            return state_value is JobState.QUEUED
+        if self._region == "history":
+            return state_value in _TERMINAL_STATES
+        return False
 
 
 class QueueSnapshotBridge(QObject):
