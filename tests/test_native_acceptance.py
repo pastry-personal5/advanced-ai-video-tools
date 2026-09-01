@@ -15,15 +15,17 @@ import platform
 import statistics
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from PySide6.QtCore import QCoreApplication  # pylint: disable=no-name-in-module
+from PySide6.QtCore import QCoreApplication, Qt  # pylint: disable=no-name-in-module
 from PySide6.QtCore import qVersion  # pylint: disable=no-name-in-module
 from PySide6.QtGui import QImage  # pylint: disable=no-name-in-module
 from PySide6.QtWidgets import QApplication  # pylint: disable=no-name-in-module
 
+from advanced_ai_video_tools.core.models import JobRequest, JobState
 from advanced_ai_video_tools.gui.jobs import JobListModel, JobQueueView, QueueSnapshotBridge
 from advanced_ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot
 from advanced_ai_video_tools.gui.theme import apply_dark_theme
@@ -56,6 +58,28 @@ class _EmptyQueue:
         del timeout
 
 
+class _PopulatedQueue(_EmptyQueue):
+    """Representative queue records for native Queue Monitoring checks."""
+
+    def __init__(self, root: Path) -> None:
+        created = datetime(2026, 9, 1, tzinfo=timezone.utc)
+
+        def snapshot(job_id: str, state: JobState, position: int | None) -> QueueJobSnapshot:
+            request = JobRequest((root / f"{job_id}-source-with-a-long-name.mov",), root, explicit_output_path=root / f"{job_id}.mp4", created_at=created)
+            return QueueJobSnapshot(job_id, request, state, position, None, 1)
+
+        self._records = (
+            snapshot("active", JobState.RUNNING, None),
+            snapshot("queued", JobState.QUEUED, 0),
+            snapshot("history", JobState.FAILED, None),
+        )
+
+    def snapshots(self) -> tuple[QueueJobSnapshot, ...]:
+        """Return active, pending, and terminal records."""
+
+        return self._records
+
+
 def _require_native_metal() -> None:
     """Skip unless the caller explicitly requested a capable native desktop."""
 
@@ -81,11 +105,10 @@ def native_qt_app() -> QApplication:
     return application
 
 
-def _visible_window(application: QApplication) -> tuple[MainWindow, float]:
+def _visible_window(application: QApplication, queue: JobQueueView | None = None) -> tuple[MainWindow, float]:
     """Show an empty shell and return after its native surface is exposed."""
 
-    queue: JobQueueView = _EmptyQueue()
-    model = JobListModel(queue, QueueSnapshotBridge())
+    model = JobListModel(queue or _EmptyQueue(), QueueSnapshotBridge())
     window = MainWindow(model, ApplicationSettings())
     window.setGeometry(40, 40, 1400, 880)
     started = time.monotonic()
@@ -150,6 +173,36 @@ def test_screencapture_contains_visible_native_window(native_qt_app: QApplicatio
         assert not image.isNull()
         dark_surface_found = any(image.pixelColor(x, y).name().lower() == "#202124" for y in range(0, image.height(), 20) for x in range(0, image.width(), 20))
         assert dark_surface_found, "the screen capture did not contain the visible Advanced AI Video Tools dark surface"
+    finally:
+        window.close()
+        native_qt_app.processEvents()
+
+
+@pytest.mark.gui_capture
+def test_populated_queue_monitoring_native_layout(native_qt_app: QApplication, tmp_path: Path) -> None:
+    """Capture and verify the populated Active, Up Next, and History workspace."""
+
+    window, _elapsed = _visible_window(native_qt_app, _PopulatedQueue(tmp_path))
+    try:
+        window.queue_monitoring_button.click()
+        native_qt_app.processEvents()
+        assert all(window.region_proxies[region].rowCount() == 1 for region in ("active", "up_next", "history"))
+        assert all(view.horizontalHeader().sectionResizeMode(0).name == "Fixed" for view in window.region_views.values())
+        assert all(view.horizontalHeader().sectionResizeMode(1).name == "Fixed" for view in window.region_views.values())
+        assert all(view.horizontalHeader().sectionResizeMode(2).name == "Fixed" for view in window.region_views.values())
+        assert all(view.horizontalHeader().defaultAlignment() == Qt.AlignmentFlag.AlignCenter for view in window.region_views.values())
+        image_path = tmp_path / "advanced-ai-video-tools-queue-monitoring.png"
+        frame = window.frameGeometry()
+        result = subprocess.run(
+            ["/usr/sbin/screencapture", "-x", "-R", f"{frame.x()},{frame.y()},{frame.width()},{frame.height()}", str(image_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15.0,
+            shell=False,
+        )
+        assert result.returncode == 0, result.stderr.strip() or result.stdout.strip() or "screencapture failed"
+        assert image_path.is_file() and image_path.stat().st_size > 1024
     finally:
         window.close()
         native_qt_app.processEvents()

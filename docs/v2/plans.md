@@ -4,7 +4,7 @@
 
 - Development target: v2
 - Released baseline: v1.0.0
-- Current phase: [Phase 6 — Information Architecture Update and GUI Enhancement](6-information-architecture-gui.md) (in progress)
+- Current phase: Phase 7 — Stabilization and release (proposed)
 - Last updated: 2026-08-31
 
 ## Purpose
@@ -36,11 +36,10 @@ preview enhancement, and a final stabilization/release pass.
 | 3 | Stabilization | Complete | Stabilize performance, resource usage, lifecycle behavior, and exception/error handling before structural refactoring |
 | 4 | Refactoring | Complete | Improve code readability and maintainability without weakening approved behavior |
 | 5 | [GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md) | Complete | Complete the GUI enhancement with immersive fullscreen selected-source preview, keyboard playback, and clip-navigation controls |
-| 6 | [Information Architecture Update and GUI Enhancement](6-information-architecture-gui.md) | In progress | Adopt a three-region Queue Monitoring workspace and improve task hierarchy without changing queue or media behavior |
+| 6 | [Information Architecture Update and GUI Enhancement](6-information-architecture-gui.md) | Complete | Adopt a three-region Queue Monitoring workspace and improve task hierarchy without changing queue or media behavior |
 | 7 | Stabilization and release | Proposed | Re-verify behavior after the fullscreen-preview feature and produce the v2 release artifacts |
 
-Phases 1 through 5 are complete. Phase 6 is in progress; Phase 7
-remains proposed.
+Phases 1 through 6 are complete. Phase 7 remains proposed.
 
 ## Cross-phase decisions
 
@@ -155,3 +154,4 @@ A phase is complete only when:
 | 2026-08-31 | Use the archived 2026-08-29 job-queue design review as the Phase 6 planning baseline: adapt its Active, Up Next, and History workspace to the current far-right Queue Preview and shared message splitter, pending review-gate approval. |
 | 2026-08-31 | Preserve the far-right three-tab Queue Preview and the bottom integrated Global Messages/Job Messages area as fixed Phase 6 Queue Monitoring layout boundaries. Approve the Active/Up Next/History workspace, session-visible completed history, scrollable History at 1400 × 880, text-only status, and inline selected-job details. |
 | 2026-08-31 | Begin Phase 6 implementation with presentation-only Active, Up Next, and History proxy views over the existing queue model; preserve canonical selection, far-right Queue Preview, and bottom integrated messages. |
+| 2026-09-01 | Complete Phase 6 after inline queue actions, fixed responsive columns, keyboard selection/navigation, optical header alignment, regression coverage, and populated native Queue Monitoring capture acceptance. |

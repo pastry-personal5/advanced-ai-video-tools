@@ -30,7 +30,7 @@ from advanced_ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapsho
 from advanced_ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.preview import FULLSCREEN_HELP_MARGIN, FULLSCREEN_SHORTCUTS, PREVIEW_PANE_MINIMUM_WIDTH, SHORTCUT_HELP, VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, FullscreenCommand, QueuePreviewPane, SourcePreviewPane, resolve_fullscreen_shortcut  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, SPACE_3, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
-from advanced_ai_video_tools.gui.window import MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.window import JOB_NAME_COLUMN_WIDTH, MainWindow  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.services.pipeline import PipelineCancelled  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
@@ -231,7 +231,7 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (1, 1, 1, 1)
     assert not window.queue_table.verticalHeader().isVisible()
     assert not window.queue_table.showGrid()
-    assert window.queue_table.horizontalHeader().sectionResizeMode(1).name == "Stretch"
+    assert window.queue_table.horizontalHeader().sectionResizeMode(1).name == "Fixed"
     assert window.queue_table.horizontalHeader().sectionResizeMode(2).name == "Fixed"
     assert window.move_job_up_button.font().pointSize() == 9
     assert window.move_job_down_button.font().pointSize() == 9
@@ -257,8 +257,10 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     active_view = window.region_views["active"]
     assert active_view.isColumnHidden(2) is False
     assert active_view.horizontalHeader().sectionResizeMode(0).name == "Fixed"
+    assert active_view.horizontalHeader().sectionResizeMode(1).name == "Fixed"
     assert active_view.horizontalHeader().sectionResizeMode(2).name == "Fixed"
     assert active_view.horizontalHeader().defaultAlignment() == Qt.AlignmentFlag.AlignCenter
+    assert active_view.textElideMode().name == "ElideRight"
     assert active_view.model().data(active_view.model().index(0, 2), Qt.ItemDataRole.DisplayRole) == "Cancel"
     action_pixmap = QPixmap(64, 36)
     action_option = QStyleOptionViewItem()
@@ -282,7 +284,7 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     window.close()
 
 
-def test_queue_monitoring_groups_active_pending_and_history_regions(qt_app: QApplication, tmp_path: Path) -> None:
+def test_queue_monitoring_groups_active_pending_and_history_regions(qt_app: QApplication, tmp_path: Path) -> None:  # pylint: disable=too-many-statements
     """Visible queue regions share one model and preserve canonical selection."""
 
     active = _snapshot(tmp_path, "active", JobState.RUNNING, None, revision=1)
@@ -298,7 +300,9 @@ def test_queue_monitoring_groups_active_pending_and_history_regions(qt_app: QApp
     assert window.region_proxies["up_next"].rowCount() == 1
     assert window.region_proxies["history"].rowCount() == 1
     assert all(view.horizontalHeader().sectionResizeMode(0).name == "Fixed" for view in window.region_views.values())
+    assert all(view.horizontalHeader().sectionResizeMode(1).name == "Fixed" for view in window.region_views.values())
     assert all(view.horizontalHeader().sectionResizeMode(2).name == "Fixed" for view in window.region_views.values())
+    assert all(view.horizontalHeader().sectionSize(1) >= JOB_NAME_COLUMN_WIDTH for view in window.region_views.values())
     assert all(view.horizontalHeader().defaultAlignment() == Qt.AlignmentFlag.AlignCenter for view in window.region_views.values())
     assert window.findChild(QLabel, "queueHistoryEmpty") is None
     active_group = window.region_groups["active"]
@@ -322,6 +326,29 @@ def test_queue_monitoring_groups_active_pending_and_history_regions(qt_app: QApp
     assert model.data(window.queue_table.currentIndex(), int(JobRole.JOB_ID)) == "pending"
     assert window.job_name_value.text() == "pending.mov"
     assert window.region_views["history"].verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded
+
+    active_view = window.region_views["active"]
+    history_view = window.region_views["history"]
+    active_view.setFocus()
+    active_view.setCurrentIndex(window.region_proxies["active"].index(0, 0))
+    QTest.keyClick(active_view, Qt.Key.Key_Down)
+    qt_app.processEvents()
+    assert window.queue_table.currentIndex().data(int(JobRole.JOB_ID)) == "pending"
+    assert window.region_views["up_next"].hasFocus()
+    QTest.keyClick(window.region_views["up_next"], Qt.Key.Key_Down)
+    qt_app.processEvents()
+    assert window.queue_table.currentIndex().data(int(JobRole.JOB_ID)) == "failed"
+    assert history_view.hasFocus()
+    QTest.keyClick(history_view, Qt.Key.Key_Up)
+    qt_app.processEvents()
+    assert window.queue_table.currentIndex().data(int(JobRole.JOB_ID)) == "pending"
+
+    window.region_views["active"].setFocus()
+    window.region_views["active"].setCurrentIndex(window.region_proxies["active"].index(0, 0))
+    QTest.keyClick(window.region_views["active"], Qt.Key.Key_Return)
+    QTest.keyClick(window.region_views["active"], Qt.Key.Key_Space)
+    assert model.data(window.queue_table.currentIndex(), int(JobRole.JOB_ID)) == "active"
+    assert isinstance(model.data(window.queue_table.currentIndex(), int(JobRole.STATE)), str)
     window.close()
 
 

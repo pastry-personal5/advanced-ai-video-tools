@@ -47,6 +47,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   presentation-only Active, Up Next, and History regions over the existing
   queue model; the far-right three-tab preview and bottom message area remain
   unchanged.
+- Added inline Active cancellation and Up Next/History removal actions,
+  fixed-width Status and action columns, a minimum-width Job Name column, and
+  cross-region keyboard navigation that keeps Enter/Space selection-only.
+- Corrected native queue-header optical centering with symmetric padding,
+  explicit text alignment, and measured per-column visual offsets.
 - Added a centered, native-video-safe loading hint while Queue Preview seeks a
   completed final video to its first or last frame.
 - Fixed source-row fullscreen actions on native macOS by constructing the help

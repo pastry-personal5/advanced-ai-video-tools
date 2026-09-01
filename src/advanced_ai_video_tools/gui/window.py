@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import QModelIndex, QRect, QSignalBlocker, Qt, Slot
-from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtCore import QEvent, QModelIndex, QRect, QSignalBlocker, Qt, Slot
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QKeyEvent, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QAbstractItemView, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QSplitterHandle, QStackedWidget, QStyledItemDelegate, QStyle, QStyleOptionHeader, QStyleOptionViewItem, QTableView, QToolButton, QVBoxLayout, QWidget
 
 from advanced_ai_video_tools.core.models import JobState, PipelineStage, Toolchain
@@ -23,7 +23,7 @@ from advanced_ai_video_tools.gui.theme import CONTROL_RADIUS, MAJOR_REGION_GAP, 
 from advanced_ai_video_tools.gui.tool_settings import ToolSettingsDialog, ToolSettingsValidator
 from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
 
-JOB_NAME_COLUMN_WIDTH = 480
+JOB_NAME_COLUMN_WIDTH = 200
 QUEUE_STATUS_COLUMN_WIDTH = 96
 QUEUE_ACTION_COLUMN_WIDTH = 56
 QUEUE_HEADER_OPTICAL_OFFSETS = {0: -4, 2: 5}
@@ -72,11 +72,16 @@ class _QueueHeaderView(QHeaderView):
         """Restore the minimum name width after a table/window resize."""
 
         super().resizeEvent(event)
-        if self._enforcing_minimum or self.sectionSize(1) >= JOB_NAME_COLUMN_WIDTH:
+        if self._enforcing_minimum:
+            return
+        parent = self.parentWidget()
+        viewport_width = parent.viewport().width() if isinstance(parent, QTableView) else 0
+        desired_width = max(JOB_NAME_COLUMN_WIDTH, viewport_width - QUEUE_STATUS_COLUMN_WIDTH - QUEUE_ACTION_COLUMN_WIDTH)
+        if self.sectionSize(1) == desired_width:
             return
         self._enforcing_minimum = True
         try:
-            self.resizeSection(1, JOB_NAME_COLUMN_WIDTH)
+            self.resizeSection(1, desired_width)
         finally:
             self._enforcing_minimum = False
 
@@ -159,10 +164,11 @@ class MainWindow(QMainWindow):
         self.queue_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.queue_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.queue_table.setTextElideMode(Qt.TextElideMode.ElideRight)
         header = _QueueHeaderView(self.queue_table)
         self.queue_table.setHorizontalHeader(header)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(0, QUEUE_STATUS_COLUMN_WIDTH)
         header.resizeSection(1, JOB_NAME_COLUMN_WIDTH)
@@ -249,6 +255,8 @@ class MainWindow(QMainWindow):
             region_groups[region] = group
 
         self.region_groups = region_groups
+        self.setTabOrder(self.region_views["active"], self.region_views["up_next"])
+        self.setTabOrder(self.region_views["up_next"], self.region_views["history"])
 
         creation_page = QWidget()
         creation_layout = QVBoxLayout(creation_page)
@@ -340,6 +348,7 @@ class MainWindow(QMainWindow):
         self.queue_table.selectionModel().currentChanged.connect(self._selection_changed)
         self.queue_table.clicked.connect(self._handle_queue_cell_click)
         for region, view in self.region_views.items():
+            view.installEventFilter(self)
             view.selectionModel().currentChanged.connect(lambda current, previous, selected_view=view: self._region_selection_changed(selected_view, current, previous))
             view.clicked.connect(lambda index, selected_region=region: self._handle_region_cell_click(selected_region, index))
         model.dataChanged.connect(self._refresh_after_model_change)
@@ -390,11 +399,12 @@ class MainWindow(QMainWindow):
         view.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        view.setTextElideMode(Qt.TextElideMode.ElideRight)
         view.setAlternatingRowColors(True)
         header = _QueueHeaderView(view)
         view.setHorizontalHeader(header)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(0, QUEUE_STATUS_COLUMN_WIDTH)
         header.resizeSection(1, JOB_NAME_COLUMN_WIDTH)
@@ -596,6 +606,39 @@ class MainWindow(QMainWindow):
         source_index = proxy.mapToSource(current)
         if source_index.isValid():
             self.queue_table.setCurrentIndex(source_index)
+
+    def eventFilter(self, watched: object, event: object) -> bool:  # pylint: disable=invalid-name
+        """Keep keyboard navigation in the visible queue order."""
+
+        if not isinstance(watched, QTableView) or not isinstance(event, QKeyEvent) or event.type() != QEvent.Type.KeyPress:
+            return super().eventFilter(watched, event)
+        if event.modifiers() != Qt.KeyboardModifier.NoModifier:
+            return super().eventFilter(watched, event)
+        if event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space}:
+            if watched.currentIndex().isValid():
+                watched.setCurrentIndex(watched.currentIndex())
+            return True
+        if event.key() not in {Qt.Key.Key_Up, Qt.Key.Key_Down}:
+            return super().eventFilter(watched, event)
+        targets: list[tuple[QTableView, QModelIndex]] = []
+        for region in ("active", "up_next", "history"):
+            view = self.region_views[region]
+            proxy = self.region_proxies[region]
+            targets.extend((view, proxy.index(row, 0)) for row in range(proxy.rowCount()))
+        if not targets:
+            return True
+        current_id = self._model.data(self.queue_table.currentIndex(), int(JobRole.JOB_ID))
+        current_position = next((position for position, (_view, index) in enumerate(targets) if targets[position][1].data(int(JobRole.JOB_ID)) == current_id), None)
+        if current_position is None:
+            target_position = 0 if event.key() == Qt.Key.Key_Down else len(targets) - 1
+        else:
+            delta = -1 if event.key() == Qt.Key.Key_Up else 1
+            target_position = max(0, min(len(targets) - 1, current_position + delta))
+        target_view, target_index = targets[target_position]
+        target_view.setCurrentIndex(target_index)
+        target_view.setFocus(Qt.FocusReason.OtherFocusReason)
+        target_view.scrollTo(target_index, QAbstractItemView.ScrollHint.EnsureVisible)
+        return True
 
     def _sync_region_selection(self) -> None:
         """Reflect the canonical selection in whichever region owns it."""

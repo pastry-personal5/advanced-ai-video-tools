@@ -3,14 +3,14 @@
 ## Status
 
 - Phase: 6
-- State: In progress
+- State: Complete
 - Predecessor: [Phase 5 — GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md)
 - Successor: Phase 7 — Stabilization and Release
 - Planning input: [Archived 2026-08-29 job-queue design review](../archive/2026-08-29-job-queue-design-review.md)
 
-Phase 6 is approved and in progress. The first presentation-only grouping
-slice is implemented; remaining interaction and responsive slices are tracked
-below.
+Phase 6 is complete. Queue Monitoring grouping, inline actions, responsive
+column sizing, and keyboard-navigation slices are implemented;
+supported-macOS verification and phase-document synchronization remain.
 
 ## Objective
 
@@ -179,7 +179,7 @@ Queue Monitoring                                      Far-right Queue Preview
 
 ## Completion evidence
 
-### Queue region grouping slice — in progress
+### Queue Monitoring presentation and interaction slices — implemented
 
 - Added Active, Up Next, and History proxy views derived from the existing
   immutable `JobListModel`.
@@ -190,10 +190,28 @@ Queue Monitoring                                      Far-right Queue Preview
   visible region selections map back to the same source index.
 - Kept the far-right three-tab Queue Preview and bottom integrated messages
   unchanged.
-- Added focused GUI coverage for region counts, empty states, and selection
-  mapping.
+- Added inline Cancel/Remove icons, removed the bottom Cancel Job button, and
+  kept actions state-specific: active jobs cancel, queued jobs are removed via
+  queue cancellation, and terminal history rows are removable.
+- Kept Status and action columns fixed-width; made Job Name dynamically fill
+  available space while enforcing a readable minimum and explicit elision and
+  tooltip behavior.
+- Added cross-region Up/Down navigation in Active → Up Next → History order;
+  Enter and Space only select and never invoke row actions.
+- Centered header text through model alignment, symmetric stylesheet padding,
+  and measured optical offsets for the native font; native capture confirmed
+  visible text centers within 0.5 capture pixels of each cell center.
+- Added focused GUI coverage for region counts, empty states, selection mapping,
+  fixed column modes, long-name presentation, keyboard navigation, safe key
+  handling, and the native action delegate paint path.
 - Validation: `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache make check` —
-  260 passed, 2 native-only tests skipped; Black, Pylint, and pycodestyle passed.
+  261 passed, 2 native-only tests skipped; Black, Pylint, and pycodestyle passed.
 
-Remaining Active/Up Next/History action placement, focus, long-name, and
-responsive-layout slices remain before Phase 6 can be marked complete.
+### Phase 6 completion record
+
+- Populated Queue Monitoring native acceptance passed on the supported macOS
+  desktop, covering Active, Up Next, and History rows, fixed section modes,
+  centered headers, and native screen capture.
+- Validation: `QT_QPA_PLATFORM=cocoa ADVANCED_AI_VIDEO_TOOLS_RUN_NATIVE_ACCEPTANCE=1 uv run pytest -m gui_capture tests/test_native_acceptance.py -q` — 2 passed, 1 deselected.
+- README, architecture, changelog, and planning records are synchronized with
+  the implemented presentation and interaction behavior.

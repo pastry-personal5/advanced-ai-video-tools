@@ -28,7 +28,8 @@ and is not an active implementation target.
 > Ctrl-C cancellation. Typed persistent settings and bounded local diagnostics are
 > available for frontends. A typed single-worker FIFO now serializes queued jobs;
 > a native PySide6 shell now renders queue state, progress, output paths, errors,
-> reordering, and cancellation. The GUI now creates jobs through ordered clip
+> reordering, cancellation, Active/Up Next/History regions, inline queue
+> actions, and keyboard-safe selection. The GUI now creates jobs through ordered clip
 > selection, asynchronous preflight review, explicit stream-drop acknowledgement,
 > safe queue submission, and validated external-tool preference editing.
 
