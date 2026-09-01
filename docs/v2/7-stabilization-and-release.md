@@ -135,9 +135,10 @@ Developer ID signing, notarization, stapling, and quarantined Gatekeeper
 testing are deferred until Apple Developer Program enrollment is available.
 Keep signing credentials outside the repository and release artifacts.
 
-## Exit criteria
+## Completion criteria
 
-Phase 7 may be marked Complete only when:
+Phase 7 is complete because the following criteria were satisfied or explicitly
+deferred under the approved release scope:
 
 1. The full default suite and required native acceptance checks pass.
 2. No performance test invokes GPU upscaling or AI enhancement.

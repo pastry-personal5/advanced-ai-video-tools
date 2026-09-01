@@ -21,11 +21,12 @@ Black is canonical formatting. Use the repository `Makefile` for routine work:
 `make run`. Python commands in Make targets run through `uv run`; installation
 uses `uv sync`. The project uses Black width `9999`; line-length diagnostics are
 disabled in pycodestyle and Pylint. `make performance-test` and
-`make gui-capture-test` are opt-in native acceptance targets: the first gates
-three warm native-window presentation measurements on the supported Apple
-Silicon Metal capability, and the second proves a visible native window can be
-captured with `screencapture`. Neither belongs in `make check`; screen capture
-also requires the invoking terminal to have macOS Screen Recording permission.
+`make gui-capture-test` are opt-in native acceptance targets: the first measures
+15 warm native-window presentation samples after one initial and two discarded
+warmups on the supported Apple Silicon Metal capability, and the second proves
+a visible native window can be captured with `screencapture`. Neither belongs
+in `make check`; screen capture also requires the invoking terminal to have
+macOS Screen Recording permission.
 
 ## AI-assisted code review
 

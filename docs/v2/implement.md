@@ -89,8 +89,9 @@ Tests must remain independent of a GPU, network, large model files, and long vid
 - Planning checkboxes and documentation match the delivered state.
 - No unrelated user files or worktree changes were modified.
 
-## Current execution pointer
+## V2 completion record
 
-Proceed from the current phase in [plans.md](plans.md). Phases 1 through 6
-are complete. Phase 7 — Stabilization and release is in progress; its detailed
-scope is in [7-stabilization-and-release.md](7-stabilization-and-release.md).
+V2 Phases 1 through 7 are complete. Phase 7 verification and release
+limitations are recorded in [7-stabilization-and-release.md](7-stabilization-and-release.md).
+Current implementation work follows the approved v3 Phase 1 Refactoring plan
+in [../v3/1-refactoring.md](../v3/1-refactoring.md).

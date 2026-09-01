@@ -135,8 +135,9 @@ without a GPU or model download.
 Opt-in native acceptance tests provide two macOS-only checks outside `make
 check`. Both first require the supported Apple Silicon platform and affirmative
 Metal capability from the read-only `system_profiler` display report. The
-presentation benchmark records three warm `MainWindow` exposure samples against
-the proposed 3-second warm-start budget. The screen-capture check exposes the
+presentation benchmark records 15 `MainWindow` exposure samples after one
+initial and two discarded warmups against the 3-second p95 budget. The
+screen-capture check exposes the
 same dark window, invokes `screencapture`, and verifies that the captured image
 contains its surface; it requires Screen Recording permission for the invoking
 terminal. These are GUI presentation checks, not a substitute for a real
