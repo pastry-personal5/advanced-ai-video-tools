@@ -9,8 +9,8 @@
 - Planning input: [Archived 2026-08-29 job-queue design review](../archive/2026-08-29-job-queue-design-review.md)
 
 Phase 6 is complete. Queue Monitoring grouping, inline actions, responsive
-column sizing, and keyboard-navigation slices are implemented;
-supported-macOS verification and phase-document synchronization remain.
+column sizing, keyboard-navigation slices, supported-macOS verification, and
+phase-document synchronization are complete.
 
 ## Objective
 

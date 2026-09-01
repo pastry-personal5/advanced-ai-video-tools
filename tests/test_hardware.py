@@ -23,6 +23,9 @@ def test_metal_gate_accepts_apple_reported_metal_support() -> None:
     assert apple_silicon_metal_error(info=PlatformInfo("Darwin", "arm64", "26.5.2"), runner=lambda _arguments, _timeout: result) is None
     assert apple_silicon_metal_error(info=PlatformInfo("Darwin", "arm64", "26.5.2"), runner=lambda _arguments, _timeout: current_result) is None
 
+    profiler_result = _result(stdout='{"SPDisplaysDataType": [{"spdisplays_metal": "spdisplays_supported"}]}')
+    assert apple_silicon_metal_error(info=PlatformInfo("Darwin", "arm64", "26.5.2"), runner=lambda _arguments, _timeout: profiler_result) is None
+
 
 def test_metal_gate_rejects_missing_or_unsupported_capability() -> None:
     """A profile without usable Metal cannot accidentally enable the benchmark."""

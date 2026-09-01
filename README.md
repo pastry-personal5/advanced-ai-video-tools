@@ -6,7 +6,7 @@ Advanced AI Video Tools is a Python project for macOS on Apple Silicon that conc
 
 Active v2 planning is maintained in [docs/v2/plans.md](docs/v2/plans.md).
 Implementation follows [docs/v2/implement.md](docs/v2/implement.md); Phases 1
-through 5 are complete and Phase 6 is in progress.
+through 6 are complete and Phase 7 stabilization and release work is in progress.
 Future v3 planning is maintained separately in [docs/v3/plans.md](docs/v3/plans.md)
 and is not an active implementation target.
 
@@ -229,15 +229,19 @@ make check      # Run formatting checks, linters, and tests
 make run        # Launch the PySide6 desktop shell
 make performance-test  # Opt-in Apple Silicon Metal native presentation benchmark
 make gui-capture-test  # Opt-in native-window macOS screen-capture check
+make package-dev-dmg   # Build an unsigned development-only macOS DMG
 ```
 
 The two native acceptance targets require an interactive Apple Silicon macOS
 desktop. They confirm Metal support through `system_profiler`, run outside the
-default test suite, and skip when the current terminal cannot use the required
-native capability. `gui-capture-test` also requires Screen Recording permission
-for the invoking terminal or test runner. The presentation benchmark records
-three warm window-exposure samples and enforces the v2 proposed 3-second warm
-start budget; it is not a Real-ESRGAN throughput benchmark.
+default test suite, and fail clearly when explicitly requested without an
+active display. Invoke the Make targets directly from the interactive terminal;
+wrapping them in a headless or restricted subprocess can remove WindowServer
+access. `gui-capture-test` also requires Screen Recording permission for the
+invoking terminal or test runner. The presentation benchmark performs one
+initial warmup, two discarded warmups, and 15 measured window-exposure samples;
+it writes `/private/tmp/advanced-ai-video-tools-performance.xml` and enforces
+the 3-second p95 budget. It is not a Real-ESRGAN throughput benchmark.
 
 Use the `Makefile` as the canonical developer interface. Run an underlying tool directly through `uv run` only when diagnosing or configuring it, for example `uv run pylint src tests`.
 

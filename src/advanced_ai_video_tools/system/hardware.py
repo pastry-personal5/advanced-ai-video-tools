@@ -28,7 +28,7 @@ def _metal_value_is_supported(value: object) -> bool:
     if not isinstance(value, str):
         return False
     normalized = value.strip().lower()
-    if normalized in {"supported", "metal", "metal 1", "metal 2", "metal 3", "metal 4"}:
+    if normalized in {"supported", "spdisplays_supported", "metal", "metal 1", "metal 2", "metal 3", "metal 4"}:
         return True
     return normalized.startswith("spdisplays_metal")
 

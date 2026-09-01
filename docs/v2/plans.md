@@ -4,8 +4,8 @@
 
 - Development target: v2
 - Released baseline: v1.0.0
-- Current phase: Phase 7 — Stabilization and release (proposed)
-- Last updated: 2026-08-31
+- Current phase: Phase 7 — Stabilization and release (in progress)
+- Last updated: 2026-09-01
 
 ## Purpose
 
@@ -37,9 +37,10 @@ preview enhancement, and a final stabilization/release pass.
 | 4 | Refactoring | Complete | Improve code readability and maintainability without weakening approved behavior |
 | 5 | [GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md) | Complete | Complete the GUI enhancement with immersive fullscreen selected-source preview, keyboard playback, and clip-navigation controls |
 | 6 | [Information Architecture Update and GUI Enhancement](6-information-architecture-gui.md) | Complete | Adopt a three-region Queue Monitoring workspace and improve task hierarchy without changing queue or media behavior |
-| 7 | Stabilization and release | Proposed | Re-verify behavior after the fullscreen-preview feature and produce the v2 release artifacts |
+| 7 | [Stabilization and release](7-stabilization-and-release.md) | In progress | Re-verify behavior, establish no-upscaling performance evidence, and produce the v2 release artifacts |
 
-Phases 1 through 6 are complete. Phase 7 remains proposed.
+Phases 1 through 6 are complete. Phase 7 is in progress; its performance
+campaign is explicitly deferred for the current execution pass.
 
 ## Cross-phase decisions
 
@@ -83,10 +84,21 @@ owner approval.
 
 ### Phase 7 stabilization and release scope
 
+- Detailed execution scope is maintained in [Phase 7 — Stabilization and release](7-stabilization-and-release.md).
 - Phase 7 retains the previously planned final stabilization and v2 release-artifact work.
 - Phase 7 begins only after Phases 5 and 6 are complete and their
   implementation, tests, and documentation are synchronized.
 - Release work must re-verify fullscreen-preview behavior, including keyboard focus, help visibility, source navigation, player cleanup, and recovery from preview errors.
+- Add a repeatable performance test for native GUI presentation and other
+  explicitly non-upscaling work. The test must not invoke Real-ESRGAN, Vulkan
+  inference, GPU upscaling, model loading for inference, or any comparable
+  GPU-based enhancement workload.
+- Write an append-only historical performance record for every accepted run,
+  including date, host model, Apple Silicon architecture, macOS version, Python
+  version, Qt version, workload definition, command, sample count, warm-up
+  policy, median, p95, and pass/fail result. Preserve prior records and label
+  results as non-comparable when the host, workload, or measurement method
+  changes.
 
 ## Version 2 invariants
 
@@ -155,3 +167,4 @@ A phase is complete only when:
 | 2026-08-31 | Preserve the far-right three-tab Queue Preview and the bottom integrated Global Messages/Job Messages area as fixed Phase 6 Queue Monitoring layout boundaries. Approve the Active/Up Next/History workspace, session-visible completed history, scrollable History at 1400 × 880, text-only status, and inline selected-job details. |
 | 2026-08-31 | Begin Phase 6 implementation with presentation-only Active, Up Next, and History proxy views over the existing queue model; preserve canonical selection, far-right Queue Preview, and bottom integrated messages. |
 | 2026-09-01 | Complete Phase 6 after inline queue actions, fixed responsive columns, keyboard selection/navigation, optical header alignment, regression coverage, and populated native Queue Monitoring capture acceptance. |
+| 2026-09-01 | Pass Phase 7 non-performance native GUI capture acceptance on an interactive macOS desktop: visible-window and populated Queue Monitoring captures passed; defer performance and production signing/notarization. |

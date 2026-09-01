@@ -27,6 +27,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Began Phase 7 stabilization by correcting native macOS Metal capability
+  detection for the `spdisplays_supported` value emitted by
+  `system_profiler`; no performance benchmark was run.
+- Added an unsigned development-only macOS DMG workflow through
+  `make package-dev-dmg`; production signing and notarization remain deferred.
+- Recorded successful native macOS GUI capture acceptance for the visible
+  window and populated Queue Monitoring layout (`2 passed, 1 deselected`).
+- Ran the native no-upscaling presentation performance check successfully once
+  (`1 passed, 2 deselected`) with a 0.035-second median and 0.050-second p95;
+  recorded the 15 captured samples in the Phase 7 performance history.
+- Hardened native acceptance startup against transient/no-screen Cocoa
+  sessions by waiting for display enumeration before constructing Qt video
+  widgets; the benchmark now uses two discarded warmups and 15 measured
+  samples.
+- Made `make performance-test` deterministic for automation by using a writable
+  uv cache, emitting a JUnit timing report on every run, and failing explicitly
+  when a requested Cocoa display is unavailable instead of silently skipping.
+
 - Routed terminal Ctrl+C through the GUI's normal close lifecycle, cancelling
   queued and active work cooperatively and joining the queue worker before exit.
 - Matched the Active, Up Next, and History queue regions to Queue Preview's

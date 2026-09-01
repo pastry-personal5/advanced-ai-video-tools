@@ -22,7 +22,7 @@ import pytest
 
 from PySide6.QtCore import QCoreApplication, Qt  # pylint: disable=no-name-in-module
 from PySide6.QtCore import qVersion  # pylint: disable=no-name-in-module
-from PySide6.QtGui import QImage  # pylint: disable=no-name-in-module
+from PySide6.QtGui import QGuiApplication, QImage  # pylint: disable=no-name-in-module
 from PySide6.QtWidgets import QApplication  # pylint: disable=no-name-in-module
 
 from advanced_ai_video_tools.core.models import JobRequest, JobState
@@ -101,6 +101,12 @@ def native_qt_app() -> QApplication:
     if existing is not None and not isinstance(existing, QApplication):
         raise RuntimeError("a non-GUI Qt application already exists")
     application = existing or QApplication(["advanced-ai-video-tools-native-acceptance"])
+    deadline = time.monotonic() + 5.0
+    while not QGuiApplication.screens() and time.monotonic() < deadline:
+        application.processEvents()
+        time.sleep(0.05)
+    if not QGuiApplication.screens():
+        pytest.fail("native acceptance was requested, but no active macOS display became available within 5 seconds")
     apply_dark_theme(application)
     return application
 
@@ -128,13 +134,17 @@ def _visible_window(application: QApplication, queue: JobQueueView | None = None
 
 @pytest.mark.performance
 def test_native_window_presentation_meets_warm_start_budget(native_qt_app: QApplication, record_property: pytest.RecordProperty) -> None:
-    """Record three Metal-gated native presentation samples against the 3 s budget."""
+    """Record repeatable native presentation samples against the 3 s budget."""
 
     samples: list[float] = []
     warmup_window, _warmup_elapsed = _visible_window(native_qt_app)
     warmup_window.close()
     native_qt_app.processEvents()
-    for _ in range(3):
+    for _ in range(2):
+        warmup_window, _warmup_elapsed = _visible_window(native_qt_app)
+        warmup_window.close()
+        native_qt_app.processEvents()
+    for _ in range(15):
         window, elapsed = _visible_window(native_qt_app)
         samples.append(elapsed)
         window.close()
@@ -146,6 +156,7 @@ def test_native_window_presentation_meets_warm_start_budget(native_qt_app: QAppl
     record_property("python_version", platform.python_version())
     record_property("qt_version", qVersion())
     record_property("measurement_kind", "warm repeated window presentation")
+    record_property("native_window_presentation_samples_seconds", ",".join(f"{sample:.3f}" for sample in samples))
     record_property("native_window_presentation_median_seconds", f"{median:.3f}")
     record_property("native_window_presentation_p95_seconds", f"{p95:.3f}")
     assert p95 <= 3.0, f"native window presentation p95 was {p95:.3f}s (budget: 3.000s; samples: {samples!r})"

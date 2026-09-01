@@ -57,6 +57,7 @@ disable = [
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"
 testpaths = ["tests"]
+junit_family = "legacy"
 markers = [
   "integration: exercises user-installed FFmpeg and FFprobe with tiny media",
   "performance: opt-in Apple Silicon native GUI presentation measurement only; no media or upscaling",

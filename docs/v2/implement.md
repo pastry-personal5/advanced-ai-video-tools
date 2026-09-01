@@ -91,4 +91,6 @@ Tests must remain independent of a GPU, network, large model files, and long vid
 
 ## Current execution pointer
 
-Proceed from the current phase in [plans.md](plans.md). Phases 1 through 5 are complete. Phase 6 — Information Architecture Update and GUI Enhancement is in progress; Phase 7 — Stabilization and Release remains proposed.
+Proceed from the current phase in [plans.md](plans.md). Phases 1 through 6
+are complete. Phase 7 — Stabilization and release is in progress; its detailed
+scope is in [7-stabilization-and-release.md](7-stabilization-and-release.md).
