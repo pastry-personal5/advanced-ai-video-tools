@@ -8,9 +8,9 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import QModelIndex, QSignalBlocker, Qt, Slot
+from PySide6.QtCore import QModelIndex, QRect, QSignalBlocker, Qt, Slot
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QAbstractItemView, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QSplitterHandle, QStackedWidget, QTableView, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QSplitterHandle, QStackedWidget, QStyledItemDelegate, QStyle, QStyleOptionHeader, QStyleOptionViewItem, QTableView, QToolButton, QVBoxLayout, QWidget
 
 from advanced_ai_video_tools.core.models import JobState, PipelineStage, Toolchain
 from advanced_ai_video_tools.gui.editor import JobEditor
@@ -22,6 +22,11 @@ from advanced_ai_video_tools.gui.submission import JobSubmissionController
 from advanced_ai_video_tools.gui.theme import CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_1, SPACE_2, SPACE_3, SPACE_4
 from advanced_ai_video_tools.gui.tool_settings import ToolSettingsDialog, ToolSettingsValidator
 from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
+
+JOB_NAME_COLUMN_WIDTH = 480
+QUEUE_STATUS_COLUMN_WIDTH = 96
+QUEUE_ACTION_COLUMN_WIDTH = 56
+QUEUE_HEADER_OPTICAL_OFFSETS = {0: -4, 2: 5}
 
 
 class _ModernSplitterHandle(QSplitterHandle):
@@ -54,6 +59,64 @@ class _ModernContentMessageSplitter(QSplitter):
         """Create the custom handle used between content and messages."""
 
         return _ModernSplitterHandle(self.orientation(), self)
+
+
+class _QueueHeaderView(QHeaderView):
+    """Keep the Job Name section readable when Qt reapportions stretch space."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(Qt.Orientation.Horizontal, parent)
+        self._enforcing_minimum = False
+
+    def resizeEvent(self, event: object) -> None:  # pylint: disable=invalid-name
+        """Restore the minimum name width after a table/window resize."""
+
+        super().resizeEvent(event)
+        if self._enforcing_minimum or self.sectionSize(1) >= JOB_NAME_COLUMN_WIDTH:
+            return
+        self._enforcing_minimum = True
+        try:
+            self.resizeSection(1, JOB_NAME_COLUMN_WIDTH)
+        finally:
+            self._enforcing_minimum = False
+
+    def paintSection(self, painter: QPainter, rect: QRect, logical_index: int) -> None:  # pylint: disable=invalid-name
+        """Paint header chrome normally and optically center short labels."""
+
+        if not rect.isValid():
+            return
+        option = QStyleOptionHeader()
+        self.initStyleOptionForIndex(option, logical_index)
+        option.rect = rect
+        painter.save()
+        painter.setClipRect(rect)
+        self.style().drawControl(QStyle.ControlElement.CE_HeaderSection, option, painter, self)
+        option.rect = rect.translated(QUEUE_HEADER_OPTICAL_OFFSETS.get(logical_index, 0), 0)
+        self.style().drawControl(QStyle.ControlElement.CE_HeaderLabel, option, painter, self)
+        painter.restore()
+
+
+class _QueueActionDelegate(QStyledItemDelegate):
+    """Render compact, high-contrast icons in the queue action column."""
+
+    def __init__(self, cancel_icon: QIcon, remove_icon: QIcon, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._cancel_icon = cancel_icon
+        self._remove_icon = remove_icon
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:  # pylint: disable=invalid-name
+        """Paint only the contextual action icon for this cell."""
+
+        action = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+        if not action:
+            return
+        icon = self._cancel_icon if action == "Cancel" else self._remove_icon
+        icon_size = min(20, max(16, option.rect.height() - 12))
+        rect = option.rect
+        icon_rect = rect.adjusted((rect.width() - icon_size) // 2, (rect.height() - icon_size) // 2, -(rect.width() - icon_size) // 2, -(rect.height() - icon_size) // 2)
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(rect, option.palette.highlight())
+        icon.paint(painter, icon_rect, Qt.AlignmentFlag.AlignCenter, QIcon.Mode.Normal if option.state & QStyle.StateFlag.State_Enabled else QIcon.Mode.Disabled)
 
 
 class MainWindow(QMainWindow):
@@ -96,12 +159,15 @@ class MainWindow(QMainWindow):
         self.queue_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.queue_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.queue_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        header = self.queue_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header = _QueueHeaderView(self.queue_table)
+        self.queue_table.setHorizontalHeader(header)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(0, 140)
-        header.resizeSection(2, 110)
+        header.resizeSection(0, QUEUE_STATUS_COLUMN_WIDTH)
+        header.resizeSection(1, JOB_NAME_COLUMN_WIDTH)
+        header.resizeSection(2, QUEUE_ACTION_COLUMN_WIDTH)
+        header.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
         header.setStretchLastSection(False)
         self.queue_table.setAlternatingRowColors(True)
         self.queue_table.setAccessibleName("Processing queue")
@@ -138,8 +204,6 @@ class MainWindow(QMainWindow):
         self.move_job_down_button.setObjectName("moveJobDownButton")
         for reorder_button in (self.move_job_up_button, self.move_job_down_button):
             reorder_button.setFixedHeight(26)
-        self.cancel_selected_job_button = QPushButton("Cancel Job")
-        self.cancel_selected_job_button.setObjectName("cancelSelectedJobButton")
         details = QGroupBox("Selected Job")
         details.setObjectName("selectedJobDetails")
         details_layout = QFormLayout(details)
@@ -169,14 +233,11 @@ class MainWindow(QMainWindow):
             proxy = QueueRegionProxyModel(region, self)
             proxy.setSourceModel(model)
             view = QTableView()
-            self._configure_region_view(view, f"queue{title.replace(' ', '')}View", f"{title} jobs")
-            if region != "history":
-                view.setColumnHidden(2, True)
             if region == "active":
                 view.setMaximumHeight(88)
-            elif region == "up_next":
-                view.setMaximumHeight(150)
             view.setModel(proxy)
+            self._configure_region_view(view, f"queue{title.replace(' ', '')}View", f"{title} jobs")
+            view.setItemDelegateForColumn(2, _QueueActionDelegate(self._cancel_icon(), self._remove_icon(), view))
             self.region_views[region] = view
             self.region_proxies[region] = proxy
             group = QGroupBox(title)
@@ -223,12 +284,6 @@ class MainWindow(QMainWindow):
         monitoring_layout.addWidget(details)
         monitoring_layout.addWidget(self.selected_job_overall_progress)
         monitoring_layout.addWidget(self.selected_job_stage_progress)
-        controls = QHBoxLayout()
-        controls.setContentsMargins(0, 0, 0, 0)
-        controls.setSpacing(SPACE_2)
-        controls.addStretch(1)
-        controls.addWidget(self.cancel_selected_job_button)
-        monitoring_layout.addLayout(controls)
 
         self.view_stack = QStackedWidget()
         self.view_stack.setObjectName("contentViewStack")
@@ -292,7 +347,6 @@ class MainWindow(QMainWindow):
         model.rowsRemoved.connect(self._rows_removed)
         model.modelReset.connect(self._refresh_selected_job)
         model.snapshot_changed.connect(self._handle_queue_snapshot)
-        self.cancel_selected_job_button.clicked.connect(self._cancel_selected_job)
         self.move_job_up_button.clicked.connect(lambda: self._move_selected_job(-1))
         self.move_job_down_button.clicked.connect(lambda: self._move_selected_job(1))
         self.preferences_action.triggered.connect(self._open_preferences)
@@ -337,13 +391,45 @@ class MainWindow(QMainWindow):
         view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         view.setAlternatingRowColors(True)
-        header = view.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header = _QueueHeaderView(view)
+        view.setHorizontalHeader(header)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(0, 110)
-        header.resizeSection(2, 92)
+        header.resizeSection(0, QUEUE_STATUS_COLUMN_WIDTH)
+        header.resizeSection(1, JOB_NAME_COLUMN_WIDTH)
+        header.resizeSection(2, QUEUE_ACTION_COLUMN_WIDTH)
+        header.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
         header.setStretchLastSection(False)
+
+    @staticmethod
+    def _cancel_icon() -> QIcon:
+        """Create the distinguished stop icon used for active cancellation."""
+
+        pixmap = QPixmap(20, 20)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor("#ffb4ab"), 1.8))
+        painter.drawEllipse(2, 2, 16, 16)
+        painter.setBrush(QColor("#ffb4ab"))
+        painter.drawRoundedRect(7, 7, 6, 6, 1, 1)
+        painter.end()
+        return QIcon(pixmap)
+
+    @staticmethod
+    def _remove_icon() -> QIcon:
+        """Create the remove icon used for terminal history rows."""
+
+        pixmap = QPixmap(20, 20)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor("#d4d7dc"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawEllipse(2, 2, 16, 16)
+        painter.drawLine(7, 10, 13, 10)
+        painter.end()
+        return QIcon(pixmap)
 
     @staticmethod
     def _navigation_button(glyph: str, label: str, object_name: str) -> QToolButton:
@@ -534,21 +620,29 @@ class MainWindow(QMainWindow):
 
     @Slot(str, QModelIndex)
     def _handle_region_cell_click(self, region: str, index: QModelIndex) -> None:
-        """Handle contextual terminal removal in the visible History region."""
+        """Handle the region's inline cancel or remove action."""
 
-        if region != "history" or index.column() != 2:
+        if index.column() != 2:
             return
         view = self.region_views[region]
         proxy = view.model()
         if isinstance(proxy, QueueRegionProxyModel):
-            self._model.remove(proxy.mapToSource(index))
+            source_index = proxy.mapToSource(index)
+            if region == "history":
+                self._model.remove(source_index)
+            else:
+                self._model.cancel(source_index)
 
     @Slot(QModelIndex)
     def _handle_queue_cell_click(self, index: QModelIndex) -> None:
-        """Handle the terminal-row Remove action in the queue table."""
+        """Handle the compatibility table's inline queue action."""
 
         if index.column() == 2:
-            self._model.remove(index)
+            state = self._model.data(index, int(JobRole.STATE))
+            if state in {JobState.QUEUED.value, JobState.VALIDATING.value, JobState.RUNNING.value}:
+                self._model.cancel(index)
+            else:
+                self._model.remove(index)
 
     @Slot(QModelIndex, QModelIndex, list)
     def _refresh_after_model_change(self, _first: QModelIndex, _last: QModelIndex, _roles: list[int]) -> None:
@@ -577,7 +671,6 @@ class MainWindow(QMainWindow):
         self.selected_job_stage_progress.setFormat("Stage: no job selected")
         self.selected_job_overall_progress.setValue(0)
         self.selected_job_overall_progress.setFormat("Whole job: 0%")
-        self.cancel_selected_job_button.setEnabled(False)
         self.move_job_up_button.setEnabled(False)
         self.move_job_down_button.setEnabled(False)
         self.job_name_value.setText("No job selected")
@@ -663,7 +756,6 @@ class MainWindow(QMainWindow):
         completed = int(self._model.data(index, int(JobRole.PROGRESS_COMPLETED)) or 0)
         total = self._model.data(index, int(JobRole.PROGRESS_TOTAL))
         self._update_progress_details(state, stage, completed, total)
-        self.cancel_selected_job_button.setEnabled(bool(self._model.data(index, int(JobRole.CAN_CANCEL))))
         position = self._model.data(index, int(JobRole.QUEUE_POSITION))
         self.move_job_up_button.setEnabled(position is not None and int(position) > 0)
         self.move_job_down_button.setEnabled(position is not None and int(position) + 1 < self._model.pending_count)
@@ -676,10 +768,6 @@ class MainWindow(QMainWindow):
             self._clear_selection_details()
             return
         self._render_selection_details(index, activate_job_tab=activate_job_tab)
-
-    @Slot()
-    def _cancel_selected_job(self) -> None:
-        self._model.cancel(self.queue_table.currentIndex())
 
     def _move_selected_job(self, offset: int) -> None:
         self._model.move_pending(self.queue_table.currentIndex(), offset)

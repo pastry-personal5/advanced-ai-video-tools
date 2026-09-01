@@ -79,6 +79,26 @@ class QueueRegionProxyModel(QSortFilterProxyModel):
             return state_value in _TERMINAL_STATES
         return False
 
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = int(Qt.ItemDataRole.DisplayRole)) -> object | None:  # pylint: disable=invalid-name
+        """Give each region's action column the appropriate accessible label."""
+
+        if orientation is Qt.Orientation.Horizontal:
+            if role == int(Qt.ItemDataRole.TextAlignmentRole):
+                return Qt.AlignmentFlag.AlignCenter
+            if role == int(Qt.ItemDataRole.DisplayRole) and section == 2:
+                return "Cancel" if self._region == "active" else "Remove"
+        return super().headerData(section, orientation, role)
+
+    def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> object | None:  # pylint: disable=invalid-name
+        """Expose region-specific action names while retaining source roles."""
+
+        if index.isValid() and index.column() == 2:
+            if role == int(Qt.ItemDataRole.DisplayRole):
+                return "Cancel" if self._region == "active" else "Remove"
+            if role == int(Qt.ItemDataRole.ToolTipRole):
+                return "Cancel this job" if self._region == "active" else "Remove this job"
+        return super().data(index, role)
+
 
 class QueueSnapshotBridge(QObject):
     """Marshal queue callbacks from arbitrary threads onto the Qt event loop."""
@@ -138,8 +158,11 @@ class JobListModel(QAbstractTableModel):
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = int(Qt.ItemDataRole.DisplayRole)) -> object | None:
         """Return accessible textual queue column headers."""
 
-        if orientation is Qt.Orientation.Horizontal and role == int(Qt.ItemDataRole.DisplayRole):
-            return ("Status", "Job Name", "Remove")[section] if 0 <= section < 3 else None
+        if orientation is Qt.Orientation.Horizontal:
+            if role == int(Qt.ItemDataRole.TextAlignmentRole):
+                return Qt.AlignmentFlag.AlignCenter
+            if role == int(Qt.ItemDataRole.DisplayRole):
+                return ("Status", "Job Name", "Remove")[section] if 0 <= section < 3 else None
         return None
 
     def data(self, index: QModelIndex, role: int = int(Qt.ItemDataRole.DisplayRole)) -> object | None:
@@ -160,8 +183,11 @@ class JobListModel(QAbstractTableModel):
                 return f"Job status: {state_text}"
             if index.column() == 1:
                 return f"Job name: {job_name}"
-            if index.column() == 2 and snapshot.state in {JobState.CANCELLED, JobState.FAILED}:
-                return "Remove this terminal job from session history"
+            if index.column() == 2:
+                if snapshot.state in {JobState.QUEUED, JobState.VALIDATING, JobState.RUNNING}:
+                    return "Cancel this job"
+                if snapshot.state in _TERMINAL_STATES:
+                    return "Remove this job from session history"
             return None
         if role == int(Qt.ItemDataRole.DisplayRole):
             if index.column() == 0:
@@ -169,7 +195,9 @@ class JobListModel(QAbstractTableModel):
             if index.column() == 1:
                 return job_name
             if index.column() == 2:
-                return "Remove" if snapshot.state in {JobState.CANCELLED, JobState.FAILED} else ""
+                if snapshot.state in {JobState.QUEUED, JobState.VALIDATING, JobState.RUNNING}:
+                    return "Cancel"
+                return "Remove" if snapshot.state in _TERMINAL_STATES else ""
         if role == int(JobRole.JOB_ID):
             return snapshot.job_id
         if role == int(JobRole.STATE):
@@ -217,7 +245,7 @@ class JobListModel(QAbstractTableModel):
         """Remove a failed or cancelled row from session presentation history."""
 
         snapshot = self.snapshot_at(index)
-        if snapshot is None or snapshot.state not in {JobState.CANCELLED, JobState.FAILED}:
+        if snapshot is None or snapshot.state not in _TERMINAL_STATES:
             return False
         row = index.row()
         self.beginRemoveRows(QModelIndex(), row, row)

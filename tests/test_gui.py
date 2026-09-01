@@ -18,10 +18,10 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QLockFile, QModelIndex, QObject, Qt, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtGui import QImage, QKeyEvent, QPalette  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtGui import QImage, QKeyEvent, QPainter, QPalette, QPixmap  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtTest import QTest  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QPushButton, QSlider, QSplitter, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QPushButton, QSlider, QSplitter, QStyle, QStyleOptionViewItem, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from advanced_ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.application import _GuiSigintBridge, create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
@@ -69,8 +69,9 @@ def test_gui_theme_is_always_dark(qt_app: QApplication) -> None:
     assert "border-radius: 0px;" in qt_app.styleSheet()
     assert "QSplitter#contentMessageSplitter" in qt_app.styleSheet()
     assert "QSplitter::handle:hover" not in qt_app.styleSheet()
-    assert "QHeaderView::section:first" in qt_app.styleSheet()
     assert "QHeaderView::section:last" in qt_app.styleSheet()
+    assert "QHeaderView::section:first" not in qt_app.styleSheet()
+    assert "text-align: center;" in qt_app.styleSheet()
     assert "QHeaderView {\n    background: #2a2b2e;\n    border: none;\n    border-bottom: 1px solid #5f6368;\n    border-radius: 0px;\n}" in qt_app.styleSheet()
     assert "border-right: 1px solid #45474b;" in qt_app.styleSheet()
     assert "QTableView#queueActiveView QHeaderView::section" in qt_app.styleSheet()
@@ -170,6 +171,7 @@ def test_bridge_mutates_model_on_qt_thread_and_rejects_stale_revisions(qt_app: Q
     assert model.data(index, int(JobRole.OUTPUT_PATH)) == str(tmp_path / "alpha.mp4")
     assert model.headerData(0, Qt.Orientation.Horizontal) == "Status"
     assert model.headerData(1, Qt.Orientation.Horizontal) == "Job Name"
+    assert model.headerData(0, Qt.Orientation.Horizontal, Qt.ItemDataRole.TextAlignmentRole) == Qt.AlignmentFlag.AlignCenter
     assert model.headerData(2, Qt.Orientation.Horizontal) == "Remove"
     assert "Status: Running" in str(model.data(index, int(Qt.ItemDataRole.AccessibleTextRole)))
     assert model.data(model.index(0, 1), int(Qt.ItemDataRole.ToolTipRole)) == "Job name: alpha.mov"
@@ -208,7 +210,7 @@ def test_model_exposes_pending_order_actions_and_terminal_error(qt_app: QApplica
     assert all("Retry" not in str(model.data(model.index(row, column), int(Qt.ItemDataRole.DisplayRole))) for row in range(model.rowCount()) for column in range(model.columnCount()))
 
 
-def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication, tmp_path: Path) -> None:
+def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication, tmp_path: Path) -> None:  # pylint: disable=too-many-statements
     """The native shell renders measured progress and delegates user actions."""
 
     first = _snapshot(tmp_path, "first", JobState.RUNNING, None, revision=2, progress=ProgressEvent(PipelineStage.ENCODE, 3, 8, "Encoding output"))
@@ -251,14 +253,27 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     assert window.selected_job_stage_progress.format() == "Stage: 3/8"
     assert window.selected_job_overall_progress.value() > 0
     assert window.selected_job_overall_progress.format().startswith("Whole job:")
-    assert window.cancel_selected_job_button.isEnabled()
+    assert window.findChild(QPushButton, "cancelSelectedJobButton") is None
+    active_view = window.region_views["active"]
+    assert active_view.isColumnHidden(2) is False
+    assert active_view.horizontalHeader().sectionResizeMode(0).name == "Fixed"
+    assert active_view.horizontalHeader().sectionResizeMode(2).name == "Fixed"
+    assert active_view.horizontalHeader().defaultAlignment() == Qt.AlignmentFlag.AlignCenter
+    assert active_view.model().data(active_view.model().index(0, 2), Qt.ItemDataRole.DisplayRole) == "Cancel"
+    action_pixmap = QPixmap(64, 36)
+    action_option = QStyleOptionViewItem()
+    action_option.rect = action_pixmap.rect()
+    action_option.state = QStyle.StateFlag.State_Enabled | QStyle.StateFlag.State_Selected
+    action_painter = QPainter(action_pixmap)
+    active_view.itemDelegateForColumn(2).paint(action_painter, action_option, active_view.model().index(0, 2))
+    action_painter.end()
     assert window.findChild(QLabel, "jobActionSummary") is None
     assert window.findChild(QLabel, "logPathLabel") is None
     selected_details = window.findChild(QGroupBox, "selectedJobDetails")
     assert selected_details is not None
     assert selected_details.layout().contentsMargins().left() == SPACE_2
     assert selected_details.layout().verticalSpacing() == 4
-    window.cancel_selected_job_button.click()
+    window._handle_region_cell_click("active", active_view.model().index(0, 2))  # pylint: disable=protected-access
     assert queue.cancelled == ["first"]
 
     window.queue_table.setCurrentIndex(model.index(1, 0))
@@ -282,6 +297,9 @@ def test_queue_monitoring_groups_active_pending_and_history_regions(qt_app: QApp
     assert window.region_proxies["active"].rowCount() == 1
     assert window.region_proxies["up_next"].rowCount() == 1
     assert window.region_proxies["history"].rowCount() == 1
+    assert all(view.horizontalHeader().sectionResizeMode(0).name == "Fixed" for view in window.region_views.values())
+    assert all(view.horizontalHeader().sectionResizeMode(2).name == "Fixed" for view in window.region_views.values())
+    assert all(view.horizontalHeader().defaultAlignment() == Qt.AlignmentFlag.AlignCenter for view in window.region_views.values())
     assert window.findChild(QLabel, "queueHistoryEmpty") is None
     active_group = window.region_groups["active"]
     up_next_group = window.region_groups["up_next"]

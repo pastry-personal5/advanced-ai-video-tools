@@ -358,6 +358,7 @@ QTableView#queueHistoryView QHeaderView::section {{
     background: #2a2b2e;
     padding: {SPACE_1}px;
     font-size: 9pt;
+    text-align: center;
 }}
 
 QHeaderView {{
@@ -375,14 +376,10 @@ QHeaderView::section {{
     padding: {SPACE_2}px;
     color: #e8eaed;
     font-weight: 600;
-}}
-
-QHeaderView::section:first {{
-    padding-left: 0;
+    text-align: center;
 }}
 
 QHeaderView::section:last {{
-    padding-right: 0;
     border-right: none;
 }}
 
