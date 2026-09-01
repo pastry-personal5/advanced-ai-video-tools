@@ -4,11 +4,17 @@ This document is the authoritative technical overview for Advanced AI Video Tool
 
 ## Development target
 
-Version 1.0.0 is the completed release baseline. The active development goal is version 2, with Phases 1 through 6 complete and Phase 7 in progress. Until a version 2 design decision explicitly supersedes a version 1 contract, the implemented version 1 behavior in this document remains binding. The target change alone does not authorize speculative features, compatibility expansion, or changes to media policy.
+Version 1.0.0 is the completed release baseline. Version 2 is complete, and
+v3 Phase 1 Refactoring is the active development target. Until an approved v3
+design decision explicitly supersedes a v2 contract, the implemented v2
+behavior in this document remains binding. The target change alone does not
+authorize speculative features, compatibility expansion, or changes to media
+policy.
 
-The v2 roadmap lives in [v2/plans.md](v2/plans.md) and shared execution rules
-live in [v2/implement.md](v2/implement.md). Phases 1 through 6 are complete;
-Phase 7 is in progress. Planning documents describe intended work; this
+The v2 roadmap lives in [v2/plans.md](v2/plans.md), the active v3 roadmap lives
+in [v3/plans.md](v3/plans.md), and shared execution rules live in
+[v3/implement.md](v3/implement.md). V2 Phases 1 through 7 are complete;
+v3 Phase 1 is in progress. Planning documents describe intended work; this
 architecture document remains authoritative for implemented system behavior.
 
 ## Implementation status

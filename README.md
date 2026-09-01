@@ -4,9 +4,10 @@ Advanced AI Video Tools is a Python project for macOS on Apple Silicon that conc
 
 > **Release and development status:** v1.0.0 is the current completed release baseline. The active development target is v2. Existing v1 behavior remains authoritative until a v2 design decision explicitly changes it; no additional v2 features are implied solely by the target change.
 
-Active v2 planning is maintained in [docs/v2/plans.md](docs/v2/plans.md).
-Implementation follows [docs/v2/implement.md](docs/v2/implement.md); Phases 1
-through 6 are complete and Phase 7 stabilization and release work is in progress.
+V2 planning and implementation are complete. Active v3 planning is maintained
+in [docs/v3/plans.md](docs/v3/plans.md); v3 Phase 1 Refactoring is now the
+active implementation target. Production signing and notarization remain
+deferred because Apple Developer Program enrollment is unavailable.
 Future v3 planning is maintained separately in [docs/v3/plans.md](docs/v3/plans.md)
 and is not an active implementation target.
 
@@ -179,6 +180,11 @@ uv run advanced-ai-video-tools process --help
 
 In the desktop application, add clips in top-to-bottom concat order, choose an output directory, set the target height, and select **Preflight**. Diagnostic preflight runs outside the GUI thread and shows every warning or blocking issue before submission. Unsupported secondary streams require the dedicated acknowledgement checkbox; that acknowledgement is bound to the exact reviewed per-clip dropped-item inventory, applies only to that job, and is never saved as a preference. Accepted jobs enter the single-worker FIFO and perform authoritative preflight again immediately before processing. If the inventory changed while waiting, authoritative preflight rejects the job for another review. The GUI uses the **Advanced AI Video Tools** display identity, a persistent dark theme, a tall far-right source preview in Job Creation, and a tall far-right Queue Preview in Queue Monitoring. Queue Preview has **Original**, **Upscaled**, and **Final Video** tabs: while the selected job is upscaling, the first two tabs show frame 1 as soon as it is ready, then their matched latest sampled frame every 16 frames; Final Video stays empty. After completion, Final Video automatically loops that job's published local result. Pressing **Go to first frame** or **Go to last frame** shows a brief centered loading hint until native seeking reaches the requested frame. Session-only Global Messages/Job Messages tabs remain in the shared left workspace. Open fullscreen preview with the preview expand button or the `Start Fullscreen Preview` action at the right of a source row. Fullscreen has no clickable controls: use `0`/`9` for first/last frame, `j`/`l` for autoplaying adjacent clips, `Space`/`k` for play/pause, `Shift-P`/`Shift-N` to play adjacent clips from the start, `Esc` to close, and `?` (`Shift+/` on a standard keyboard) for shortcut help. When launched from a terminal, **Ctrl+C** closes the GUI through that same graceful shutdown path: previews release, pending jobs cancel, the active job is cancelled and cleaned up, and the queue worker exits before the process ends. Repeated Ctrl+C remains cooperative until cleanup completes.
 
+Finder-launched app bundles preserve the inherited `PATH` and add standard
+`/opt/homebrew/bin`, `/usr/local/bin`, and `/opt/local/bin` locations for
+user-managed tools; custom locations remain configurable in **Edit →
+Preferences**.
+
 The GUI always uses its approved dark theme; it does not follow the macOS light/dark appearance setting.
 
 Run preflight against one or more real clips:
@@ -258,7 +264,8 @@ ai-videol-tools-v2/
 │   ├── upscaling/      # Real-ESRGAN policy and safe argument construction
 │   ├── video/          # Probing, compatibility, manifests, and FFmpeg builders
 │   ├── cli.py          # Thin preflight and processing command-line adapters
-│   └── __main__.py     # Module entry point
+│   ├── __main__.py     # CLI module entry point
+│   └── gui_entry.py    # macOS app-bundle GUI entry point
 ├── tests/              # Automated tests and lightweight fixtures
 ├── docs/
 │   └── ARCHITECTURE.md # Pipeline and component specification

@@ -27,7 +27,7 @@ uv run --with "pyinstaller==${PYINSTALLER_VERSION}" pyinstaller \
   --distpath "${BUILD_DIR}/dist" \
   --workpath "${BUILD_DIR}/work" \
   --specpath "$BUILD_DIR" \
-  src/advanced_ai_video_tools/__main__.py
+  src/advanced_ai_video_tools/gui_entry.py
 
 if [[ ! -d "$APP_PATH" ]]; then
   print -u2 "error: PyInstaller did not produce ${APP_PATH}"

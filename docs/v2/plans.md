@@ -4,7 +4,7 @@
 
 - Development target: v2
 - Released baseline: v1.0.0
-- Current phase: Phase 7 — Stabilization and release (in progress)
+- Current phase: Phase 7 — Stabilization and release (complete)
 - Last updated: 2026-09-01
 
 ## Purpose
@@ -37,10 +37,10 @@ preview enhancement, and a final stabilization/release pass.
 | 4 | Refactoring | Complete | Improve code readability and maintainability without weakening approved behavior |
 | 5 | [GUI Enhancement Including Fullscreen Preview](5-gui-enhancement.md) | Complete | Complete the GUI enhancement with immersive fullscreen selected-source preview, keyboard playback, and clip-navigation controls |
 | 6 | [Information Architecture Update and GUI Enhancement](6-information-architecture-gui.md) | Complete | Adopt a three-region Queue Monitoring workspace and improve task hierarchy without changing queue or media behavior |
-| 7 | [Stabilization and release](7-stabilization-and-release.md) | In progress | Re-verify behavior, establish no-upscaling performance evidence, and produce the v2 release artifacts |
+| 7 | [Stabilization and release](7-stabilization-and-release.md) | Complete | Re-verify behavior, establish no-upscaling performance evidence, and produce the v2 release artifacts |
 
-Phases 1 through 6 are complete. Phase 7 is in progress; its performance
-campaign is explicitly deferred for the current execution pass.
+Phases 1 through 7 are complete. Production signing and notarization remain
+deferred because Apple Developer Program enrollment is unavailable.
 
 ## Cross-phase decisions
 

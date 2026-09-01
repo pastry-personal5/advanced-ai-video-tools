@@ -4,6 +4,11 @@ All notable changes to Advanced AI Video Tools are documented in this file.
 
 ## [Unreleased] — v2 rename
 
+- Activated v3 Phase 1 Refactoring after completing v2 Phase 7; crop and video
+  interpolation remain gated behind their predecessor phases.
+- Completed Phase 7 stabilization and release verification. The unsigned
+  development DMG is the verified release artifact; Apple Developer Program-
+  dependent production signing and notarization are deferred.
 - Completed Phase 3 stabilization with deterministic failure-path coverage,
   native presentation and screen-capture acceptance checks, and no-upscaling
   queue/resource measurements. Performance benchmarks that invoke AI
@@ -44,6 +49,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Made `make performance-test` deterministic for automation by using a writable
   uv cache, emitting a JUnit timing report on every run, and failing explicitly
   when a requested Cocoa display is unavailable instead of silently skipping.
+- Fixed the development DMG Finder launch by giving PyInstaller a GUI-only
+  entry point; the bundled app no longer invokes the argument-required CLI
+  parser and exits silently without a subcommand.
+- Fixed Finder-launched tool discovery by exposing standard Homebrew and
+  MacPorts locations through the GUI bundle entry point while preserving the
+  inherited `PATH`.
+- Verified that the rebuilt unsigned development DMG launches normally from
+  Finder.
 
 - Routed terminal Ctrl+C through the GUI's normal close lifecycle, cancelling
   queued and active work cooperatively and joining the queue worker before exit.

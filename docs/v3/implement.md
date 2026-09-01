@@ -1,7 +1,7 @@
 # Version 3 Implementation Guide
 
-V3 implementation is not authorized by this document. When a phase is
-approved, follow this order:
+V3 Phase 1 implementation is authorized. Phase 2 and Phase 3 implementation
+remain unauthorized. For the active phase, follow this order:
 
 1. Read [plans.md](plans.md), the selected phase file, and the v2 architecture
    and implementation rules.

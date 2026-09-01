@@ -3,6 +3,7 @@
 from datetime import datetime
 from pathlib import Path
 
+from advanced_ai_video_tools import gui_entry
 from advanced_ai_video_tools.identity import IDENTITY
 from advanced_ai_video_tools.storage.naming import automatic_output_basename
 from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace
@@ -33,6 +34,25 @@ def test_packaging_surfaces_match_identity_map() -> None:
     assert f'{IDENTITY.legacy_command} = "{IDENTITY.import_package_name}.cli:main"' in project
     assert f"<string>{IDENTITY.display_name}</string>" in plist
     assert f"<string>{IDENTITY.bundle_identifier}</string>" in plist
+
+    gui_entry_source = (repository_root / "src/advanced_ai_video_tools/gui_entry.py").read_text(encoding="utf-8")
+    assert "run_gui()" in gui_entry_source
+    assert "cli" not in gui_entry_source
+
+    gui_entry_source = (repository_root / "src/advanced_ai_video_tools/gui_entry.py").read_text(encoding="utf-8")
+    assert "run_gui()" in gui_entry_source
+    assert "cli" not in gui_entry_source
+
+
+def test_gui_bundle_entry_point_preserves_and_augments_finder_path(monkeypatch) -> None:
+    """Finder launches expose common macOS tool locations without replacing PATH."""
+
+    monkeypatch.setenv("PATH", "/custom/bin:/usr/bin")
+    gui_entry._augment_macos_path()  # pylint: disable=protected-access
+
+    path_entries = gui_entry.os.environ["PATH"].split(gui_entry.os.pathsep)
+    assert path_entries[:3] == ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"]
+    assert path_entries[-2:] == ["/custom/bin", "/usr/bin"]
 
 
 def test_runtime_consumers_use_canonical_identity() -> None:

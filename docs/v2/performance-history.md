@@ -52,6 +52,29 @@ repository.
 - Anomalies: none in the supported direct Make invocation
 - Comparability notes: comparable with record 01 at the workload level; environment metadata is more complete in this record
 
+### phase7-native-presentation-2026-09-01-03
+
+- Date/time and timezone: 2026-09-01 15:00:51 Asia/Seoul
+- Commit: uncommitted working tree
+- Workload ID/version: `native-window-presentation` / Phase 7 benchmark revision
+- Exact command: `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache make performance-test`
+- Host model: Apple M5 Max (`Black-Laptop-2026`)
+- Architecture: `arm64`
+- macOS version/build: `macOS-26.6.2-arm64-arm-64bit-Mach-O`; build not reported
+- Python version: `3.13.5`
+- Qt/PySide6 version: `6.11.2`
+- Display configuration: interactive Cocoa desktop; exact display not reported
+- Power state: not reported
+- Warm-up policy: one initial warmup plus two discarded warmups
+- Measured sample count: 15
+- Samples (seconds): `0.053, 0.060, 0.025, 0.047, 0.033, 0.027, 0.037, 0.027, 0.035, 0.027, 0.029, 0.037, 0.036, 0.030, 0.036`
+- Median: `0.035` seconds
+- P95: `0.055` seconds
+- Minimum/maximum: `0.025` / `0.060` seconds
+- Pass/fail: PASS; p95 is below the 3-second budget
+- Anomalies: none reported
+- Comparability notes: accepted native presentation run; exact display and power state were not reported
+
 ## Record template
 
 ```text

@@ -3,7 +3,7 @@
 ## Status
 
 - Phase: 7
-- State: In progress
+- State: Complete
 - Predecessors: Phases 1 through 6
 - Target: v2 release candidate and release artifacts
 
@@ -11,9 +11,9 @@ Phase 7 is the final v2 stabilization and release phase. It begins only after
 Phase 6 is complete and its implementation, tests, and documentation are
 synchronized.
 
-The performance suite is intentionally deferred for this execution pass at
-the user's direction. No performance test or historical performance record is
-being run or fabricated.
+The no-upscaling performance suite and supported-macOS manual verification
+are complete. Production signing and notarization remain deferred because the
+owner is not enrolled in the Apple Developer Program.
 
 ## Objective
 
@@ -116,22 +116,24 @@ are labeled non-comparable.
 ## Release artifacts
 
 The current approved Phase 7 artifact is an unsigned/ad-hoc-signed
-development-only DMG.
+development-only DMG. Its Finder launch uses the GUI-only entry point rather
+than the argument-driven CLI dispatcher, so opening the app without command
+line arguments starts the window instead of exiting silently.
 Build it with `make package-dev-dmg`; the workflow uses a pinned PyInstaller
 version, the real application entry point, the approved bundle identifier,
 and an explicit macOS minimum version. It does not sign, notarize, or bundle
 user-managed external tools.
 
-Define and verify the production `.app` and `.dmg` build workflow, bundle identifier,
-`Info.plist`, entry point, dependency bundling, DMG naming/layout, and clean
-install behavior. Do not bundle user-managed FFmpeg, FFprobe, Real-ESRGAN,
-Vulkan support, or model files.
+The production `.app` and `.dmg` workflow is skipped for this release because
+the owner is not enrolled in the Apple Developer Program. The unsigned
+development `.app`/`.dmg` workflow, bundle identifier, `Info.plist`, entry
+point, DMG naming/layout, and clean-install behavior remain the verified
+release artifact scope. Do not bundle user-managed FFmpeg, FFprobe,
+Real-ESRGAN, Vulkan support, or model files.
 
-Complete the approved Developer ID distribution workflow: sign nested
-binaries and the app with hardened runtime and minimum entitlements, verify
-with `codesign` and `spctl`, notarize, staple, and test the quarantined
-downloaded DMG under Gatekeeper. Keep signing credentials outside the
-repository and release artifacts.
+Developer ID signing, notarization, stapling, and quarantined Gatekeeper
+testing are deferred until Apple Developer Program enrollment is available.
+Keep signing credentials outside the repository and release artifacts.
 
 ## Exit criteria
 
@@ -150,8 +152,11 @@ Phase 7 may be marked Complete only when:
 
 ## Verification record
 
+- Phase 7 manual verification was completed on 2026-09-01, as reported by the
+  user. Packaged-app functional checks and development DMG clean-install
+  behavior were also completed manually.
 - `UV_CACHE_DIR=/private/tmp/ai-video-tools-uv-cache make check` passed with
-  261 tests passed and 3 opt-in native tests skipped.
+  262 tests passed and 3 opt-in native tests skipped.
 - The non-performance native capture target passed on the supported interactive
   macOS desktop: `make gui-capture-test` — 2 passed, 1 deselected. It
   recognized the actual `spdisplays_supported` value, created the Cocoa
@@ -171,6 +176,15 @@ Phase 7 may be marked Complete only when:
   15 samples, a 0.029-second median, and a 0.069-second p95. Restricted wrapper
   processes remain intentionally unsupported because they cannot access the
   logged-in WindowServer session.
+- The rebuilt unsigned development DMG launched normally from Finder after
+  switching PyInstaller to the GUI-only entry point. Packaged-app functional
+  checks for settings, queue lifecycle, and logs were completed manually. The
+  development DMG clean-install behavior was also manually verified. The
+  GUI-only bundle entry point now preserves Finder's inherited `PATH` and adds
+  standard Homebrew/MacPorts locations so user-managed FFmpeg, FFprobe, and
+  Real-ESRGAN installations can be discovered from Finder.
+- Production `.app`/`.dmg` packaging and Developer ID distribution are skipped
+  for this release because Apple Developer Program enrollment is unavailable.
 - `uv build --out-dir /private/tmp/ai-video-tools-phase7-build` could not
   resolve the build dependency because network/DNS access to PyPI is
   unavailable in this environment; no artifact was written to the repository.

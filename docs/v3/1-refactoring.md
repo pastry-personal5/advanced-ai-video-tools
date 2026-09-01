@@ -3,7 +3,7 @@
 ## Status
 
 - Phase: 1
-- State: Proposed
+- State: In progress
 - Predecessor: V2 release completion
 - Successor: [Phase 2 — Crop Feature](2-crop.md)
 
@@ -40,7 +40,13 @@ or output contracts.
   tests.
 - `make check` and required supported-macOS checks pass.
 
+## Approval record
+
+The owner explicitly authorized v3 Phase 1 on 2026-09-01 after completion of
+v2 Phase 7. Crop and video-interpolation implementation remain gated behind
+this phase and are not authorized.
+
 ## Approval gates
 
-Approve the target module slices, public-compatibility policy, and measurable
-completion criteria before implementation.
+Before each implementation slice, record the selected modules, public-
+compatibility impact, and measurable completion criteria in this document.
