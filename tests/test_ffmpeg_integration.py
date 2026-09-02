@@ -21,7 +21,7 @@ from advanced_ai_video_tools.services.upscaling import UpscalingResult
 from advanced_ai_video_tools.storage.workspaces import WorkspaceManager
 from advanced_ai_video_tools.system.platform import PlatformInfo
 from advanced_ai_video_tools.system.processes import SubprocessRunner
-from advanced_ai_video_tools.video.commands import NormalizationSpec, build_concat_command, build_normalization_command
+from advanced_ai_video_tools.video.commands import NormalizationSpec, create_concat_command, create_normalization_command
 from advanced_ai_video_tools.video.compatibility import effective_frame_rate, frame_rates_equivalent
 from advanced_ai_video_tools.video.manifest import write_concat_manifest
 from advanced_ai_video_tools.video.probe import FFprobeClient
@@ -138,7 +138,7 @@ def test_quantized_sixteen_fps_prores_normalizes_concats_and_verifies(tmp_path: 
     workspace = manager.create()
     executor = MediaPreparationExecutor(manager, SubprocessRunner(), MergedOutputVerifier(prober), command_timeout_seconds=30)
 
-    result = executor.execute_in_workspace(job, ffmpeg, workspace)
+    result = executor.execute_preparation_in_workspace(job, ffmpeg, workspace)
 
     merged_video = result.merged_probe.primary_video
     assert result.normalization_count == 2
@@ -249,7 +249,7 @@ def test_normalize_pad_trim_silence_then_concat_once(tmp_path: Path) -> None:
     normalized = (tmp_path / "normalized-short.mkv", tmp_path / "normalized-silent.mkv", tmp_path / "director's-normalized-long.mkv")
     spec = NormalizationSpec(64, 36, Rational(1, 1), Rational(10, 1), BT709_PROFILE, "mono")
     for probe, output in zip(probes, normalized):
-        _run(build_normalization_command(ffmpeg, probe, output, spec))
+        _run(create_normalization_command(ffmpeg, probe, output, spec))
 
     for output in normalized:
         audio_end = _audio_packet_end(ffprobe, output)
@@ -257,7 +257,7 @@ def test_normalize_pad_trim_silence_then_concat_once(tmp_path: Path) -> None:
     manifest = tmp_path / "concat.ffconcat"
     merged_path = tmp_path / "merged.mkv"
     write_concat_manifest(manifest, normalized)
-    _run(build_concat_command(ffmpeg, manifest, merged_path, has_audio=True))
+    _run(create_concat_command(ffmpeg, manifest, merged_path, has_audio=True))
 
     merged = client.probe(merged_path)
     assert merged.primary_video is not None
@@ -293,7 +293,7 @@ def test_media_preparation_executor_runs_real_ffmpeg_and_cleans_success(tmp_path
     manager = WorkspaceManager(tmp_path / "jobs")
     executor = MediaPreparationExecutor(manager, SubprocessRunner(), MergedOutputVerifier(prober), command_timeout_seconds=30)
 
-    result = executor.execute(job, ffmpeg)
+    result = executor.execute_preparation(job, ffmpeg)
 
     assert result.normalization_count == 2
     assert len(result.process_results) == 3
@@ -329,8 +329,8 @@ def test_caller_owned_preparation_extracts_exact_rgb_frame_sequence(tmp_path: Pa
     preparation = MediaPreparationExecutor(manager, runner, MergedOutputVerifier(prober), command_timeout_seconds=30)
     extraction = FrameExtractionExecutor(manager, runner, command_timeout_seconds=30)
 
-    prepared = preparation.execute_in_workspace(job, ffmpeg, workspace)
-    extracted = extraction.execute(prepared, job, ffmpeg, workspace=workspace)
+    prepared = preparation.execute_preparation_in_workspace(job, ffmpeg, workspace)
+    extracted = extraction.execute_extraction(prepared, job, ffmpeg, workspace=workspace)
 
     assert prepared.merged_probe.path.is_file()
     assert extracted.frame_count == 8
@@ -369,10 +369,10 @@ def test_terminal_pipeline_encodes_verifies_atomically_replaces_and_cleans(tmp_p
     extraction = FrameExtractionExecutor(manager, runner, command_timeout_seconds=30)
     finalization = FinalizationExecutor(manager, runner, FinalOutputVerifier(prober), command_timeout_seconds=30)
 
-    prepared = preparation.execute_in_workspace(job, ffmpeg, workspace)
-    extracted = extraction.execute(prepared, job, ffmpeg, workspace=workspace)
+    prepared = preparation.execute_preparation_in_workspace(job, ffmpeg, workspace)
+    extracted = extraction.execute_extraction(prepared, job, ffmpeg, workspace=workspace)
     upscaled = UpscalingResult(extracted.frames_directory, extracted.frame_pattern, extracted.frame_count, extracted.frame_width, extracted.frame_height, None, True, extracted.audio_source_path, (), workspace.identifier)
-    result = finalization.execute(prepared, upscaled, job, toolchain, workspace=workspace)
+    result = finalization.execute_finalization(prepared, upscaled, job, toolchain, workspace=workspace)
 
     assert result.output_path == output
     assert result.output_probe.path == output
@@ -400,7 +400,7 @@ def test_full_pipeline_service_runs_concat_first_upscales_once_and_publishes(tmp
     states: list[JobState] = []
     events: list[ProgressEvent] = []
 
-    result = service.run(request, progress=events.append, state_changed=states.append)
+    result = service.execute_pipeline(request, progress=events.append, state_changed=states.append)
 
     assert states == [JobState.QUEUED, JobState.VALIDATING, JobState.RUNNING, JobState.COMPLETED]
     assert result.output_path == output

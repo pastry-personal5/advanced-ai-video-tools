@@ -59,7 +59,7 @@ def select_ai_scale(source_height: int, target_height: int) -> int | None:
     return 4
 
 
-def build_upscale_plan(job: JobPlan, toolchain: Toolchain, workspace: Path, *, input_directory: Path, frame_count: int, input_width: int, input_height: int) -> UpscalePlan:
+def create_upscale_plan(job: JobPlan, toolchain: Toolchain, workspace: Path, *, input_directory: Path, frame_count: int, input_width: int, input_height: int) -> UpscalePlan:
     """Validate the frozen job decision and create its directory-mode plan."""
 
     workspace_path = workspace.resolve(strict=False)
@@ -79,8 +79,8 @@ def build_upscale_plan(job: JobPlan, toolchain: Toolchain, workspace: Path, *, i
     return UpscalePlan(input_directory, workspace_path / "upscaled", toolchain.realesrgan.path, toolchain.model_directory, job.model_name, job.ai_scale, frame_count, input_width, input_height)
 
 
-def build_realesrgan_command(plan: UpscalePlan, tile_size: int) -> tuple[str, ...]:
-    """Build one explicit directory-mode invocation with safe v1 defaults."""
+def create_realesrgan_command(plan: UpscalePlan, tile_size: int) -> tuple[str, ...]:
+    """Create one explicit directory-mode invocation with safe v1 defaults."""
 
     if plan.scale not in SUPPORTED_SCALES:
         raise ValueError("a skipped upscale plan has no Real-ESRGAN command")

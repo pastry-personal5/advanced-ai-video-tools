@@ -133,7 +133,7 @@ def test_ready_plan_freezes_name_dimensions_rate_and_scale(tmp_path: Path) -> No
     source = _input(tmp_path)
     service = _service(tmp_path, {source: _probe(source)})
 
-    report = service.run(JobRequest((source,), tmp_path))
+    report = service.execute_preflight(JobRequest((source,), tmp_path))
 
     assert report.ready
     assert report.plan is not None
@@ -157,7 +157,7 @@ def test_preflight_preserves_queue_frozen_creation_identity(tmp_path: Path) -> N
     created = datetime(2026, 7, 4, 9, 8, 7, 654321, tzinfo=timezone.utc)
     basename = automatic_output_basename(created)
 
-    report = service.run(JobRequest((source,), tmp_path, created_at=created, generated_output_basename=basename))
+    report = service.execute_preflight(JobRequest((source,), tmp_path, created_at=created, generated_output_basename=basename))
 
     assert report.ready
     assert report.plan is not None
@@ -175,7 +175,7 @@ def test_frozen_generated_destination_that_appears_before_start_is_rejected(tmp_
     basename = automatic_output_basename(created)
     (tmp_path / basename).touch()
 
-    report = service.run(JobRequest((source,), tmp_path, created_at=created, generated_output_basename=basename))
+    report = service.execute_preflight(JobRequest((source,), tmp_path, created_at=created, generated_output_basename=basename))
 
     assert not report.ready
     assert report.plan is None
@@ -190,7 +190,7 @@ def test_preflight_reports_measured_validation_and_probe_progress(tmp_path: Path
     service = _service(tmp_path, {first: _probe(first), second: _probe(second)})
     events: list[ProgressEvent] = []
 
-    report = service.run(JobRequest((first, second), tmp_path), progress=events.append)
+    report = service.execute_preflight(JobRequest((first, second), tmp_path), progress=events.append)
 
     assert report.ready and report.plan is not None
     assert [(event.stage, event.completed, event.total) for event in events] == [
@@ -214,7 +214,7 @@ def test_nonpositive_target_height_is_a_validation_issue_not_an_exception(tmp_pa
     """Strict scale policy remains behind the user-facing request validator."""
 
     source = _input(tmp_path)
-    report = _service(tmp_path, {source: _probe(source)}).run(JobRequest((source,), tmp_path, target_height=0))
+    report = _service(tmp_path, {source: _probe(source)}).execute_preflight(JobRequest((source,), tmp_path, target_height=0))
 
     assert not report.ready
     assert any(issue.code is IssueCode.INVALID_OUTPUT and "Target height" in issue.message for issue in report.issues)
@@ -231,7 +231,7 @@ def test_hdr_and_rotation_are_hard_failures(tmp_path: Path, video: VideoStream, 
     """Unsupported image interpretation is rejected, never normalized silently."""
 
     source = _input(tmp_path)
-    report = _service(tmp_path, {source: _probe(source, video_streams=(video,))}).run(JobRequest((source,), tmp_path))
+    report = _service(tmp_path, {source: _probe(source, video_streams=(video,))}).execute_preflight(JobRequest((source,), tmp_path))
 
     assert not report.ready
     assert code in {issue.code for issue in report.issues}
@@ -244,7 +244,7 @@ def test_missing_transfer_and_primaries_are_accepted_without_defaults(tmp_path: 
     media = _probe(source, video_streams=(_video(color_transfer=None, color_primaries=None),))
     service = _service(tmp_path, {source: media})
 
-    report = service.run(JobRequest((source,), tmp_path))
+    report = service.execute_preflight(JobRequest((source,), tmp_path))
 
     assert report.ready and report.plan is not None
     assert report.plan.output_color_profile == ColorProfile(ColorMatrix.BT709, None, None)
@@ -257,7 +257,7 @@ def test_missing_matrix_or_range_is_rejected(tmp_path: Path, missing_field: str)
 
     source = _input(tmp_path)
     media = _probe(source, video_streams=(_video(**{missing_field: None}),))
-    report = _service(tmp_path, {source: media}).run(JobRequest((source,), tmp_path))
+    report = _service(tmp_path, {source: media}).execute_preflight(JobRequest((source,), tmp_path))
 
     assert not report.ready
     color_issue = next(issue for issue in report.issues if issue.code is IssueCode.AMBIGUOUS_COLOR)
@@ -272,7 +272,7 @@ def test_first_clip_smpte170m_matrix_is_preserved_as_output_profile(tmp_path: Pa
     smpte170m = _probe(source, video_streams=(_video(color_space="smpte170m"),))
     service = _service(tmp_path, {source: smpte170m})
 
-    report = service.run(JobRequest((source,), tmp_path))
+    report = service.execute_preflight(JobRequest((source,), tmp_path))
 
     assert report.ready and report.plan is not None
     assert report.plan.output_color_profile == ColorProfile(ColorMatrix.SMPTE170M, "bt709", "bt709")
@@ -287,7 +287,7 @@ def test_color_profile_different_from_first_clip_is_rejected(tmp_path: Path) -> 
     second = _input(tmp_path, "second.mov")
     probes = {first: _probe(first, video_streams=(_video(color_space="smpte170m"),)), second: _probe(second)}
 
-    report = _service(tmp_path, probes).run(JobRequest((first, second), tmp_path))
+    report = _service(tmp_path, probes).execute_preflight(JobRequest((first, second), tmp_path))
 
     assert not report.ready
     issue = next(issue for issue in report.issues if issue.code is IssueCode.UNSUPPORTED_COLOR)
@@ -304,13 +304,13 @@ def test_explicit_transfer_conflict_is_rejected_but_missing_value_is_ignored(tmp
     accepted_probes = {first: _probe(first), missing: _probe(missing, video_streams=(_video(color_transfer=None),))}
     accepted_service = _service(tmp_path, accepted_probes)
 
-    accepted = accepted_service.run(JobRequest((first, missing), tmp_path))
+    accepted = accepted_service.execute_preflight(JobRequest((first, missing), tmp_path))
     rejected_probes = {
         first: _probe(first, video_streams=(_video(color_transfer=None),)),
         conflicting: _probe(conflicting),
         conflicting_again: _probe(conflicting_again, video_streams=(_video(color_transfer="smpte170m"),)),
     }
-    rejected = _service(tmp_path, rejected_probes).run(JobRequest((first, conflicting, conflicting_again), tmp_path))
+    rejected = _service(tmp_path, rejected_probes).execute_preflight(JobRequest((first, conflicting, conflicting_again), tmp_path))
 
     assert accepted.ready and accepted.plan is not None
     assert not rejected.ready
@@ -322,7 +322,7 @@ def test_other_explicit_sdr_matrices_remain_unsupported(tmp_path: Path) -> None:
     """The design expansion is limited to SMPTE 170M rather than arbitrary matrices."""
 
     source = _input(tmp_path)
-    report = _service(tmp_path, {source: _probe(source, video_streams=(_video(color_space="fcc"),))}).run(JobRequest((source,), tmp_path))
+    report = _service(tmp_path, {source: _probe(source, video_streams=(_video(color_space="fcc"),))}).execute_preflight(JobRequest((source,), tmp_path))
 
     assert not report.ready
     assert any(issue.code is IssueCode.UNSUPPORTED_COLOR for issue in report.issues)
@@ -341,11 +341,11 @@ def test_secondary_streams_require_acknowledgement(tmp_path: Path) -> None:
     )
     service = _service(tmp_path, {source: media})
 
-    rejected = service.run(JobRequest((source,), tmp_path))
-    accepted = service.run(JobRequest((source,), tmp_path, acknowledge_dropped_streams=True))
+    rejected = service.execute_preflight(JobRequest((source,), tmp_path))
+    accepted = service.execute_preflight(JobRequest((source,), tmp_path, acknowledge_dropped_streams=True))
     rejected_issue = next(item for item in rejected.issues if item.code is IssueCode.STREAM_ACKNOWLEDGEMENT)
     assert rejected_issue.acknowledgement_key is not None
-    bound = service.run(JobRequest((source,), tmp_path, acknowledge_dropped_streams=True, acknowledged_stream_keys=(rejected_issue.acknowledgement_key,)))
+    bound = service.execute_preflight(JobRequest((source,), tmp_path, acknowledge_dropped_streams=True, acknowledged_stream_keys=(rejected_issue.acknowledgement_key,)))
 
     assert not rejected.ready
     assert accepted.ready
@@ -360,7 +360,7 @@ def test_secondary_streams_require_acknowledgement(tmp_path: Path) -> None:
     service.registry.release(bound.plan.output_path)
 
     changed_media = _probe(source, audio_streams=(audio, audio), other_streams=(OtherStream(3, "subtitle", "mov_text"),), chapter_count=2)
-    changed = _service(tmp_path, {source: changed_media}).run(JobRequest((source,), tmp_path, acknowledge_dropped_streams=True, acknowledged_stream_keys=(rejected_issue.acknowledgement_key,)))
+    changed = _service(tmp_path, {source: changed_media}).execute_preflight(JobRequest((source,), tmp_path, acknowledge_dropped_streams=True, acknowledged_stream_keys=(rejected_issue.acknowledgement_key,)))
     assert not changed.ready
     changed_issue = next(item for item in changed.issues if item.code is IssueCode.STREAM_ACKNOWLEDGEMENT)
     assert changed_issue.severity is IssueSeverity.ERROR
@@ -377,7 +377,7 @@ def test_vfr_uses_exact_average_rate_and_forces_normalization(tmp_path: Path) ->
     )
     service = _service(tmp_path, {source: _probe(source, video_streams=(video,))})
 
-    report = service.run(JobRequest((source,), tmp_path))
+    report = service.execute_preflight(JobRequest((source,), tmp_path))
 
     assert report.ready
     assert report.plan is not None
@@ -394,7 +394,7 @@ def test_quantized_sixteen_fps_is_recognized_as_cfr(tmp_path: Path) -> None:
     video = _video(real_frame_rate=Rational(16, 1), average_frame_rate=Rational(48600, 3037), time_base=Rational(1, 600))
     service = _service(tmp_path, {source: _probe(source, video_streams=(video,))})
 
-    report = service.run(JobRequest((source,), tmp_path))
+    report = service.execute_preflight(JobRequest((source,), tmp_path))
 
     assert report.ready and report.plan is not None
     assert report.plan.output_frame_rate == Rational(16, 1)
@@ -407,7 +407,7 @@ def test_disk_estimate_requires_twenty_percent_margin(tmp_path: Path) -> None:
     """Insufficient cache volume capacity blocks work before extraction."""
 
     source = _input(tmp_path)
-    report = _service(tmp_path, {source: _probe(source)}, free_bytes=1).run(JobRequest((source,), tmp_path))
+    report = _service(tmp_path, {source: _probe(source)}, free_bytes=1).execute_preflight(JobRequest((source,), tmp_path))
 
     assert not report.ready
     assert IssueCode.INSUFFICIENT_DISK in {issue.code for issue in report.issues}
@@ -417,7 +417,7 @@ def test_explicit_output_cannot_alias_an_input(tmp_path: Path) -> None:
     """Overwrite mode never permits destruction of a source clip."""
 
     source = _input(tmp_path)
-    report = _service(tmp_path, {source: _probe(source)}).run(JobRequest((source,), tmp_path, explicit_output_path=source))
+    report = _service(tmp_path, {source: _probe(source)}).execute_preflight(JobRequest((source,), tmp_path, explicit_output_path=source))
 
     assert not report.ready
     assert IssueCode.INVALID_OUTPUT in {issue.code for issue in report.issues}

@@ -9,7 +9,7 @@ import pytest
 
 from advanced_ai_video_tools.core.models import Rational
 from advanced_ai_video_tools.system.processes import ProcessOutputLimitError
-from advanced_ai_video_tools.video.probe import FFprobeClient, ProbeError, build_ffprobe_command, parse_probe_document
+from advanced_ai_video_tools.video.probe import FFprobeClient, ProbeError, create_ffprobe_command, parse_probe_document
 
 
 def test_probe_parser_preserves_exact_rates_and_stream_inventory() -> None:
@@ -146,7 +146,7 @@ def test_ffprobe_client_logs_the_complete_argument_vector_before_launch(tmp_path
 
     FFprobeClient(executable, runner=completed).probe(media)
 
-    assert logged == [build_ffprobe_command(executable, media)]
+    assert logged == [create_ffprobe_command(executable, media)]
 
 
 def test_ffprobe_client_rejects_oversized_output(tmp_path: Path) -> None:

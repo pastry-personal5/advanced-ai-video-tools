@@ -93,8 +93,8 @@ def _validate_video_policy(probe: MediaProbe, *, expected_profile: ColorProfile 
     return profile
 
 
-def build_normalization_command(ffmpeg: Path, probe: MediaProbe, output: Path, spec: NormalizationSpec) -> tuple[str, ...]:
-    """Build one shell-free FFV1/PCM normalization invocation."""
+def create_normalization_command(ffmpeg: Path, probe: MediaProbe, output: Path, spec: NormalizationSpec) -> tuple[str, ...]:
+    """Create one shell-free FFV1/PCM normalization invocation."""
 
     _validate_video_policy(probe, expected_profile=spec.color_profile)
     video = probe.primary_video
@@ -103,7 +103,7 @@ def build_normalization_command(ffmpeg: Path, probe: MediaProbe, output: Path, s
     if output.resolve(strict=False) == probe.path.resolve(strict=False):
         raise ValueError("normalization output cannot overwrite its source input")
     duration = _duration(probe)
-    duration_text = _decimal_text(duration)
+    duration_string = _decimal_text(duration)
     input_range = "pc" if video.color_range in {"pc", "jpeg"} else "tv"
     matrix = spec.color_profile.matrix.value
     transfer = spec.color_profile.transfer
@@ -118,13 +118,13 @@ def build_normalization_command(ffmpeg: Path, probe: MediaProbe, output: Path, s
     audio_input_index = 0
     if spec.audio_layout is not None and probe.primary_audio is None:
         audio_input_index = 1
-        arguments.extend(["-f", "lavfi", "-t", duration_text, "-i", f"anullsrc=channel_layout={spec.audio_layout}:sample_rate={spec.audio_sample_rate}"])
-    video_filter = f"[0:{video.index}]scale=w={spec.width}:h={spec.height}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int:in_color_matrix={matrix}:out_color_matrix={matrix}:in_range={input_range}:out_range=tv,setsar={spec.sample_aspect_ratio},pad=width={spec.width}:height={spec.height}:x=(ow-iw)/2:y=(oh-ih)/2:color=black,trim=duration={duration_text},setpts=PTS-STARTPTS,fps=fps={spec.frame_rate}:round=near,format=yuv444p10le,setparams={':'.join(setparams)}[v]"
+        arguments.extend(["-f", "lavfi", "-t", duration_string, "-i", f"anullsrc=channel_layout={spec.audio_layout}:sample_rate={spec.audio_sample_rate}"])
+    video_filter = f"[0:{video.index}]scale=w={spec.width}:h={spec.height}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos+accurate_rnd+full_chroma_int:in_color_matrix={matrix}:out_color_matrix={matrix}:in_range={input_range}:out_range=tv,setsar={spec.sample_aspect_ratio},pad=width={spec.width}:height={spec.height}:x=(ow-iw)/2:y=(oh-ih)/2:color=black,trim=duration={duration_string},setpts=PTS-STARTPTS,fps=fps={spec.frame_rate}:round=near,format=yuv444p10le,setparams={':'.join(setparams)}[v]"
     filters = [video_filter]
     if spec.audio_layout is not None:
         audio = probe.primary_audio
         audio_label = f"[0:{audio.index}]" if audio is not None else f"[{audio_input_index}:a:0]"
-        filters.append(f"{audio_label}aresample={spec.audio_sample_rate}:async=0:first_pts=0,aformat=sample_rates={spec.audio_sample_rate}:channel_layouts={spec.audio_layout},apad,atrim=duration={duration_text},asetpts=PTS-STARTPTS[a]")
+        filters.append(f"{audio_label}aresample={spec.audio_sample_rate}:async=0:first_pts=0,aformat=sample_rates={spec.audio_sample_rate}:channel_layouts={spec.audio_layout},apad,atrim=duration={duration_string},asetpts=PTS-STARTPTS[a]")
     arguments.extend(["-filter_complex", ";".join(filters), "-map", "[v]"])
     if spec.audio_layout is not None:
         arguments.extend(["-map", "[a]"])
@@ -138,12 +138,12 @@ def build_normalization_command(ffmpeg: Path, probe: MediaProbe, output: Path, s
         arguments.append("-an")
     else:
         arguments.extend(["-c:a", "pcm_s24le", "-ar:a", str(spec.audio_sample_rate), "-channel_layout:a", spec.audio_layout])
-    arguments.extend(["-t", duration_text, "-avoid_negative_ts", "make_zero", "-f", "matroska", str(output)])
+    arguments.extend(["-t", duration_string, "-avoid_negative_ts", "make_zero", "-f", "matroska", str(output)])
     return tuple(arguments)
 
 
-def build_concat_command(ffmpeg: Path, manifest: Path, output: Path, *, has_audio: bool) -> tuple[str, ...]:
-    """Build one concat-demuxer stream-copy invocation with explicit maps."""
+def create_concat_command(ffmpeg: Path, manifest: Path, output: Path, *, has_audio: bool) -> tuple[str, ...]:
+    """Create one concat-demuxer stream-copy invocation with explicit maps."""
 
     arguments = [str(ffmpeg), "-hide_banner", "-nostdin", "-y", "-noautorotate", "-f", "concat", "-safe", "0", "-i", str(manifest), "-map", "0:v:0"]
     if has_audio:
@@ -152,8 +152,8 @@ def build_concat_command(ffmpeg: Path, manifest: Path, output: Path, *, has_audi
     return tuple(arguments)
 
 
-def build_media_preparation_plan(job: JobPlan, ffmpeg: Path, workspace: Path) -> MediaPreparationPlan:
-    """Plan normalize-all-or-none and then one concat operation."""
+def create_media_preparation_plan(job: JobPlan, ffmpeg: Path, workspace: Path) -> MediaPreparationPlan:
+    """Create a normalize-all-or-none plan followed by one concat operation."""
 
     if not job.probes:
         raise ValueError("a preparation plan requires at least one probe")
@@ -178,10 +178,10 @@ def build_media_preparation_plan(job: JobPlan, ffmpeg: Path, workspace: Path) ->
         normalized_directory = workspace / "normalized"
         spec = NormalizationSpec(first_video.width, first_video.height, first_video.sample_aspect_ratio, job.output_frame_rate, job.output_color_profile, job.output_audio_layout)
         concat_inputs = tuple(normalized_directory / f"clip-{index:06d}.mkv" for index in range(1, len(job.probes) + 1))
-        normalization_commands.extend(build_normalization_command(ffmpeg, probe, output, spec) for probe, output in zip(job.probes, concat_inputs))
+        normalization_commands.extend(create_normalization_command(ffmpeg, probe, output, spec) for probe, output in zip(job.probes, concat_inputs))
     else:
         concat_inputs = tuple(probe.path for probe in job.probes)
-    concat_command = build_concat_command(ffmpeg, manifest, merged, has_audio=job.output_audio_layout is not None)
+    concat_command = create_concat_command(ffmpeg, manifest, merged, has_audio=job.output_audio_layout is not None)
     return MediaPreparationPlan(compatibility, tuple(normalization_commands), concat_inputs, manifest, concat_command, merged)
 
 
@@ -200,8 +200,8 @@ def expected_frame_count(probe: MediaProbe, frame_rate: Rational) -> int:
     return max(1, int(exact_count.to_integral_value(rounding=ROUND_HALF_UP)))
 
 
-def build_frame_extraction_command(ffmpeg: Path, merged: MediaProbe, frames_directory: Path, frame_rate: Rational) -> tuple[str, ...]:
-    """Build one shell-free limited SDR YUV to full-range RGB PNG decode."""
+def create_frame_extraction_command(ffmpeg: Path, merged: MediaProbe, frames_directory: Path, frame_rate: Rational) -> tuple[str, ...]:
+    """Create one shell-free limited SDR YUV to full-range RGB PNG decode."""
 
     if not frame_rate.positive:
         raise ValueError("frame extraction rate must be positive")
@@ -219,13 +219,13 @@ def build_frame_extraction_command(ffmpeg: Path, merged: MediaProbe, frames_dire
     return (str(ffmpeg), "-hide_banner", "-nostdin", "-y", "-noautorotate", "-i", str(merged.path), "-map", f"0:{video.index}", "-an", "-sn", "-dn", "-vf", video_filter, "-c:v", "png", "-pix_fmt", "rgb24", "-compression_level", "6", "-fps_mode", "passthrough", "-start_number", "1", "-f", "image2", str(frame_pattern))
 
 
-def build_frame_extraction_plan(job: JobPlan, ffmpeg: Path, merged: MediaProbe, workspace: Path) -> FrameExtractionPlan:
-    """Plan deterministic frame extraction while retaining merged audio in place."""
+def create_frame_extraction_plan(job: JobPlan, ffmpeg: Path, merged: MediaProbe, workspace: Path) -> FrameExtractionPlan:
+    """Create a deterministic extraction plan that retains merged audio."""
 
     if merged.path.resolve(strict=False).parent != workspace.resolve(strict=False):
         raise ValueError("merged media must be a direct child of the owned workspace")
     frames_directory = workspace / "frames"
-    command = build_frame_extraction_command(ffmpeg, merged, frames_directory, job.output_frame_rate)
+    command = create_frame_extraction_command(ffmpeg, merged, frames_directory, job.output_frame_rate)
     video = merged.primary_video
     if video is None or color_profile(video) != job.output_color_profile:
         raise ValueError("merged color profile differs from the frozen job profile")

@@ -86,7 +86,7 @@ def test_upscale_success_uses_one_directory_invocation_and_retains_audio(tmp_pat
     runner = RecordingUpscaleRunner()
     events: list[ProgressEvent] = []
 
-    result = UpscalingExecutor(manager, runner, command_timeout_seconds=5).execute(extracted, job, tools, workspace=workspace, progress=events.append)
+    result = UpscalingExecutor(manager, runner, command_timeout_seconds=5).execute_upscaling(extracted, job, tools, workspace=workspace, progress=events.append)
 
     assert not result.skipped
     assert result.scale == 2
@@ -125,7 +125,7 @@ def test_upscale_skip_reuses_verified_extracted_frames_without_process(tmp_path:
     manager, workspace, extracted, job, tools = _fixture(tmp_path, scale=None, output_height=36)
     runner = RecordingUpscaleRunner()
 
-    result = UpscalingExecutor(manager, runner).execute(extracted, job, tools, workspace=workspace)
+    result = UpscalingExecutor(manager, runner).execute_upscaling(extracted, job, tools, workspace=workspace)
 
     assert result.skipped
     assert result.scale is None
@@ -143,7 +143,7 @@ def test_pre_cancelled_skip_is_still_a_cancelled_stage(tmp_path: Path) -> None:
     token.cancel()
 
     with pytest.raises(UpscalingCancelled, match="before launch"):
-        UpscalingExecutor(manager, RecordingUpscaleRunner()).execute(extracted, job, tools, workspace=workspace, cancellation=token)
+        UpscalingExecutor(manager, RecordingUpscaleRunner()).execute_upscaling(extracted, job, tools, workspace=workspace, cancellation=token)
 
 
 def test_vulkan_memory_failure_retries_after_resetting_only_output(tmp_path: Path) -> None:
@@ -152,7 +152,7 @@ def test_vulkan_memory_failure_retries_after_resetting_only_output(tmp_path: Pat
     manager, workspace, extracted, job, tools = _fixture(tmp_path)
     runner = RecordingUpscaleRunner(("memory", "success"))
 
-    result = UpscalingExecutor(manager, runner).execute(extracted, job, tools, workspace=workspace)
+    result = UpscalingExecutor(manager, runner).execute_upscaling(extracted, job, tools, workspace=workspace)
 
     assert [attempt.tile_size for attempt in result.attempts] == [0, 512]
     assert [command[command.index("-t") + 1] for command in runner.commands] == ["0", "512"]
@@ -167,10 +167,11 @@ def test_non_memory_failure_does_not_retry_and_preserves_diagnostics(tmp_path: P
     runner = RecordingUpscaleRunner(("failure",))
 
     with pytest.raises(UpscalingFailed) as captured:
-        UpscalingExecutor(manager, runner).execute(extracted, job, tools, workspace=workspace)
+        UpscalingExecutor(manager, runner).execute_upscaling(extracted, job, tools, workspace=workspace)
 
     assert len(runner.commands) == 1
     assert captured.value.diagnostic_tail == "failed to load model"
+    assert isinstance(captured.value.__cause__, ProcessExecutionError)
     assert len(captured.value.attempts) == 1
     assert workspace.path.is_dir()
 
@@ -182,7 +183,7 @@ def test_memory_retries_are_bounded_and_record_every_attempt(tmp_path: Path) -> 
     runner = RecordingUpscaleRunner(("memory",) * 6)
 
     with pytest.raises(UpscalingFailed) as captured:
-        UpscalingExecutor(manager, runner).execute(extracted, job, tools, workspace=workspace)
+        UpscalingExecutor(manager, runner).execute_upscaling(extracted, job, tools, workspace=workspace)
 
     assert [attempt.tile_size for attempt in captured.value.attempts] == [0, *MEMORY_RETRY_TILE_SIZES]
     assert len(runner.commands) == 6
@@ -195,7 +196,7 @@ def test_upscale_output_must_match_the_input_frame_set_exactly(tmp_path: Path) -
     runner = RecordingUpscaleRunner(("short",))
 
     with pytest.raises(UpscalingFailed, match="frame count differs"):
-        UpscalingExecutor(manager, runner).execute(extracted, job, tools, workspace=workspace)
+        UpscalingExecutor(manager, runner).execute_upscaling(extracted, job, tools, workspace=workspace)
 
     assert len(runner.commands) == 1
 
@@ -207,7 +208,7 @@ def test_upscale_cancellation_preserves_caller_owned_workspace(tmp_path: Path) -
     runner = RecordingUpscaleRunner(("cancel",))
 
     with pytest.raises(UpscalingCancelled) as captured:
-        UpscalingExecutor(manager, runner).execute(extracted, job, tools, workspace=workspace)
+        UpscalingExecutor(manager, runner).execute_upscaling(extracted, job, tools, workspace=workspace)
 
     assert captured.value.workspace_path == workspace.path
     assert workspace.path.is_dir()
@@ -245,7 +246,7 @@ for source in source_directory.glob('frame-*.png'):
     executable.chmod(0o755)
     tools = Toolchain(tools.ffmpeg, tools.ffprobe, ToolInfo(executable, "fake"), tools.model_directory)
 
-    result = UpscalingExecutor(manager, SubprocessRunner(), command_timeout_seconds=5).execute(extracted, job, tools, workspace=workspace)
+    result = UpscalingExecutor(manager, SubprocessRunner(), command_timeout_seconds=5).execute_upscaling(extracted, job, tools, workspace=workspace)
 
     assert result.frame_count == 3
     assert (result.frame_width, result.frame_height) == (128, 72)

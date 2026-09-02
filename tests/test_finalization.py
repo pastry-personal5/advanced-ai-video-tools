@@ -91,7 +91,7 @@ def test_success_verifies_publishes_replaces_and_cleans_workspace(tmp_path: Path
     events: list[ProgressEvent] = []
     executor = FinalizationExecutor(manager, runner, FinalOutputVerifier(FinalProbe()), command_timeout_seconds=5)
 
-    result = executor.execute(prepared, upscaled, job, toolchain, workspace=workspace, progress=events.append)
+    result = executor.execute_finalization(prepared, upscaled, job, toolchain, workspace=workspace, progress=events.append)
 
     assert result.output_path == job.output_path
     assert result.output_probe.path == job.output_path
@@ -107,7 +107,7 @@ def test_final_verifier_accepts_rate_rounding_below_one_timestamp_tick(tmp_path:
     manager, workspace, prepared, upscaled, job, toolchain = _inputs(tmp_path)
     executor = FinalizationExecutor(manager, FinalRunner(), FinalOutputVerifier(FinalProbe(rate=Rational(10001, 1000), time_base=Rational(1, 1000))), command_timeout_seconds=5)
 
-    result = executor.execute(prepared, upscaled, job, toolchain, workspace=workspace)
+    result = executor.execute_finalization(prepared, upscaled, job, toolchain, workspace=workspace)
 
     assert result.output_path == job.output_path
     assert not workspace.path.exists()
@@ -121,10 +121,11 @@ def test_encode_failure_preserves_old_output_and_workspace_but_discards_partial(
     executor = FinalizationExecutor(manager, FinalRunner(fail=True), FinalOutputVerifier(FinalProbe()), command_timeout_seconds=5)
 
     with pytest.raises(FinalizationFailed) as captured:
-        executor.execute(prepared, upscaled, job, toolchain, workspace=workspace)
+        executor.execute_finalization(prepared, upscaled, job, toolchain, workspace=workspace)
 
     assert captured.value.stage is PipelineStage.ENCODE
     assert captured.value.diagnostic_tail == "synthetic final encode failure"
+    assert isinstance(captured.value.__cause__, ProcessExecutionError)
     assert job.output_path.read_bytes() == b"old output"
     assert workspace.path.is_dir()
     assert not tuple(tmp_path.glob(".*.partial.mp4"))
@@ -138,7 +139,7 @@ def test_verification_failure_preserves_destination_and_diagnostic_workspace(tmp
     executor = FinalizationExecutor(manager, FinalRunner(), FinalOutputVerifier(FinalProbe(width=32)), command_timeout_seconds=5)
 
     with pytest.raises(FinalizationFailed, match="dimensions differ") as captured:
-        executor.execute(prepared, upscaled, job, toolchain, workspace=workspace)
+        executor.execute_finalization(prepared, upscaled, job, toolchain, workspace=workspace)
 
     assert captured.value.stage is PipelineStage.VERIFY
     assert job.output_path.read_bytes() == b"old output"
@@ -153,7 +154,7 @@ def test_final_verification_failure_reports_exact_frame_timing_operands(tmp_path
     executor = FinalizationExecutor(manager, FinalRunner(), FinalOutputVerifier(FinalProbe(rate=Rational(12, 1), time_base=Rational(1, 1000))), command_timeout_seconds=5)
 
     with pytest.raises(FinalizationFailed) as captured:
-        executor.execute(prepared, upscaled, job, toolchain, workspace=workspace)
+        executor.execute_finalization(prepared, upscaled, job, toolchain, workspace=workspace)
 
     message = str(captured.value)
     assert "final video frame timing mismatch" in message
@@ -172,7 +173,7 @@ def test_cancellation_discards_partial_and_cleans_owned_workspace(tmp_path: Path
     executor = FinalizationExecutor(manager, FinalRunner(cancel=True), FinalOutputVerifier(FinalProbe()), command_timeout_seconds=5)
 
     with pytest.raises(FinalizationCancelled, match="workspace cleaned") as captured:
-        executor.execute(prepared, upscaled, job, toolchain, workspace=workspace)
+        executor.execute_finalization(prepared, upscaled, job, toolchain, workspace=workspace)
 
     assert captured.value.stage is PipelineStage.ENCODE
     assert captured.value.workspace_path == workspace.path
@@ -189,7 +190,7 @@ def test_no_clobber_modes_reject_a_publication_race(tmp_path: Path, generated: b
     executor = FinalizationExecutor(manager, FinalRunner(), FinalOutputVerifier(FinalProbe(race_destination=job.output_path)), command_timeout_seconds=5)
 
     with pytest.raises(FinalizationFailed, match="appeared") as captured:
-        executor.execute(prepared, upscaled, job, toolchain, workspace=workspace)
+        executor.execute_finalization(prepared, upscaled, job, toolchain, workspace=workspace)
 
     assert captured.value.stage is PipelineStage.PUBLISH
     assert job.output_path.read_bytes() == b"racing winner"

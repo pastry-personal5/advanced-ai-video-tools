@@ -81,7 +81,7 @@ def test_executor_runs_normalization_then_one_concat_and_cleans_success(tmp_path
     executor, manager = _executor(tmp_path, runner)
     events: list[ProgressEvent] = []
 
-    result = executor.execute(_job(), Path("ffmpeg"), progress=events.append)
+    result = executor.execute_preparation(_job(), Path("ffmpeg"), progress=events.append)
 
     assert result.normalization_count == 2
     assert len(result.process_results) == 3
@@ -101,7 +101,7 @@ def test_composable_executor_retains_verified_merged_media_for_caller(tmp_path: 
     workspace = manager.create()
     events: list[ProgressEvent] = []
 
-    result = executor.execute_in_workspace(_job(), Path("ffmpeg"), workspace, progress=events.append)
+    result = executor.execute_preparation_in_workspace(_job(), Path("ffmpeg"), workspace, progress=events.append)
 
     assert result.workspace_identifier == workspace.identifier
     assert result.merged_probe.path == workspace.path / "merged.mkv"
@@ -118,12 +118,13 @@ def test_process_failure_retains_workspace_and_stops_before_concat(tmp_path: Pat
     executor, _manager = _executor(tmp_path, runner)
 
     with pytest.raises(PreparationFailed) as captured:
-        executor.execute(_job(), Path("ffmpeg"))
+        executor.execute_preparation(_job(), Path("ffmpeg"))
 
     assert captured.value.stage is PipelineStage.NORMALIZE
     assert captured.value.workspace_path.is_dir()
     assert (captured.value.workspace_path / ".ai-video-tools-owned").is_file()
     assert captured.value.diagnostic_tail == "synthetic failure"
+    assert isinstance(captured.value.__cause__, ProcessExecutionError)
     assert len(runner.commands) == 2
 
 
@@ -134,7 +135,7 @@ def test_cancellation_cleans_workspace_after_process_termination(tmp_path: Path)
     executor, manager = _executor(tmp_path, runner)
 
     with pytest.raises(PreparationCancelled, match="workspace cleaned"):
-        executor.execute(_job(), Path("ffmpeg"), CancellationToken())
+        executor.execute_preparation(_job(), Path("ffmpeg"), CancellationToken())
 
     assert not any(manager.root.iterdir())
 
@@ -147,7 +148,7 @@ def test_composable_cancellation_leaves_cleanup_to_caller(tmp_path: Path) -> Non
     workspace = manager.create()
 
     with pytest.raises(PreparationCancelled) as captured:
-        executor.execute_in_workspace(_job(), Path("ffmpeg"), workspace, CancellationToken())
+        executor.execute_preparation_in_workspace(_job(), Path("ffmpeg"), workspace, CancellationToken())
 
     assert captured.value.workspace_path == workspace.path
     assert workspace.path.is_dir()
@@ -161,7 +162,7 @@ def test_verification_failure_retains_workspace(tmp_path: Path) -> None:
     executor, _manager = _executor(tmp_path, runner, merged_width=32)
 
     with pytest.raises(PreparationFailed) as captured:
-        executor.execute(_job(), Path("ffmpeg"))
+        executor.execute_preparation(_job(), Path("ffmpeg"))
 
     assert captured.value.stage is PipelineStage.VERIFY
     assert captured.value.workspace_path.is_dir()

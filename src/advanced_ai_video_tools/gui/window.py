@@ -375,7 +375,7 @@ class MainWindow(QMainWindow):
         self._append_global_message("Application started.")
         self._append_global_message("Add clips in order they should be concatenated.")
         if submission is not None:
-            self.editor.request_ready.connect(submission.start)
+            self.editor.request_ready.connect(submission.begin_submission)
             submission.busy_changed.connect(self.editor.set_busy)
             submission.status_changed.connect(self._append_global_message)
             submission.queued.connect(lambda job_id: self._append_job_message(job_id, "Job queued."))

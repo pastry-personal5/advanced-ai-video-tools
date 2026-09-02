@@ -1,11 +1,11 @@
-# V3 Phase 2 — Crop Feature
+# V3 Phase 3 — Crop Feature
 
 ## Status
 
-- Phase: 2
+- Phase: 3
 - State: Proposed
 - Predecessor: [Phase 1 — Refactoring](1-refactoring.md)
-- Successor: [Phase 3 — Video Interpolation](3-video-interpolation.md)
+- Successor: [Phase 4 — Video Interpolation](4-video-interpolation.md)
 
 ## Objective
 

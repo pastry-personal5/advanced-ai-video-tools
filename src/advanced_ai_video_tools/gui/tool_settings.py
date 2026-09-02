@@ -14,6 +14,7 @@ from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
 from advanced_ai_video_tools.core.models import ToolOverrides, Toolchain
+from advanced_ai_video_tools.gui.worker_lifecycle import connect_completion_cleanup, shutdown_worker_thread
 from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
 from advanced_ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
 
@@ -62,7 +63,7 @@ class ToolSettingsValidator(QObject):
 
         return self._thread is not None
 
-    def start(self, overrides: ToolOverrides) -> bool:
+    def begin_validation(self, overrides: ToolOverrides) -> bool:
         """Validate one immutable override set without blocking Qt."""
 
         if self.busy:
@@ -73,12 +74,8 @@ class ToolSettingsValidator(QObject):
         thread.started.connect(worker.run)
         worker.succeeded.connect(self._forward_success, Qt.ConnectionType.QueuedConnection)
         worker.failed.connect(self._forward_failure, Qt.ConnectionType.QueuedConnection)
-        worker.succeeded.connect(thread.quit, Qt.ConnectionType.DirectConnection)
-        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
-        worker.succeeded.connect(worker.deleteLater)
-        worker.failed.connect(worker.deleteLater)
+        connect_completion_cleanup(thread, worker, worker.succeeded, worker.failed)
         thread.finished.connect(self._thread_finished)
-        thread.finished.connect(thread.deleteLater)
         self._thread = thread
         self._worker = worker
         self.busy_changed.emit(True)
@@ -89,9 +86,7 @@ class ToolSettingsValidator(QObject):
         """Wait for bounded validation before destroying its Qt objects."""
 
         thread = self._thread
-        if thread is not None and thread.isRunning():
-            thread.quit()
-            thread.wait()
+        shutdown_worker_thread(thread)
         self._thread = None
         self._worker = None
 
@@ -220,17 +215,17 @@ class ToolSettingsDialog(QDialog):
     @Slot()
     def _validate(self) -> None:
         overrides = self.overrides()
-        if not self._validator.start(overrides):
+        if not self._validator.begin_validation(overrides):
             self.status.setText("Another tool validation is already running.")
             return
         self.status.setText("Validating executables, model files, and Vulkan inference…")
 
     @Slot(object, object)
-    def _validation_succeeded(self, overrides_value: object, toolchain_value: object) -> None:
-        if not isinstance(overrides_value, ToolOverrides) or not isinstance(toolchain_value, Toolchain):
+    def _validation_succeeded(self, tool_overrides: object, resolved_toolchain: object) -> None:
+        if not isinstance(tool_overrides, ToolOverrides) or not isinstance(resolved_toolchain, Toolchain):
             self.status.setText("Tool validation returned an invalid result.")
             return
-        updated = replace(self._settings, tools=overrides_value)
+        updated = replace(self._settings, tools=tool_overrides)
         try:
             self._settings_store.save(updated)
         except SettingsError as error:
@@ -238,13 +233,13 @@ class ToolSettingsDialog(QDialog):
             self.status.setText(f"Tools passed validation, but settings could not be saved: {error}")
             return
         self._settings = updated
-        self.status.setText("Validated and saved. Resolved tools: " f"FFmpeg {toolchain_value.ffmpeg.path}; FFprobe {toolchain_value.ffprobe.path}; " f"Real-ESRGAN {toolchain_value.realesrgan.path}; models {toolchain_value.model_directory}.")
+        self.status.setText("Validated and saved. Resolved tools: " f"FFmpeg {resolved_toolchain.ffmpeg.path}; FFprobe {resolved_toolchain.ffprobe.path}; " f"Real-ESRGAN {resolved_toolchain.realesrgan.path}; models {resolved_toolchain.model_directory}.")
         self.settings_saved.emit(updated)
         self.accept()
 
     @Slot(object, str)
-    def _validation_failed(self, overrides_value: object, message: str) -> None:
-        if isinstance(overrides_value, ToolOverrides):
+    def _validation_failed(self, tool_overrides: object, message: str) -> None:
+        if isinstance(tool_overrides, ToolOverrides):
             self.status.setText(f"Validation failed: {message}")
 
     @Slot(bool)

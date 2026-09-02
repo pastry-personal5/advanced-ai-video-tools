@@ -121,43 +121,43 @@ class JobSubmissionController(QObject):
         self._dialog_parent = parent
 
     @Slot(object)
-    def apply_settings(self, value: object) -> None:
+    def apply_settings(self, settings_snapshot: object) -> None:
         """Adopt persisted preferences for requests submitted in the future."""
 
-        if isinstance(value, ApplicationSettings):
-            self._settings = value
+        if isinstance(settings_snapshot, ApplicationSettings):
+            self._settings = settings_snapshot
 
     @Slot(object)
-    def start(self, value: object) -> None:
+    def begin_submission(self, job_request: object) -> None:
         """Begin asynchronous preflight for one frozen request."""
 
-        if not isinstance(value, JobRequest):
+        if not isinstance(job_request, JobRequest):
             self.status_changed.emit("Could not create a typed processing request.")
             return
-        if not self._preview.start(value):
+        if not self._preview.begin_preview(job_request):
             self.status_changed.emit("A preflight review is already running.")
             return
         self.status_changed.emit("Validating tools and probing input clips…")
 
     @Slot(object, object)
-    def _preflight_finished(self, request_value: object, report_value: object) -> None:
-        if not isinstance(request_value, JobRequest) or not isinstance(report_value, PreflightReport):
+    def _preflight_finished(self, job_request: object, preflight_report: object) -> None:
+        if not isinstance(job_request, JobRequest) or not isinstance(preflight_report, PreflightReport):
             self.status_changed.emit("Preflight returned an invalid result.")
             return
-        decision = self._decision_provider(self._dialog_parent, report_value)
+        decision = self._decision_provider(self._dialog_parent, preflight_report)
         if not decision.accepted:
             self.status_changed.emit("Job was not added to the queue.")
             return
-        stream_ack_required = any(issue.severity is IssueSeverity.ERROR and issue.code is IssueCode.STREAM_ACKNOWLEDGEMENT for issue in report_value.issues)
-        unrelated_errors = any(issue.severity is IssueSeverity.ERROR and issue.code is not IssueCode.STREAM_ACKNOWLEDGEMENT for issue in report_value.issues) or (report_value.plan is None and not stream_ack_required)
+        stream_ack_required = any(issue.severity is IssueSeverity.ERROR and issue.code is IssueCode.STREAM_ACKNOWLEDGEMENT for issue in preflight_report.issues)
+        unrelated_errors = any(issue.severity is IssueSeverity.ERROR and issue.code is not IssueCode.STREAM_ACKNOWLEDGEMENT for issue in preflight_report.issues) or (preflight_report.plan is None and not stream_ack_required)
         if unrelated_errors:
             self.status_changed.emit("Resolve the blocking preflight errors before queuing.")
             return
         if stream_ack_required and not decision.acknowledge_dropped_streams:
             self.status_changed.emit("Explicit dropped-stream acknowledgement is required.")
             return
-        acknowledgement_keys = tuple(issue.acknowledgement_key for issue in report_value.issues if issue.code is IssueCode.STREAM_ACKNOWLEDGEMENT and issue.acknowledgement_key is not None)
-        request = replace(request_value, acknowledge_dropped_streams=stream_ack_required, acknowledged_stream_keys=acknowledgement_keys)
+        acknowledgement_keys = tuple(issue.acknowledgement_key for issue in preflight_report.issues if issue.code is IssueCode.STREAM_ACKNOWLEDGEMENT and issue.acknowledgement_key is not None)
+        request = replace(job_request, acknowledge_dropped_streams=stream_ack_required, acknowledged_stream_keys=acknowledgement_keys)
         try:
             job_id = self._queue.submit(request)
         except (QueueError, ValueError) as error:

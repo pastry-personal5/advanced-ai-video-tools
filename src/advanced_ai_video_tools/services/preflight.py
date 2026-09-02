@@ -22,11 +22,11 @@ from advanced_ai_video_tools.core.models import (
     PipelineStage,
     PreflightIssue,
     PreflightReport,
-    ProgressEvent,
     Rational,
     Toolchain,
     VideoStream,
 )
+from advanced_ai_video_tools.services.progress import ProgressCallback, ProgressEmitter
 from advanced_ai_video_tools.storage.naming import OutputCollisionError, OutputPathRegistry, automatic_output_basename_matches
 from advanced_ai_video_tools.storage.paths import job_cache_directory
 from advanced_ai_video_tools.system.platform import PlatformInfo, platform_error
@@ -40,7 +40,6 @@ Clock = Callable[[], datetime]
 PlatformProvider = Callable[[], PlatformInfo]
 ProberFactory = Callable[[Toolchain], MediaProber]
 FreeSpaceProvider = Callable[[Path], int]
-ProgressCallback = Callable[[ProgressEvent], None]
 
 
 def _local_now() -> datetime:
@@ -152,12 +151,7 @@ class PreflightService:
 
         return self._registry
 
-    @staticmethod
-    def _emit(callback: ProgressCallback | None, stage: PipelineStage, completed: int, total: int, message: str) -> None:
-        if callback is not None:
-            callback(ProgressEvent(stage, completed, total, message))
-
-    def run(self, request: JobRequest, progress: ProgressCallback | None = None) -> PreflightReport:
+    def execute_preflight(self, request: JobRequest, progress: ProgressCallback | None = None) -> PreflightReport:
         """Return a frozen plan only when every safety gate passes."""
 
         # This method deliberately reads as the ordered preflight workflow.
@@ -169,7 +163,7 @@ class PreflightService:
         probes: list[MediaProbe] = []
         reserved_output: Path | None = None
 
-        self._emit(progress, PipelineStage.VALIDATE, 0, 1, "Validating the job request and external tools")
+        ProgressEmitter.emit(progress, PipelineStage.VALIDATE, 0, 1, "Validating the job request and external tools")
 
         host_error = platform_error(self._platform_provider())
         if host_error:
@@ -200,28 +194,28 @@ class PreflightService:
                 code = IssueCode.MISSING_TOOL
             issues.append(_issue(IssueSeverity.ERROR, code, str(error)))
 
-        self._emit(progress, PipelineStage.VALIDATE, 1, 1, "Completed job request and external-tool validation")
+        ProgressEmitter.emit(progress, PipelineStage.VALIDATE, 1, 1, "Completed job request and external-tool validation")
 
         inputs_valid = not any(issue.code is IssueCode.INVALID_INPUT for issue in issues)
         if toolchain is not None and inputs_valid:
             prober = self._prober_factory(toolchain)
             probe_total = len(request.inputs)
-            self._emit(progress, PipelineStage.PROBE, 0, probe_total, f"Probing {probe_total} input clip{'s' if probe_total != 1 else ''}")
-            for index, path in enumerate(request.inputs, start=1):
+            ProgressEmitter.emit(progress, PipelineStage.PROBE, 0, probe_total, f"Probing {probe_total} input clip{'s' if probe_total != 1 else ''}")
+            for input_index, input_path in enumerate(request.inputs, start=1):
                 try:
-                    probes.append(prober.probe(path))
+                    probes.append(prober.probe(input_path))
                 except ProbeError as error:
                     issues.append(
                         _issue(
                             IssueSeverity.ERROR,
                             IssueCode.INVALID_MEDIA,
                             str(error),
-                            path,
+                            input_path,
                         )
                     )
-                self._emit(progress, PipelineStage.PROBE, index, probe_total, f"Probed input clip {index} of {probe_total}")
+                ProgressEmitter.emit(progress, PipelineStage.PROBE, input_index, probe_total, f"Probed input clip {input_index} of {probe_total}")
         else:
-            self._emit(progress, PipelineStage.PROBE, 0, 0, "Media probing skipped because validation did not resolve runnable inputs and tools")
+            ProgressEmitter.emit(progress, PipelineStage.PROBE, 0, 0, "Media probing skipped because validation did not resolve runnable inputs and tools")
 
         output_rate: Rational | None = None
         output_width: int | None = None

@@ -96,7 +96,7 @@ class RecordingPreflight:
         self.registry = RecordingRegistry()
         self.thread_identifier: int | None = None
 
-    def run(self, _request: JobRequest, progress: object = None) -> PreflightReport:
+    def execute_preflight(self, _request: JobRequest, progress: object = None) -> PreflightReport:
         """Emit measured progress and return the configured report."""
 
         self.thread_identifier = threading.get_ident()
@@ -117,7 +117,7 @@ class FakePreview(QObject):
         super().__init__()
         self.requests: list[JobRequest] = []
 
-    def start(self, request: JobRequest) -> bool:
+    def begin_preview(self, request: JobRequest) -> bool:
         """Record a preview request without resolving it automatically."""
 
         self.requests.append(request)
@@ -153,7 +153,7 @@ def test_editor_preserves_concat_order_and_builds_frozen_supported_request(qt_ap
     assert editor.input_paths() == (paths[0], paths[2], paths[1])
     editor.output_directory.setText(str(tmp_path / "output"))
     editor.target_height.setValue(1080)
-    request = editor.build_request()
+    request = editor.create_job_request()
 
     assert request.inputs == (paths[0], paths[2], paths[1])
     assert request.output_directory == tmp_path / "output"
@@ -561,8 +561,8 @@ def test_preflight_controller_runs_off_gui_thread_forwards_progress_and_releases
 
     controller.finished.connect(record_result)
     controller.progress.connect(progress.append)
-    assert controller.start(_request(tmp_path))
-    assert not controller.start(_request(tmp_path))
+    assert controller.begin_preview(_request(tmp_path))
+    assert not controller.begin_preview(_request(tmp_path))
 
     assert _process_until(qt_app, lambda: bool(results) and not controller.busy)
     assert service.thread_identifier is not None and service.thread_identifier != threading.get_ident()
@@ -609,7 +609,7 @@ def test_acknowledged_request_is_queued_and_only_non_safety_preferences_persist(
     controller = JobSubmissionController(queue, preview, settings, store, decision_provider=acknowledge)  # type: ignore[arg-type]
     queued: list[str] = []
     controller.queued.connect(queued.append)
-    controller.start(request)
+    controller.begin_submission(request)
     issue = PreflightIssue(IssueSeverity.ERROR, IssueCode.STREAM_ACKNOWLEDGEMENT, "An extra audio stream will be dropped.", request.inputs[0], "reviewed-inventory-key")
     preview.finished.emit(request, PreflightReport((issue,), None, None))
     qt_app.processEvents()
@@ -634,7 +634,7 @@ def test_submission_controller_refuses_unrelated_error_even_if_provider_accepts(
     queue = RecordingQueue()
     controller = JobSubmissionController(queue, preview, ApplicationSettings(), SettingsStore(tmp_path / "settings.yaml"), decision_provider=lambda _parent, _report: PreflightDecision(True, True))  # type: ignore[arg-type]
     request = _request(tmp_path)
-    controller.start(request)
+    controller.begin_submission(request)
     issue = PreflightIssue(IssueSeverity.ERROR, IssueCode.UNSUPPORTED_HDR, "HDR is unsupported.", request.inputs[0])
     preview.finished.emit(request, PreflightReport((issue,), None, None))
     qt_app.processEvents()

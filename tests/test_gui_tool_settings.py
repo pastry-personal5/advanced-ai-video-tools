@@ -83,8 +83,8 @@ def test_validator_runs_discovery_off_gui_thread_and_returns_on_gui_thread(qt_ap
 
     validator.succeeded.connect(record)
     requested = ToolOverrides(ffmpeg=tmp_path / "custom-ffmpeg")
-    assert validator.start(requested)
-    assert not validator.start(ToolOverrides())
+    assert validator.begin_validation(requested)
+    assert not validator.begin_validation(ToolOverrides())
 
     assert _process_until(qt_app, lambda: bool(results) and not validator.busy)
     assert discovery.calls == [requested]

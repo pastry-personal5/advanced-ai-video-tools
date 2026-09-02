@@ -76,7 +76,7 @@ def test_extraction_retains_frames_and_merged_audio_for_job_owner(tmp_path: Path
     prepared, job = _prepared(workspace)
     events: list[ProgressEvent] = []
 
-    result = executor.execute(prepared, job, Path("ffmpeg"), workspace=workspace, progress=events.append)
+    result = executor.execute_extraction(prepared, job, Path("ffmpeg"), workspace=workspace, progress=events.append)
 
     assert result.frame_count == 20
     assert result.expected_frame_count == 20
@@ -97,7 +97,7 @@ def test_extraction_rejects_gapped_inventory_and_retains_workspace(tmp_path: Pat
     prepared, job = _prepared(workspace, has_audio=False)
 
     with pytest.raises(FrameExtractionFailed, match="not contiguous") as captured:
-        executor.execute(prepared, job, Path("ffmpeg"), workspace=workspace)
+        executor.execute_extraction(prepared, job, Path("ffmpeg"), workspace=workspace)
 
     assert captured.value.workspace_path == workspace.path
     assert workspace.path.is_dir()
@@ -111,7 +111,7 @@ def test_extraction_rejects_non_rgb_png(tmp_path: Path) -> None:
     prepared, job = _prepared(workspace)
 
     with pytest.raises(FrameExtractionFailed, match="8-bit RGB"):
-        executor.execute(prepared, job, Path("ffmpeg"), workspace=workspace)
+        executor.execute_extraction(prepared, job, Path("ffmpeg"), workspace=workspace)
 
 
 def test_extraction_rejects_implausible_frame_count(tmp_path: Path) -> None:
@@ -121,7 +121,7 @@ def test_extraction_rejects_implausible_frame_count(tmp_path: Path) -> None:
     prepared, job = _prepared(workspace)
 
     with pytest.raises(FrameExtractionFailed, match="count differs"):
-        executor.execute(prepared, job, Path("ffmpeg"), workspace=workspace)
+        executor.execute_extraction(prepared, job, Path("ffmpeg"), workspace=workspace)
 
 
 def test_extraction_process_failure_preserves_bounded_diagnostic(tmp_path: Path) -> None:
@@ -131,9 +131,10 @@ def test_extraction_process_failure_preserves_bounded_diagnostic(tmp_path: Path)
     prepared, job = _prepared(workspace)
 
     with pytest.raises(FrameExtractionFailed) as captured:
-        executor.execute(prepared, job, Path("ffmpeg"), workspace=workspace)
+        executor.execute_extraction(prepared, job, Path("ffmpeg"), workspace=workspace)
 
     assert captured.value.diagnostic_tail == "synthetic extraction failure"
+    assert isinstance(captured.value.__cause__, ProcessExecutionError)
     assert workspace.path.is_dir()
 
 
@@ -144,7 +145,7 @@ def test_extraction_cancellation_leaves_workspace_cleanup_to_job_owner(tmp_path:
     prepared, job = _prepared(workspace)
 
     with pytest.raises(FrameExtractionCancelled) as captured:
-        executor.execute(prepared, job, Path("ffmpeg"), workspace=workspace)
+        executor.execute_extraction(prepared, job, Path("ffmpeg"), workspace=workspace)
 
     assert captured.value.workspace_path == workspace.path
     assert workspace.path.is_dir()

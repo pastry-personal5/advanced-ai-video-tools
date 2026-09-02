@@ -18,7 +18,6 @@ implementation evidence truthful.
 
 ## Non-negotiable contracts
 
-- Preserve v1 behavior unless the user explicitly approves a v2 change.
 - Keep CLI and GUI thin over the same typed application service.
 - Keep the pipeline **concat first, upscale at most once**; follow the complete
   stage contract in `docs/ARCHITECTURE.md`.

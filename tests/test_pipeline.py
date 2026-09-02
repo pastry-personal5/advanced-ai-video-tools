@@ -54,7 +54,7 @@ class FakePreflight:
         self.registry = RecordingRegistry()
         self.calls = 0
 
-    def run(self, _request: JobRequest, progress: object = None) -> PreflightReport:
+    def execute_preflight(self, _request: JobRequest, progress: object = None) -> PreflightReport:
         """Record validation and forward measured synthetic progress."""
 
         self.calls += 1
@@ -71,10 +71,10 @@ class FakePreparation:
         self.calls = calls
         self.cancel = cancel
 
-    def execute_in_workspace(self, job: JobPlan, _ffmpeg: Path, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: object = None) -> PreparationResult:
+    def execute_preparation_in_workspace(self, job: JobPlan, _ffmpeg: Path, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: object = None, *, context: object = None) -> PreparationResult:
         """Return merged media inside the shared workspace."""
 
-        del progress
+        del progress, context
         self.calls.append("prepare")
         if self.cancel:
             if cancellation is not None:
@@ -93,10 +93,10 @@ class FakeExtraction:
         self.calls = calls
         self.fail = fail
 
-    def execute(self, prepared: PreparationResult, _job: JobPlan, _ffmpeg: Path, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: object = None) -> FrameExtractionResult:
+    def execute_extraction(self, prepared: PreparationResult, _job: JobPlan, _ffmpeg: Path, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: object = None, context: object = None) -> FrameExtractionResult:
         """Return one synthetic frame inventory."""
 
-        del cancellation, progress
+        del cancellation, progress, context
         self.calls.append("extract")
         if self.fail:
             raise FrameExtractionFailed("synthetic extraction failure", workspace.path, "bounded diagnostic")
@@ -114,10 +114,10 @@ class FakeUpscaling:
     def __init__(self, calls: list[str]) -> None:
         self.calls = calls
 
-    def execute(self, extracted: FrameExtractionResult, _job: JobPlan, _toolchain: Toolchain, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: object = None) -> UpscalingResult:
+    def execute_upscaling(self, extracted: FrameExtractionResult, _job: JobPlan, _toolchain: Toolchain, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: object = None, context: object = None) -> UpscalingResult:
         """Return a skipped-upscale result in the same workspace."""
 
-        del cancellation, progress
+        del cancellation, progress, context
         self.calls.append("upscale")
         return UpscalingResult(extracted.frames_directory, extracted.frame_pattern, extracted.frame_count, extracted.frame_width, extracted.frame_height, None, True, extracted.audio_source_path, (), workspace.identifier)
 
@@ -130,10 +130,10 @@ class FakeFinalization:
         self.manager = manager
         self.cancel = cancel
 
-    def execute(self, prepared: PreparationResult, _upscaled: UpscalingResult, job: JobPlan, _toolchain: Toolchain, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: object = None) -> FinalizationResult:
+    def execute_finalization(self, prepared: PreparationResult, _upscaled: UpscalingResult, job: JobPlan, _toolchain: Toolchain, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: object = None, context: object = None) -> FinalizationResult:
         """Model finalization's cleanup ownership on success and cancellation."""
 
-        del cancellation, progress
+        del cancellation, progress, context
         self.calls.append("finalize")
         self.manager.cleanup(workspace)
         if self.cancel:
@@ -166,7 +166,7 @@ def test_success_runs_each_stage_once_in_order_and_releases_reservation(tmp_path
     events: list[ProgressEvent] = []
     service, preflight, manager = _service(tmp_path, report, calls)
 
-    result = service.run(JobRequest((tmp_path / "source.mp4",), tmp_path), progress=events.append, state_changed=states.append)
+    result = service.execute_pipeline(JobRequest((tmp_path / "source.mp4",), tmp_path), progress=events.append, state_changed=states.append)
 
     assert calls == ["prepare", "extract", "upscale", "finalize"]
     assert states == [JobState.QUEUED, JobState.VALIDATING, JobState.RUNNING, JobState.COMPLETED]
@@ -186,7 +186,7 @@ def test_pipeline_logs_one_stable_job_id_across_stage_contexts(tmp_path: Path) -
     messages: list[str] = []
     sink_id = logger.add(messages.append, level="INFO", format="{extra[job_id]}|{extra[stage]}|{message}")
     try:
-        service.run(JobRequest((tmp_path / "source.mp4",), tmp_path))
+        service.execute_pipeline(JobRequest((tmp_path / "source.mp4",), tmp_path))
     finally:
         logger.remove(sink_id)
 
@@ -206,7 +206,7 @@ def test_validation_failure_never_creates_workspace(tmp_path: Path) -> None:
     service, preflight, manager = _service(tmp_path, report, calls)
 
     with pytest.raises(PipelineFailed, match="HDR is unsupported") as captured:
-        service.run(JobRequest((), tmp_path), state_changed=states.append)
+        service.execute_pipeline(JobRequest((), tmp_path), state_changed=states.append)
 
     assert captured.value.stage is PipelineStage.VALIDATE
     assert states == [JobState.QUEUED, JobState.VALIDATING, JobState.FAILED]
@@ -224,7 +224,7 @@ def test_processing_failure_retains_workspace_and_releases_reservation(tmp_path:
     service, preflight, _manager = _service(tmp_path, report, calls, extraction_fail=True)
 
     with pytest.raises(PipelineFailed) as captured:
-        service.run(JobRequest((tmp_path / "source.mp4",), tmp_path), state_changed=states.append)
+        service.execute_pipeline(JobRequest((tmp_path / "source.mp4",), tmp_path), state_changed=states.append)
 
     assert calls == ["prepare", "extract"]
     assert captured.value.stage is PipelineStage.EXTRACT
@@ -244,7 +244,7 @@ def test_pre_finalization_cancellation_cleans_workspace_before_terminal_state(tm
     service, preflight, manager = _service(tmp_path, report, calls, preparation_cancel=True)
 
     with pytest.raises(PipelineCancelled) as captured:
-        service.run(JobRequest((tmp_path / "source.mp4",), tmp_path), progress=events.append, state_changed=states.append)
+        service.execute_pipeline(JobRequest((tmp_path / "source.mp4",), tmp_path), progress=events.append, state_changed=states.append)
 
     assert captured.value.stage is PipelineStage.CONCATENATE
     assert calls == ["prepare"]
@@ -263,7 +263,7 @@ def test_finalization_cancellation_is_not_cleaned_twice(tmp_path: Path) -> None:
     service, _preflight, manager = _service(tmp_path, report, calls, finalization_cancel=True)
 
     with pytest.raises(PipelineCancelled) as captured:
-        service.run(JobRequest((tmp_path / "source.mp4",), tmp_path), state_changed=states.append)
+        service.execute_pipeline(JobRequest((tmp_path / "source.mp4",), tmp_path), state_changed=states.append)
 
     assert captured.value.stage is PipelineStage.ENCODE
     assert states[-2:] == [JobState.CANCELLING, JobState.CANCELLED]
@@ -281,7 +281,7 @@ def test_pre_cancelled_job_never_runs_preflight(tmp_path: Path) -> None:
     service, preflight, manager = _service(tmp_path, report, calls)
 
     with pytest.raises(PipelineCancelled, match="before validation"):
-        service.run(JobRequest((tmp_path / "source.mp4",), tmp_path), cancellation=token, state_changed=states.append)
+        service.execute_pipeline(JobRequest((tmp_path / "source.mp4",), tmp_path), cancellation=token, state_changed=states.append)
 
     assert states == [JobState.QUEUED, JobState.CANCELLING, JobState.CANCELLED]
     assert preflight.calls == 0
@@ -303,7 +303,7 @@ def test_cancellation_during_validation_releases_the_new_reservation(tmp_path: P
             token.cancel()
 
     with pytest.raises(PipelineCancelled, match="after validation"):
-        service.run(JobRequest((tmp_path / "source.mp4",), tmp_path), cancellation=token, state_changed=cancel_during_validation)
+        service.execute_pipeline(JobRequest((tmp_path / "source.mp4",), tmp_path), cancellation=token, state_changed=cancel_during_validation)
 
     assert states == [JobState.QUEUED, JobState.VALIDATING, JobState.CANCELLING, JobState.CANCELLED]
     assert not calls

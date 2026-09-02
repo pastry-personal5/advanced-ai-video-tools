@@ -2,26 +2,26 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, replace as dataclass_replace
 from decimal import Decimal
 from pathlib import Path
 
 from loguru import logger
 
-from advanced_ai_video_tools.core.models import JobPlan, MediaProbe, OverwriteMode, PipelineStage, ProgressEvent, Toolchain, VideoStream
+from advanced_ai_video_tools.core.models import JobPlan, MediaProbe, OverwriteMode, PipelineStage, Toolchain, VideoStream
 from advanced_ai_video_tools.services.media_preparation import PreparationResult
+from advanced_ai_video_tools.services.progress import ProgressCallback, ProgressEmitter
+from advanced_ai_video_tools.services.context import StageContext
 from advanced_ai_video_tools.services.upscaling import UpscalingResult
 from advanced_ai_video_tools.storage.naming import OutputCollisionError
 from advanced_ai_video_tools.storage.publication import AtomicOutputPublisher, PartialOutput, PublicationError
 from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceError, WorkspaceManager
 from advanced_ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessError, ProcessResult, ProcessRunner
 from advanced_ai_video_tools.video.compatibility import assess_frame_timing
-from advanced_ai_video_tools.video.finalization import FinalAudioMode, FinalEncodingPlan, build_final_encoding_plan
+from advanced_ai_video_tools.video.finalization import FinalAudioMode, FinalEncodingPlan, create_final_encoding_plan
 from advanced_ai_video_tools.video.frames import FrameInventoryError, FrameInventoryVerifier
 from advanced_ai_video_tools.video.probe import MediaProber, ProbeError
 
-ProgressCallback = Callable[[ProgressEvent], None]
 DEFAULT_FINAL_ENCODING_TIMEOUT_SECONDS = 24 * 60 * 60
 
 
@@ -143,19 +143,14 @@ class FinalizationExecutor:
         self._frame_verifier = frame_verifier or FrameInventoryVerifier()
         self._command_timeout_seconds = command_timeout_seconds
 
-    @staticmethod
-    def _emit(callback: ProgressCallback | None, stage: PipelineStage, completed: int, total: int, message: str) -> None:
-        if callback is not None:
-            callback(ProgressEvent(stage, completed, total, message))
-
     def _discard_partial(self, partial: PartialOutput | None) -> None:
         if partial is not None and partial.path.exists():
             self._publisher.discard(partial)
 
     def _cleanup_workspace(self, workspace: OwnedWorkspace, progress: ProgressCallback | None) -> None:
-        self._emit(progress, PipelineStage.CLEANUP, 0, 1, "Cleaning the completed job workspace")
+        ProgressEmitter.emit(progress, PipelineStage.CLEANUP, 0, 1, "Cleaning the completed job workspace")
         self._workspace_manager.cleanup(workspace)
-        self._emit(progress, PipelineStage.CLEANUP, 1, 1, "Completed job workspace cleaned")
+        ProgressEmitter.emit(progress, PipelineStage.CLEANUP, 1, 1, "Completed job workspace cleaned")
 
     def _validate_start(self, prepared: PreparationResult, upscaled: UpscalingResult, job: JobPlan, workspace: OwnedWorkspace) -> tuple[Path, bool]:
         workspace_path = self._workspace_manager.validate(workspace)
@@ -167,9 +162,16 @@ class FinalizationExecutor:
             raise OutputCollisionError(f"destination already exists before encoding: {job.output_path}")
         return workspace_path, replace
 
-    def execute(self, prepared: PreparationResult, upscaled: UpscalingResult, job: JobPlan, toolchain: Toolchain, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None) -> FinalizationResult:
+    def execute_finalization(self, prepared: PreparationResult, upscaled: UpscalingResult, job: JobPlan, toolchain: Toolchain, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, context: StageContext | None = None) -> FinalizationResult:
         """Encode to a partial, verify, publish atomically, and clean terminal state."""
 
+        # The ordered encode/verify/publish workflow is intentionally explicit.
+        # pylint: disable=too-many-statements
+        if context is not None:
+            workspace = context.workspace
+            cancellation = context.cancellation
+            progress = context.progress
+            toolchain = context.toolchain or toolchain
         token = cancellation or CancellationToken()
         partial: PartialOutput | None = None
         stage = PipelineStage.ENCODE
@@ -178,24 +180,24 @@ class FinalizationExecutor:
             if token.cancelled:
                 raise ProcessCancelled("finalization cancelled before encoding", ())
             partial = self._publisher.create_partial(job.output_path)
-            plan = build_final_encoding_plan(job, toolchain.ffmpeg.path, prepared.merged_probe, workspace_path, partial.path, frames_directory=upscaled.frames_directory, frame_count=upscaled.frame_count, frame_width=upscaled.frame_width, frame_height=upscaled.frame_height, audio_source_path=upscaled.audio_source_path)
-            self._emit(progress, stage, 0, upscaled.frame_count, f"Encoding {upscaled.frame_count} final video frames")
-            process_result = self._process_runner.run(plan.command, token, self._command_timeout_seconds)
+            encoding_plan = create_final_encoding_plan(job, toolchain.ffmpeg.path, prepared.merged_probe, workspace_path, partial.path, frames_directory=upscaled.frames_directory, frame_count=upscaled.frame_count, frame_width=upscaled.frame_width, frame_height=upscaled.frame_height, audio_source_path=upscaled.audio_source_path)
+            ProgressEmitter.emit(progress, stage, 0, upscaled.frame_count, f"Encoding {upscaled.frame_count} final video frames")
+            process_result = self._process_runner.run(encoding_plan.command, token, self._command_timeout_seconds)
             if token.cancelled:
-                raise ProcessCancelled("finalization cancelled after encoding", plan.command, process_result.stdout_tail, process_result.stderr_tail)
-            self._emit(progress, stage, upscaled.frame_count, upscaled.frame_count, "Encoded the final MP4 partial")
+                raise ProcessCancelled("finalization cancelled after encoding", encoding_plan.command, process_result.stdout_tail, process_result.stderr_tail)
+            ProgressEmitter.emit(progress, stage, upscaled.frame_count, upscaled.frame_count, "Encoded the final MP4 partial")
             stage = PipelineStage.VERIFY
-            self._emit(progress, stage, 0, 1, "Verifying the final MP4 partial")
-            output_probe = self._verifier.verify(partial.path, job, plan)
+            ProgressEmitter.emit(progress, stage, 0, 1, "Verifying the final MP4 partial")
+            output_probe = self._verifier.verify(partial.path, job, encoding_plan)
             if token.cancelled:
-                raise ProcessCancelled("finalization cancelled after verification", plan.command)
-            self._emit(progress, stage, 1, 1, "Verified the final MP4 partial")
+                raise ProcessCancelled("finalization cancelled after verification", encoding_plan.command)
+            ProgressEmitter.emit(progress, stage, 1, 1, "Verified the final MP4 partial")
             stage = PipelineStage.PUBLISH
-            self._emit(progress, stage, 0, 1, "Publishing the verified final output")
+            ProgressEmitter.emit(progress, stage, 0, 1, "Publishing the verified final output")
             output_path = self._publisher.publish(partial, replace=replace)
             output_probe = dataclass_replace(output_probe, path=output_path)
             partial = None
-            self._emit(progress, stage, 1, 1, "Published the verified final output")
+            ProgressEmitter.emit(progress, stage, 1, 1, "Published the verified final output")
         except ProcessCancelled as error:
             try:
                 self._discard_partial(partial)
@@ -214,4 +216,4 @@ class FinalizationExecutor:
             self._cleanup_workspace(workspace, progress)
         except WorkspaceError as error:
             raise FinalizationFailed(f"Output was published, but workspace cleanup failed: {error}", workspace.path, PipelineStage.CLEANUP) from error
-        return FinalizationResult(output_path, output_probe, plan.audio_mode, process_result, workspace.identifier)
+        return FinalizationResult(output_path, output_probe, encoding_plan.audio_mode, process_result, workspace.identifier)

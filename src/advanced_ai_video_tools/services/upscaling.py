@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event, Thread
 
-from advanced_ai_video_tools.core.models import JobPlan, PipelineStage, ProgressEvent, Toolchain
+from advanced_ai_video_tools.core.models import JobPlan, PipelineStage, Toolchain
 from advanced_ai_video_tools.services.frame_extraction import FrameExtractionResult
+from advanced_ai_video_tools.services.progress import ProgressCallback, ProgressEmitter
+from advanced_ai_video_tools.services.context import StageContext
 from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceError, WorkspaceManager
 from advanced_ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessError, ProcessExecutionError, ProcessResult, ProcessRunner
-from advanced_ai_video_tools.upscaling.realesrgan import AUTOMATIC_TILE_SIZE, MEMORY_RETRY_TILE_SIZES, UpscalePlan, build_realesrgan_command, build_upscale_plan, is_vulkan_memory_failure
+from advanced_ai_video_tools.upscaling.realesrgan import AUTOMATIC_TILE_SIZE, MEMORY_RETRY_TILE_SIZES, UpscalePlan, create_realesrgan_command, create_upscale_plan, is_vulkan_memory_failure
 from advanced_ai_video_tools.video.frames import FRAME_FILENAME_TEMPLATE, FrameInventoryError, FrameInventoryVerifier
 
-ProgressCallback = Callable[[ProgressEvent], None]
 DEFAULT_UPSCALE_TIMEOUT_SECONDS = 24 * 60 * 60
 UPSCALE_PROGRESS_POLL_SECONDS = 1.0
 LIVE_PREVIEW_FRAME_INTERVAL = 16
@@ -86,11 +87,6 @@ class UpscalingExecutor:
         self._command_timeout_seconds = command_timeout_seconds
 
     @staticmethod
-    def _emit(callback: ProgressCallback | None, completed: int, total: int, message: str, *, original_preview_image_path: Path | None = None, upscaled_preview_image_path: Path | None = None) -> None:
-        if callback is not None:
-            callback(ProgressEvent(PipelineStage.UPSCALE, completed, total, message, original_preview_image_path, upscaled_preview_image_path))
-
-    @staticmethod
     def _attempt(tile_size: int, command: Sequence[str], result: ProcessResult | ProcessError) -> UpscaleAttempt:
         return UpscaleAttempt(tile_size, tuple(command), result.returncode if isinstance(result, (ProcessResult, ProcessExecutionError)) else None, result.stdout_tail, result.stderr_tail)
 
@@ -98,9 +94,9 @@ class UpscalingExecutor:
         workspace_path = self._workspace_manager.validate(workspace)
         if extracted.workspace_identifier != workspace.identifier:
             raise ValueError("extracted frames belong to a different workspace")
-        plan = build_upscale_plan(job, toolchain, workspace_path, input_directory=extracted.frames_directory, frame_count=extracted.frame_count, input_width=extracted.frame_width, input_height=extracted.frame_height)
-        self._verifier.verify(plan.input_directory, plan.input_width, plan.input_height, plan.expected_frame_count)
-        return plan
+        upscale_plan = create_upscale_plan(job, toolchain, workspace_path, input_directory=extracted.frames_directory, frame_count=extracted.frame_count, input_width=extracted.frame_width, input_height=extracted.frame_height)
+        self._verifier.verify(upscale_plan.input_directory, upscale_plan.input_width, upscale_plan.input_height, upscale_plan.expected_frame_count)
+        return upscale_plan
 
     @staticmethod
     def _count_output_frames(directory: Path) -> int:
@@ -129,8 +125,9 @@ class UpscalingExecutor:
             count = min(total, self._count_output_frames(output_directory))
             if count > observed:
                 observed = count
-                self._emit(
+                ProgressEmitter.emit(
                     callback,
+                    PipelineStage.UPSCALE,
                     count,
                     total,
                     f"Upscaling frame {count} of {total}",
@@ -140,65 +137,71 @@ class UpscalingExecutor:
 
     # The bounded retry/error branches mirror the pipeline's explicit stage contract.
     # pylint: disable=too-many-branches,too-many-statements
-    def execute(self, extracted: FrameExtractionResult, job: JobPlan, toolchain: Toolchain, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None) -> UpscalingResult:
+    def execute_upscaling(self, extracted: FrameExtractionResult, job: JobPlan, toolchain: Toolchain, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, context: StageContext | None = None) -> UpscalingResult:
         """Skip or upscale once, retrying only recognized Vulkan-memory failures."""
 
+        if context is not None:
+            workspace = context.workspace
+            cancellation = context.cancellation
+            progress = context.progress
+            toolchain = context.toolchain or toolchain
         token = cancellation or CancellationToken()
         try:
-            plan = self._plan(extracted, job, toolchain, workspace)
+            upscale_plan = self._plan(extracted, job, toolchain, workspace)
         except (FrameInventoryError, WorkspaceError, OSError, ValueError) as error:
             raise UpscalingFailed(f"Upscaling could not start: {error}. Workspace retained at {workspace.path}", workspace.path) from error
         if token.cancelled:
             raise UpscalingCancelled("Upscaling cancelled before launch. The caller still owns the workspace.", workspace.path)
-        if plan.skipped:
-            self._emit(progress, 0, plan.expected_frame_count, "AI upscaling is not required for the requested height")
-            self._emit(progress, plan.expected_frame_count, plan.expected_frame_count, "Using the verified extracted frames without AI upscaling")
-            return UpscalingResult(plan.input_directory, plan.input_directory / FRAME_FILENAME_TEMPLATE, plan.expected_frame_count, plan.input_width, plan.input_height, None, True, extracted.audio_source_path, (), workspace.identifier)
+        if upscale_plan.skipped:
+            ProgressEmitter.emit(progress, PipelineStage.UPSCALE, 0, upscale_plan.expected_frame_count, "AI upscaling is not required for the requested height")
+            ProgressEmitter.emit(progress, PipelineStage.UPSCALE, upscale_plan.expected_frame_count, upscale_plan.expected_frame_count, "Using the verified extracted frames without AI upscaling")
+            return UpscalingResult(upscale_plan.input_directory, upscale_plan.input_directory / FRAME_FILENAME_TEMPLATE, upscale_plan.expected_frame_count, upscale_plan.input_width, upscale_plan.input_height, None, True, extracted.audio_source_path, (), workspace.identifier)
         attempts: list[UpscaleAttempt] = []
         tile_sizes = (AUTOMATIC_TILE_SIZE,) + MEMORY_RETRY_TILE_SIZES
-        scale = plan.scale
+        scale = upscale_plan.scale
         if scale is None:
             raise AssertionError("non-skipped upscale plan has no scale")
         for attempt_number, tile_size in enumerate(tile_sizes, start=1):
-            command = build_realesrgan_command(plan, tile_size)
+            command_args = create_realesrgan_command(upscale_plan, tile_size)
             tile_label = "automatic tiling" if tile_size == AUTOMATIC_TILE_SIZE else f"tile size {tile_size}"
             try:
-                self._workspace_manager.recreate_direct_child(workspace, plan.output_directory.name)
-                self._emit(progress, 0, plan.expected_frame_count, f"Upscaling {plan.expected_frame_count} frames with {tile_label} (attempt {attempt_number} of {len(tile_sizes)})")
+                self._workspace_manager.recreate_direct_child(workspace, upscale_plan.output_directory.name)
+                ProgressEmitter.emit(progress, PipelineStage.UPSCALE, 0, upscale_plan.expected_frame_count, f"Upscaling {upscale_plan.expected_frame_count} frames with {tile_label} (attempt {attempt_number} of {len(tile_sizes)})")
                 monitor_stop = Event()
-                monitor = Thread(target=self._monitor_output_progress, args=(plan.input_directory, plan.output_directory, plan.expected_frame_count, progress, monitor_stop), daemon=True) if progress is not None else None
+                monitor = Thread(target=self._monitor_output_progress, args=(upscale_plan.input_directory, upscale_plan.output_directory, upscale_plan.expected_frame_count, progress, monitor_stop), daemon=True) if progress is not None else None
                 if monitor is not None:
                     monitor.start()
                 try:
-                    result = self._process_runner.run(command, token, self._command_timeout_seconds)
+                    result = self._process_runner.run(command_args, token, self._command_timeout_seconds)
                 finally:
                     monitor_stop.set()
                     if monitor is not None:
                         monitor.join()
                 if token.cancelled:
-                    raise ProcessCancelled("upscaling cancelled", command, result.stdout_tail, result.stderr_tail)
-                attempts.append(self._attempt(tile_size, command, result))
-                output_count = self._verifier.verify(plan.output_directory, plan.input_width * scale, plan.input_height * scale, plan.expected_frame_count)
+                    raise ProcessCancelled("upscaling cancelled", command_args, result.stdout_tail, result.stderr_tail)
+                attempts.append(self._attempt(tile_size, command_args, result))
+                output_count = self._verifier.verify(upscale_plan.output_directory, upscale_plan.input_width * scale, upscale_plan.input_height * scale, upscale_plan.expected_frame_count)
             except ProcessCancelled as error:
-                attempts.append(self._attempt(tile_size, command, error))
+                attempts.append(self._attempt(tile_size, command_args, error))
                 raise UpscalingCancelled("Upscaling cancelled; child processes terminated. The caller still owns the workspace.", workspace.path, attempts) from error
             except ProcessExecutionError as error:
-                attempts.append(self._attempt(tile_size, command, error))
+                attempts.append(self._attempt(tile_size, command_args, error))
                 if is_vulkan_memory_failure(error.stdout_tail, error.stderr_tail) and attempt_number < len(tile_sizes):
                     continue
                 raise UpscalingFailed(f"Real-ESRGAN failed with {tile_label}. Workspace retained at {workspace.path}", workspace.path, attempts, error.stderr_tail) from error
             except (FrameInventoryError, ProcessError, WorkspaceError, OSError, ValueError) as error:
                 if isinstance(error, ProcessError):
-                    attempts.append(self._attempt(tile_size, command, error))
+                    attempts.append(self._attempt(tile_size, command_args, error))
                 diagnostic = error.stderr_tail if isinstance(error, ProcessError) else ""
                 raise UpscalingFailed(f"Upscaling failed during {tile_label}: {error}. Workspace retained at {workspace.path}", workspace.path, attempts, diagnostic) from error
-            self._emit(
+            ProgressEmitter.emit(
                 progress,
+                PipelineStage.UPSCALE,
                 output_count,
-                plan.expected_frame_count,
+                upscale_plan.expected_frame_count,
                 f"Upscaled and verified {output_count} frames",
-                original_preview_image_path=self._sampled_preview_frame(plan.input_directory, output_count),
-                upscaled_preview_image_path=self._sampled_preview_frame(plan.output_directory, output_count),
+                original_preview_image_path=self._sampled_preview_frame(upscale_plan.input_directory, output_count),
+                upscaled_preview_image_path=self._sampled_preview_frame(upscale_plan.output_directory, output_count),
             )
-            return UpscalingResult(plan.output_directory, plan.output_directory / FRAME_FILENAME_TEMPLATE, output_count, plan.input_width * scale, plan.input_height * scale, scale, False, extracted.audio_source_path, tuple(attempts), workspace.identifier)
+            return UpscalingResult(upscale_plan.output_directory, upscale_plan.output_directory / FRAME_FILENAME_TEMPLATE, output_count, upscale_plan.input_width * scale, upscale_plan.input_height * scale, scale, False, extracted.audio_source_path, tuple(attempts), workspace.identifier)
         raise AssertionError("bounded Real-ESRGAN attempts exhausted without a terminal result")

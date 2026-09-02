@@ -53,7 +53,7 @@ class ControlledRunner:
 
         self.releases.setdefault(name, threading.Event()).set()
 
-    def run(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: object = None, state_changed: object = None, job_id: str | None = None) -> PipelineResult:
+    def execute_pipeline(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: object = None, state_changed: object = None, job_id: str | None = None) -> PipelineResult:
         """Model a cooperative synchronous pipeline."""
 
         assert cancellation is not None

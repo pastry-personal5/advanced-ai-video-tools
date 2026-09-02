@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, Rational, ToolInfo, Toolchain
-from advanced_ai_video_tools.upscaling.realesrgan import AUTOMATIC_TILE_SIZE, MEMORY_RETRY_TILE_SIZES, REAL_IMAGE_MODEL, build_realesrgan_command, build_upscale_plan, is_vulkan_memory_failure, select_ai_scale
+from advanced_ai_video_tools.upscaling.realesrgan import AUTOMATIC_TILE_SIZE, MEMORY_RETRY_TILE_SIZES, REAL_IMAGE_MODEL, create_realesrgan_command, create_upscale_plan, is_vulkan_memory_failure, select_ai_scale
 
 
 def _toolchain(tmp_path: Path) -> Toolchain:
@@ -27,8 +27,8 @@ def test_real_image_command_uses_directory_mode_and_explicit_safe_defaults(tmp_p
 
     frames = tmp_path / "job" / "frames"
     frames.mkdir(parents=True)
-    plan = build_upscale_plan(_job(), _toolchain(tmp_path), frames.parent, input_directory=frames, frame_count=10, input_width=64, input_height=36)
-    command = build_realesrgan_command(plan, AUTOMATIC_TILE_SIZE)
+    plan = create_upscale_plan(_job(), _toolchain(tmp_path), frames.parent, input_directory=frames, frame_count=10, input_width=64, input_height=36)
+    command = create_realesrgan_command(plan, AUTOMATIC_TILE_SIZE)
 
     assert command[command.index("-i") + 1] == str(frames)
     assert command[command.index("-o") + 1] == str(frames.parent / "upscaled")
@@ -51,11 +51,11 @@ def test_scale_policy_and_plan_reject_inconsistent_or_anime_decisions(tmp_path: 
     frames.mkdir(parents=True)
     tools = _toolchain(tmp_path)
     with pytest.raises(ValueError, match="inconsistent"):
-        build_upscale_plan(_job(scale=3), tools, frames.parent, input_directory=frames, frame_count=1, input_width=64, input_height=36)
+        create_upscale_plan(_job(scale=3), tools, frames.parent, input_directory=frames, frame_count=1, input_width=64, input_height=36)
     with pytest.raises(ValueError, match="real-image model"):
-        build_upscale_plan(_job(model_name="realesrgan-x4plus-anime"), tools, frames.parent, input_directory=frames, frame_count=1, input_width=64, input_height=36)
+        create_upscale_plan(_job(model_name="realesrgan-x4plus-anime"), tools, frames.parent, input_directory=frames, frame_count=1, input_width=64, input_height=36)
     with pytest.raises(ValueError, match="tile size"):
-        build_realesrgan_command(build_upscale_plan(_job(), tools, frames.parent, input_directory=frames, frame_count=1, input_width=64, input_height=36), 16)
+        create_realesrgan_command(create_upscale_plan(_job(), tools, frames.parent, input_directory=frames, frame_count=1, input_width=64, input_height=36), 16)
 
 
 @pytest.mark.parametrize("diagnostic", ["vkAllocateMemory failed -2", "VK_ERROR_OUT_OF_DEVICE_MEMORY", "Memory allocation failed.", "Could not allocate 4096 bytes of device memory", "Out of heap memory"])

@@ -28,8 +28,8 @@ def _local_now() -> datetime:
 class PipelineRunner(Protocol):
     """The synchronous processing boundary serialized by the queue."""
 
-    def run(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: Callable[[ProgressEvent], None] | None = None, state_changed: Callable[[JobState], None] | None = None, job_id: str | None = None) -> PipelineResult:
-        """Run one job to a terminal state."""
+    def execute_pipeline(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: Callable[[ProgressEvent], None] | None = None, state_changed: Callable[[JobState], None] | None = None, job_id: str | None = None) -> PipelineResult:
+        """Execute one job to a terminal state."""
 
 
 class QueueError(RuntimeError):
@@ -320,7 +320,7 @@ class JobQueue:
         error: QueueTerminalError | None = None
         state = JobState.COMPLETED
         try:
-            result = self._runner.run(
+            result = self._runner.execute_pipeline(
                 record.request,
                 cancellation=record.token,
                 progress=lambda event: self._pipeline_progress(record, event),

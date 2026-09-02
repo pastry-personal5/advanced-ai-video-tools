@@ -32,8 +32,8 @@ class MediaProber(Protocol):
         """Inspect one media input."""
 
 
-def build_ffprobe_command(executable: Path, path: Path) -> tuple[str, ...]:
-    """Build the bounded client's machine-readable FFprobe invocation."""
+def create_ffprobe_command(executable: Path, path: Path) -> tuple[str, ...]:
+    """Create the bounded client's machine-readable FFprobe invocation."""
 
     return (str(executable), "-v", "error", "-show_streams", "-show_format", "-show_chapters", "-of", "json", str(path))
 
@@ -220,7 +220,7 @@ class FFprobeClient:
     def probe(self, path: Path) -> MediaProbe:
         """Run FFprobe once and convert its JSON result."""
 
-        arguments: Sequence[str] = build_ffprobe_command(self._executable, path)
+        arguments: Sequence[str] = create_ffprobe_command(self._executable, path)
         try:
             log_subprocess_launch(arguments)
             result = self._runner(arguments, self._timeout_seconds)

@@ -94,7 +94,7 @@ def select_final_audio_mode(job: JobPlan, merged: MediaProbe, duration: Decimal)
     return FinalAudioMode.AAC
 
 
-def _final_audio_arguments(job: JobPlan, merged: MediaProbe, audio_mode: FinalAudioMode, duration_text: str) -> tuple[str | None, list[str]]:
+def _final_audio_arguments(job: JobPlan, merged: MediaProbe, audio_mode: FinalAudioMode, duration_string: str) -> tuple[str | None, list[str]]:
     """Return the expected codec and explicit audio arguments."""
 
     if audio_mode is FinalAudioMode.NONE:
@@ -102,12 +102,12 @@ def _final_audio_arguments(job: JobPlan, merged: MediaProbe, audio_mode: FinalAu
     if audio_mode is FinalAudioMode.COPY:
         expected_codec = merged.primary_audio.codec_name if merged.primary_audio is not None else None
         return expected_codec, ["-c:a", "copy"]
-    audio_filter = f"aresample=48000:async=0:first_pts=0,aformat=sample_rates=48000:channel_layouts={job.output_audio_layout},apad,atrim=duration={duration_text},asetpts=PTS-STARTPTS"
+    audio_filter = f"aresample=48000:async=0:first_pts=0,aformat=sample_rates=48000:channel_layouts={job.output_audio_layout},apad,atrim=duration={duration_string},asetpts=PTS-STARTPTS"
     return "aac", ["-af", audio_filter, "-c:a", "aac", "-profile:a", "aac_low", "-b:a", "256k", "-ar:a", "48000"]
 
 
-def build_final_encoding_plan(job: JobPlan, ffmpeg: Path, merged: MediaProbe, workspace: Path, partial_output: Path, *, frames_directory: Path, frame_count: int, frame_width: int, frame_height: int, audio_source_path: Path | None) -> FinalEncodingPlan:
-    """Build explicit RGB-to-frozen-SDR H.264 encoding and audio mux policy."""
+def create_final_encoding_plan(job: JobPlan, ffmpeg: Path, merged: MediaProbe, workspace: Path, partial_output: Path, *, frames_directory: Path, frame_count: int, frame_width: int, frame_height: int, audio_source_path: Path | None) -> FinalEncodingPlan:
+    """Create explicit RGB-to-frozen-SDR H.264 encoding and audio mux policy."""
 
     workspace_path = workspace.resolve(strict=False)
     if frames_directory.resolve(strict=False).parent != workspace_path:
@@ -128,7 +128,7 @@ def build_final_encoding_plan(job: JobPlan, ffmpeg: Path, merged: MediaProbe, wo
         raise ValueError("retained audio source differs from the verified merged media")
     if job.output_audio_layout is not None and not _SAFE_CHANNEL_LAYOUT.fullmatch(job.output_audio_layout):
         raise ValueError(f"unsupported final audio channel layout syntax: {job.output_audio_layout!r}")
-    duration_text = format(duration, "f")
+    duration_string = format(duration, "f")
     frame_pattern = frames_directory / FRAME_FILENAME_TEMPLATE
     matrix = job.output_color_profile.matrix.value
     setparams, color_arguments = _color_signaling(job.output_color_profile)
@@ -142,7 +142,7 @@ def build_final_encoding_plan(job: JobPlan, ffmpeg: Path, merged: MediaProbe, wo
     arguments.extend(["-map_metadata", "-1", "-map_chapters", "-1", "-vf", video_filter, "-c:v", "libx264", "-preset", "slow", "-crf", str(DEFAULT_VIDEO_CRF), "-pix_fmt", "yuv420p", "-r", str(job.output_frame_rate), "-fps_mode", "cfr", "-frames:v", str(frame_count)])
     arguments.extend(color_arguments)
     arguments.extend(["-metadata:s:v:0", "rotate=0"])
-    expected_audio_codec, audio_arguments = _final_audio_arguments(job, merged, audio_mode, duration_text)
+    expected_audio_codec, audio_arguments = _final_audio_arguments(job, merged, audio_mode, duration_string)
     arguments.extend(audio_arguments)
-    arguments.extend(["-t", duration_text, "-movflags", "+faststart", "-f", "mp4", str(partial_output)])
+    arguments.extend(["-t", duration_string, "-movflags", "+faststart", "-f", "mp4", str(partial_output)])
     return FinalEncodingPlan(frames_directory, frame_pattern, frame_count, frame_width, frame_height, audio_source_path, audio_mode, expected_audio_codec, duration, partial_output, tuple(arguments))

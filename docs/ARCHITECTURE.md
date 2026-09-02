@@ -116,6 +116,14 @@ abort that sequence with `KeyboardInterrupt`.
 - `upscaling.realesrgan`: real-image model and scale policy, shell-free directory commands, and conservative Vulkan-memory failure classification
 - `services.preflight`: shared path, media-policy, sizing, concat-strategy, audio,
   and disk-margin validation
+- `services.progress`: one typed construction boundary for immutable measured
+  stage progress and optional paired preview-frame paths
+- `services.contracts`: shared typed protocols for preflight and each pipeline
+  stage, keeping orchestration independent from concrete executors
+- `services.context`: immutable `StageContext` carrying workspace,
+  cancellation, progress, and resolved toolchain dependencies through stages
+- `gui.worker_lifecycle`: shared one-shot Qt worker cleanup and shutdown rules;
+  operation-specific workers retain their own typed signals
 - `services.media_preparation`: sequential normalize-all-or-none execution, one concat, measured stage progress, merged-result verification, and workspace retention policy
 - `services.frame_extraction`: cancellable exact-CFR extraction, measured progress, RGB PNG inventory verification, and retained merged-audio handoff
 - `services.upscaling`: skip-or-run orchestration, measured progress, bounded attempt diagnostics, safe retry-directory resets, cancellation, and exact scaled-frame verification

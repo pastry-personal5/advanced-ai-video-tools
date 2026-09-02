@@ -535,7 +535,7 @@ class JobEditor(QWidget):
         self._rebuild_input_rows(destination)
         return True
 
-    def build_request(self) -> JobRequest:
+    def create_job_request(self) -> JobRequest:
         """Freeze one generated-output request for asynchronous preview."""
 
         inputs = self.input_paths()
@@ -601,7 +601,7 @@ class JobEditor(QWidget):
     @Slot()
     def _request_submission(self) -> None:
         try:
-            request = self.build_request()
+            request = self.create_job_request()
         except ValueError as error:
             self.message.emit(str(error))
             return

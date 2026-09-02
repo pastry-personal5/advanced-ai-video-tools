@@ -11,6 +11,7 @@ from loguru import logger
 from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot
 
 from advanced_ai_video_tools.core.models import JobRequest
+from advanced_ai_video_tools.gui.worker_lifecycle import connect_completion_cleanup, shutdown_worker_thread
 from advanced_ai_video_tools.services.preflight import PreflightService
 
 
@@ -30,7 +31,7 @@ class _PreflightWorker(QObject):
 
         try:
             service = self._service_factory()
-            report = service.run(self._request, self.progress.emit)
+            report = service.execute_preflight(self._request, self.progress.emit)
             if report.plan is not None:
                 service.registry.release(report.plan.output_path)
         except Exception as error:  # pylint: disable=broad-exception-caught
@@ -60,7 +61,7 @@ class GuiPreflightController(QObject):
 
         return self._thread is not None
 
-    def start(self, request: JobRequest) -> bool:
+    def begin_preview(self, request: JobRequest) -> bool:
         """Start a non-authoritative preview without blocking the Qt thread."""
 
         if self.busy:
@@ -72,12 +73,8 @@ class GuiPreflightController(QObject):
         worker.progress.connect(self._forward_progress, Qt.ConnectionType.QueuedConnection)
         worker.finished.connect(self._forward_finished, Qt.ConnectionType.QueuedConnection)
         worker.failed.connect(self._forward_failed, Qt.ConnectionType.QueuedConnection)
-        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
-        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
-        worker.finished.connect(worker.deleteLater)
-        worker.failed.connect(worker.deleteLater)
+        connect_completion_cleanup(thread, worker, worker.finished, worker.failed)
         thread.finished.connect(self._thread_finished)
-        thread.finished.connect(thread.deleteLater)
         self._thread = thread
         self._worker = worker
         self.busy_changed.emit(True)
@@ -88,9 +85,7 @@ class GuiPreflightController(QObject):
         """Wait for bounded diagnostic preflight before destroying Qt objects."""
 
         thread = self._thread
-        if thread is not None and thread.isRunning():
-            thread.quit()
-            thread.wait()
+        shutdown_worker_thread(thread)
         self._thread = None
         self._worker = None
 
@@ -101,8 +96,8 @@ class GuiPreflightController(QObject):
         self.busy_changed.emit(False)
 
     @Slot(object)
-    def _forward_progress(self, value: object) -> None:
-        self.progress.emit(value)
+    def _forward_progress(self, event: object) -> None:
+        self.progress.emit(event)
 
     @Slot(object, object)
     def _forward_finished(self, request: object, report: object) -> None:

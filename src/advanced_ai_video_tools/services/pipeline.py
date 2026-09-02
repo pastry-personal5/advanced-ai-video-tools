@@ -5,64 +5,25 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
 from uuid import uuid4
 
 from loguru import logger
 
-from advanced_ai_video_tools.core.models import IssueSeverity, JobPlan, JobRequest, JobState, PipelineStage, PreflightReport, ProgressEvent, Toolchain
+from advanced_ai_video_tools.core.models import IssueSeverity, JobPlan, JobRequest, JobState, PipelineStage, PreflightReport, Toolchain
 from advanced_ai_video_tools.services.finalization import FinalOutputVerifier, FinalizationCancelled, FinalizationExecutor, FinalizationFailed, FinalizationResult
-from advanced_ai_video_tools.services.frame_extraction import FrameExtractionCancelled, FrameExtractionExecutor, FrameExtractionFailed, FrameExtractionResult
-from advanced_ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerifier, PreparationCancelled, PreparationFailed, PreparationResult
+from advanced_ai_video_tools.services.frame_extraction import FrameExtractionCancelled, FrameExtractionExecutor, FrameExtractionFailed
+from advanced_ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerifier, PreparationCancelled, PreparationFailed
+from advanced_ai_video_tools.services.contracts import ExtractionContract, FinalizationContract, PreparationContract, PreflightContract, UpscaleContract
+from advanced_ai_video_tools.services.context import StageContext
 from advanced_ai_video_tools.services.preflight import PreflightService
-from advanced_ai_video_tools.services.upscaling import UpscalingCancelled, UpscalingExecutor, UpscalingFailed, UpscalingResult
-from advanced_ai_video_tools.storage.naming import OutputPathRegistry
+from advanced_ai_video_tools.services.progress import ProgressCallback, ProgressEmitter
+from advanced_ai_video_tools.services.upscaling import UpscalingCancelled, UpscalingExecutor, UpscalingFailed
 from advanced_ai_video_tools.storage.paths import job_cache_directory
 from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceError, WorkspaceManager
 from advanced_ai_video_tools.system.processes import CancellationToken, ProcessRunner, SubprocessRunner
 from advanced_ai_video_tools.video.probe import FFprobeClient
 
-ProgressCallback = Callable[[ProgressEvent], None]
 StateCallback = Callable[[JobState], None]
-
-
-class PreflightRunner(Protocol):
-    """Validation boundary that owns destination reservations."""
-
-    @property
-    def registry(self) -> OutputPathRegistry:
-        """Return the registry holding successful plan reservations."""
-
-    def run(self, request: JobRequest, progress: ProgressCallback | None = None) -> PreflightReport:
-        """Validate user intent and return a frozen execution plan."""
-
-
-class PreparationRunner(Protocol):
-    """Composable media-preparation boundary."""
-
-    def execute_in_workspace(self, job: JobPlan, ffmpeg: Path, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None) -> PreparationResult:
-        """Prepare one merged timeline in the shared workspace."""
-
-
-class ExtractionRunner(Protocol):
-    """Composable frame-extraction boundary."""
-
-    def execute(self, prepared: PreparationResult, job: JobPlan, ffmpeg: Path, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None) -> FrameExtractionResult:
-        """Extract one verified frame sequence."""
-
-
-class UpscaleRunner(Protocol):
-    """Composable directory-upscaling boundary."""
-
-    def execute(self, extracted: FrameExtractionResult, job: JobPlan, toolchain: Toolchain, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None) -> UpscalingResult:
-        """Skip or execute the one permitted AI pass."""
-
-
-class FinalizationRunner(Protocol):
-    """Terminal encoding, publication, and cleanup boundary."""
-
-    def execute(self, prepared: PreparationResult, upscaled: UpscalingResult, job: JobPlan, toolchain: Toolchain, *, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None) -> FinalizationResult:
-        """Publish the verified output and clean terminal temporary state."""
 
 
 @dataclass(frozen=True)
@@ -148,13 +109,13 @@ class PipelineService:
     def __init__(
         self,
         *,
-        preflight: PreflightRunner | None = None,
+        preflight: PreflightContract | None = None,
         workspace_manager: WorkspaceManager | None = None,
         process_runner: ProcessRunner | None = None,
-        preparation: PreparationRunner | None = None,
-        extraction: ExtractionRunner | None = None,
-        upscaling: UpscaleRunner | None = None,
-        finalization: FinalizationRunner | None = None,
+        preparation: PreparationContract | None = None,
+        extraction: ExtractionContract | None = None,
+        upscaling: UpscaleContract | None = None,
+        finalization: FinalizationContract | None = None,
     ) -> None:
         self._preflight = preflight or PreflightService()
         self._workspace_manager = workspace_manager or WorkspaceManager(job_cache_directory())
@@ -164,7 +125,7 @@ class PipelineService:
         self._upscaling = upscaling
         self._finalization = finalization
 
-    def _stage_runners(self, toolchain: Toolchain) -> tuple[PreparationRunner, ExtractionRunner, UpscaleRunner, FinalizationRunner]:
+    def _stage_runners(self, toolchain: Toolchain) -> tuple[PreparationContract, ExtractionContract, UpscaleContract, FinalizationContract]:
         prober = FFprobeClient(toolchain.ffprobe.path)
         preparation = self._preparation or MediaPreparationExecutor(self._workspace_manager, self._process_runner, MergedOutputVerifier(prober))
         extraction = self._extraction or FrameExtractionExecutor(self._workspace_manager, self._process_runner)
@@ -176,23 +137,23 @@ class PipelineService:
         """Pass one workspace and cancellation token through every stage."""
 
         preparation, extraction, upscaling, finalization = self._stage_runners(toolchain)
+        context = StageContext(workspace=workspace, cancellation=token, progress=progress, toolchain=toolchain)
         with logger.contextualize(stage=PipelineStage.NORMALIZE.value):
             logger.info("Starting media preparation")
-            prepared = preparation.execute_in_workspace(plan, toolchain.ffmpeg.path, workspace, token, progress)
+            prepared = preparation.execute_preparation_in_workspace(plan, toolchain.ffmpeg.path, workspace, token, progress, context=context)
         with logger.contextualize(stage=PipelineStage.EXTRACT.value):
             logger.info("Starting frame extraction")
-            extracted = extraction.execute(prepared, plan, toolchain.ffmpeg.path, workspace=workspace, cancellation=token, progress=progress)
+            extracted = extraction.execute_extraction(prepared, plan, toolchain.ffmpeg.path, workspace=workspace, cancellation=token, progress=progress, context=context)
         with logger.contextualize(stage=PipelineStage.UPSCALE.value):
             logger.info("Starting AI upscale scale={} model={}", plan.ai_scale or "skip", plan.model_name)
-            upscaled = upscaling.execute(extracted, plan, toolchain, workspace=workspace, cancellation=token, progress=progress)
+            upscaled = upscaling.execute_upscaling(extracted, plan, toolchain, workspace=workspace, cancellation=token, progress=progress, context=context)
         with logger.contextualize(stage=PipelineStage.ENCODE.value):
             logger.info("Starting final encoding and publication")
-            return finalization.execute(prepared, upscaled, plan, toolchain, workspace=workspace, cancellation=token, progress=progress)
+            return finalization.execute_finalization(prepared, upscaled, plan, toolchain, workspace=workspace, cancellation=token, progress=progress, context=context)
 
     @staticmethod
     def _emit_cleanup(progress: ProgressCallback | None, completed: int, message: str) -> None:
-        if progress is not None:
-            progress(ProgressEvent(PipelineStage.CLEANUP, completed, 1, message))
+        ProgressEmitter.emit(progress, PipelineStage.CLEANUP, completed, 1, message)
 
     def _clean_cancelled_workspace(self, workspace: OwnedWorkspace, progress: ProgressCallback | None) -> None:
         self._emit_cleanup(progress, 0, "Cleaning the cancelled job workspace")
@@ -223,7 +184,7 @@ class PipelineService:
             lifecycle.transition(JobState.CANCELLED)
             raise PipelineCancelled("Processing cancelled before validation.", PipelineStage.VALIDATE)
         lifecycle.transition(JobState.VALIDATING)
-        report = self._preflight.run(request, progress)
+        report = self._preflight.execute_preflight(request, progress)
         plan = report.plan
         toolchain = report.toolchain
         if not report.ready or plan is None or toolchain is None:
@@ -274,7 +235,7 @@ class PipelineService:
         finally:
             self._preflight.registry.release(reservation)
 
-    def run(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, state_changed: StateCallback | None = None, job_id: str | None = None) -> PipelineResult:
+    def execute_pipeline(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, state_changed: StateCallback | None = None, job_id: str | None = None) -> PipelineResult:
         """Execute one complete job with stable privacy-conscious log context."""
 
         resolved_job_id = job_id or uuid4().hex

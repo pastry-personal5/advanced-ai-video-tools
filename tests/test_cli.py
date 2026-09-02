@@ -55,7 +55,7 @@ class FakeService:
         self.registry = FakeRegistry()
         self.request: JobRequest | None = None
 
-    def run(self, request: JobRequest) -> PreflightReport:
+    def execute_preflight(self, request: JobRequest) -> PreflightReport:
         """Capture parsed job intent and return the report."""
 
         self.request = request
@@ -69,7 +69,7 @@ class FakePipelineService:
         self.outcome = outcome
         self.request: JobRequest | None = None
 
-    def run(self, request: JobRequest, **_kwargs) -> PipelineResult:
+    def execute_pipeline(self, request: JobRequest, **_kwargs) -> PipelineResult:
         """Capture CLI intent and resolve the configured terminal result."""
 
         self.request = request

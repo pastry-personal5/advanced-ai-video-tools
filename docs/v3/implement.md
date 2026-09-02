@@ -1,6 +1,6 @@
 # Version 3 Implementation Guide
 
-V3 Phase 1 implementation is authorized. Phase 2 and Phase 3 implementation
+V3 Phase 1 implementation is authorized. Phase 3 and Phase 4 implementation
 remain unauthorized. For the active phase, follow this order:
 
 1. Read [plans.md](plans.md), the selected phase file, and the v2 architecture
@@ -19,11 +19,13 @@ remain unauthorized. For the active phase, follow this order:
 ## Phase-specific gates
 
 - **Refactoring:** preserve public behavior and media contracts; avoid
-  speculative abstractions.
-- **Crop:** define crop coordinate units, validation, aspect-ratio policy,
+  speculative abstractions. Complete the naming-first Phase 1A gate, then
+  execute the staged 1B consolidation, 1C readability, and 1D typed-contract
+  gates recorded in the active phase file.
+- **Crop (Phase 3):** define crop coordinate units, validation, aspect-ratio policy,
   rotation/color ordering, CLI/GUI controls, and output verification before
   implementation.
-- **Interpolation:** define the source-frame-rate contract, timing model,
+- **Interpolation (Phase 4):** define the source-frame-rate contract, timing model,
   algorithm/tool ownership, audio/timestamp behavior, 30/60 fps selection,
   resource limits, cancellation, and quality verification before implementation.
 

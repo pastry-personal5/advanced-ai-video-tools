@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from advanced_ai_video_tools.core.models import AudioStream, ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, Rational, VideoStream
-from advanced_ai_video_tools.video.finalization import DEFAULT_VIDEO_CRF, FinalAudioMode, build_final_encoding_plan
+from advanced_ai_video_tools.video.finalization import DEFAULT_VIDEO_CRF, FinalAudioMode, create_final_encoding_plan
 
 
 def _video(duration: Decimal = Decimal("1")) -> VideoStream:
@@ -29,7 +29,7 @@ def _plan(tmp_path: Path, strategy: ConcatStrategy, *, audio: AudioStream | None
     frames = workspace / "frames"
     merged_path = workspace / "merged.mkv"
     merged = MediaProbe(merged_path, Decimal("1"), (_video(),), (audio,) if audio is not None else (), ())
-    return build_final_encoding_plan(_job(tmp_path, strategy, audio_layout="mono" if audio is not None else None), Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=frames, frame_count=10, frame_width=64, frame_height=36, audio_source_path=merged_path if audio is not None else None)
+    return create_final_encoding_plan(_job(tmp_path, strategy, audio_layout="mono" if audio is not None else None), Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=frames, frame_count=10, frame_width=64, frame_height=36, audio_source_path=merged_path if audio is not None else None)
 
 
 def test_video_only_command_freezes_quality_color_timing_and_stream_policy(tmp_path: Path) -> None:
@@ -67,7 +67,7 @@ def test_smpte170m_matrix_is_preserved_in_final_encoding(tmp_path: Path) -> None
     merged = MediaProbe(merged_path, Decimal("1"), (video,), (), ())
     job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "final.mp4", False, (), Rational(10, 1), 64, 36, None, ConcatStrategy.NORMALIZE, None, (), 100, 120, ColorProfile(ColorMatrix.SMPTE170M, "bt709", "bt709"))
 
-    plan = build_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=workspace / "frames", frame_count=10, frame_width=64, frame_height=36, audio_source_path=None)
+    plan = create_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=workspace / "frames", frame_count=10, frame_width=64, frame_height=36, audio_source_path=None)
 
     video_filter = plan.command[plan.command.index("-vf") + 1]
     assert "out_color_matrix=smpte170m" in video_filter
@@ -84,7 +84,7 @@ def test_missing_transfer_and_primaries_remain_omitted_from_final_encoding(tmp_p
     merged = MediaProbe(merged_path, Decimal("1"), (video,), (), ())
     job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "final.mp4", False, (), Rational(10, 1), 64, 36, None, ConcatStrategy.NORMALIZE, None, (), 100, 120, ColorProfile(ColorMatrix.SMPTE170M, None, None))
 
-    plan = build_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=workspace / "frames", frame_count=10, frame_width=64, frame_height=36, audio_source_path=None)
+    plan = create_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=workspace / "frames", frame_count=10, frame_width=64, frame_height=36, audio_source_path=None)
 
     assert "setparams=range=limited:colorspace=smpte170m" in plan.command[plan.command.index("-vf") + 1]
     assert "-color_trc" not in plan.command
@@ -139,9 +139,9 @@ def test_final_builder_rejects_unsafe_destination_dimensions_and_audio_source(tm
     merged = MediaProbe(workspace / "merged.mkv", Decimal("1"), (_video(),), (_audio("pcm_s24le"),), ())
     job = _job(tmp_path, ConcatStrategy.NORMALIZE, audio_layout="mono")
     with pytest.raises(ValueError, match="destination filesystem"):
-        build_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / "elsewhere" / ".partial.mp4", frames_directory=frames, frame_count=10, frame_width=64, frame_height=36, audio_source_path=merged.path)
+        create_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / "elsewhere" / ".partial.mp4", frames_directory=frames, frame_count=10, frame_width=64, frame_height=36, audio_source_path=merged.path)
     with pytest.raises(ValueError, match="retained audio source"):
-        build_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=frames, frame_count=10, frame_width=64, frame_height=36, audio_source_path=workspace / "other.mkv")
+        create_final_encoding_plan(job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=frames, frame_count=10, frame_width=64, frame_height=36, audio_source_path=workspace / "other.mkv")
     odd_job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "final.mp4", False, (), Rational(10, 1), 63, 36, None, ConcatStrategy.NORMALIZE, "mono", (), 100, 120, ColorProfile(ColorMatrix.BT709, "bt709", "bt709"))
     with pytest.raises(ValueError, match="even"):
-        build_final_encoding_plan(odd_job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=frames, frame_count=10, frame_width=64, frame_height=36, audio_source_path=merged.path)
+        create_final_encoding_plan(odd_job, Path("ffmpeg"), merged, workspace, tmp_path / ".partial.mp4", frames_directory=frames, frame_count=10, frame_width=64, frame_height=36, audio_source_path=merged.path)

@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
 from loguru import logger
 
-from advanced_ai_video_tools.core.models import ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, VideoStream
+from advanced_ai_video_tools.core.models import ConcatStrategy, JobPlan, MediaProbe, PipelineStage, VideoStream
+from advanced_ai_video_tools.services.progress import ProgressCallback, ProgressEmitter
+from advanced_ai_video_tools.services.context import StageContext
 from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceError, WorkspaceManager
 from advanced_ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessError, ProcessResult, ProcessRunner
-from advanced_ai_video_tools.video.commands import MediaPreparationPlan, build_media_preparation_plan
+from advanced_ai_video_tools.video.commands import MediaPreparationPlan, create_media_preparation_plan
 from advanced_ai_video_tools.video.compatibility import assess_frame_timing
 from advanced_ai_video_tools.video.manifest import write_concat_manifest
 from advanced_ai_video_tools.video.probe import MediaProber, ProbeError
 
-ProgressCallback = Callable[[ProgressEvent], None]
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 24 * 60 * 60
 
 
@@ -149,39 +149,37 @@ class MediaPreparationExecutor:
         self._verifier = verifier
         self._command_timeout_seconds = command_timeout_seconds
 
-    @staticmethod
-    def _emit(callback: ProgressCallback | None, stage: PipelineStage, completed: int, total: int | None, message: str) -> None:
-        if callback is not None:
-            callback(ProgressEvent(stage, completed, total, message))
-
     def _cleanup(self, workspace: OwnedWorkspace, callback: ProgressCallback | None) -> None:
-        self._emit(callback, PipelineStage.CLEANUP, 0, 1, "Cleaning the preparation workspace")
+        ProgressEmitter.emit(callback, PipelineStage.CLEANUP, 0, 1, "Cleaning the preparation workspace")
         self._workspace_manager.cleanup(workspace)
-        self._emit(callback, PipelineStage.CLEANUP, 1, 1, "Preparation workspace cleaned")
+        ProgressEmitter.emit(callback, PipelineStage.CLEANUP, 1, 1, "Preparation workspace cleaned")
 
     def _normalize_clips(
         self,
         plan: MediaPreparationPlan,
         token: CancellationToken,
         progress: ProgressCallback | None,
-        results: list[ProcessResult],
+        process_results: list[ProcessResult],
     ) -> None:
         normalization_total = len(plan.normalization_commands)
         if normalization_total == 0:
-            self._emit(progress, PipelineStage.NORMALIZE, 0, 0, "Normalization is not required")
+            ProgressEmitter.emit(progress, PipelineStage.NORMALIZE, 0, 0, "Normalization is not required")
             return
-        self._emit(progress, PipelineStage.NORMALIZE, 0, normalization_total, "Starting lossless normalization")
-        for index, command in enumerate(plan.normalization_commands, start=1):
-            results.append(self._process_runner.run(command, token, self._command_timeout_seconds))
-            self._emit(progress, PipelineStage.NORMALIZE, index, normalization_total, f"Normalized clip {index} of {normalization_total}")
+        ProgressEmitter.emit(progress, PipelineStage.NORMALIZE, 0, normalization_total, "Starting lossless normalization")
+        for clip_index, command_args in enumerate(plan.normalization_commands, start=1):
+            process_results.append(self._process_runner.run(command_args, token, self._command_timeout_seconds))
+            ProgressEmitter.emit(progress, PipelineStage.NORMALIZE, clip_index, normalization_total, f"Normalized clip {clip_index} of {normalization_total}")
 
-    def execute(self, job: JobPlan, ffmpeg: Path, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None) -> PreparationResult:
+    def execute_preparation(self, job: JobPlan, ffmpeg: Path, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, *, context: StageContext | None = None) -> PreparationResult:
         """Run normalize-all-or-none, concat once, verify, then clean success."""
 
+        if context is not None:
+            cancellation = context.cancellation
+            progress = context.progress
         token = cancellation or CancellationToken()
         workspace = self._workspace_manager.create()
         try:
-            result = self.execute_in_workspace(job, ffmpeg, workspace, token, progress)
+            result = self.execute_preparation_in_workspace(job, ffmpeg, workspace, token, progress)
         except PreparationCancelled as error:
             try:
                 self._cleanup(workspace, progress)
@@ -194,36 +192,40 @@ class MediaPreparationExecutor:
             raise PreparationFailed(f"Preparation succeeded, but workspace cleanup failed: {error}", workspace.path, PipelineStage.CLEANUP) from error
         return result
 
-    def execute_in_workspace(self, job: JobPlan, ffmpeg: Path, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None) -> PreparationResult:
+    def execute_preparation_in_workspace(self, job: JobPlan, ffmpeg: Path, workspace: OwnedWorkspace, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, *, context: StageContext | None = None) -> PreparationResult:
         """Prepare media in a caller-owned workspace without cleaning it."""
 
+        if context is not None:
+            workspace = context.workspace
+            cancellation = context.cancellation
+            progress = context.progress
         token = cancellation or CancellationToken()
         stage = PipelineStage.NORMALIZE
-        results: list[ProcessResult] = []
+        process_results: list[ProcessResult] = []
         try:
             workspace_path = self._workspace_manager.validate(workspace)
-            plan = build_media_preparation_plan(job, ffmpeg, workspace_path)
-            self._prepare_directories(plan)
-            self._normalize_clips(plan, token, progress, results)
+            preparation_plan = create_media_preparation_plan(job, ffmpeg, workspace_path)
+            self._prepare_directories(preparation_plan)
+            self._normalize_clips(preparation_plan, token, progress, process_results)
             if token.cancelled:
                 raise ProcessCancelled("preparation cancelled", ())
-            write_concat_manifest(plan.concat_manifest_path, plan.concat_inputs)
+            write_concat_manifest(preparation_plan.concat_manifest_path, preparation_plan.concat_inputs)
             stage = PipelineStage.CONCATENATE
-            self._emit(progress, stage, 0, 1, "Concatenating the prepared timeline")
-            results.append(self._process_runner.run(plan.concat_command, token, self._command_timeout_seconds))
-            self._emit(progress, stage, 1, 1, "Concatenated the prepared timeline")
+            ProgressEmitter.emit(progress, stage, 0, 1, "Concatenating the prepared timeline")
+            process_results.append(self._process_runner.run(preparation_plan.concat_command, token, self._command_timeout_seconds))
+            ProgressEmitter.emit(progress, stage, 1, 1, "Concatenated the prepared timeline")
             if token.cancelled:
                 raise ProcessCancelled("preparation cancelled", ())
             stage = PipelineStage.VERIFY
-            self._emit(progress, stage, 0, 1, "Verifying the merged timeline")
-            merged_probe = self._verifier.verify(plan.merged_output_path, job, plan.compatibility.strategy)
-            self._emit(progress, stage, 1, 1, "Verified the merged timeline")
+            ProgressEmitter.emit(progress, stage, 0, 1, "Verifying the merged timeline")
+            merged_probe = self._verifier.verify(preparation_plan.merged_output_path, job, preparation_plan.compatibility.strategy)
+            ProgressEmitter.emit(progress, stage, 1, 1, "Verified the merged timeline")
         except ProcessCancelled as error:
             raise PreparationCancelled("Preparation cancelled; child processes terminated. The caller still owns the workspace.", workspace.path, stage) from error
         except (MergedOutputVerificationError, ProcessError, ProbeError, WorkspaceError, OSError, ValueError) as error:
             diagnostic = error.stderr_tail if isinstance(error, ProcessError) else ""
             raise PreparationFailed(f"Preparation failed during {stage.value}: {error}. Workspace retained at {workspace.path}", workspace.path, stage, diagnostic) from error
-        return PreparationResult(merged_probe, len(plan.normalization_commands), tuple(results), workspace.identifier)
+        return PreparationResult(merged_probe, len(preparation_plan.normalization_commands), tuple(process_results), workspace.identifier)
 
     @staticmethod
     def _prepare_directories(plan: MediaPreparationPlan) -> None:

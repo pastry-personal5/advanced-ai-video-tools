@@ -143,7 +143,7 @@ class FakeQueue:
 class UnusedRunner:
     """A runtime dependency that must remain idle until job creation exists."""
 
-    def run(self, *_args: object, **_kwargs: object) -> object:
+    def execute_pipeline(self, *_args: object, **_kwargs: object) -> object:
         """Fail if the empty initial shell unexpectedly starts processing."""
 
         raise AssertionError("the initial GUI shell must not submit work by itself")
@@ -574,7 +574,7 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.source_preview.preview_label.text() == "Preview unavailable; preflight can still inspect this clip."
     assert window.source_preview.preview_label.isVisible()
     window.editor.output_directory.setText(str(tmp_path))
-    assert window.editor.build_request().inputs == (tmp_path / "first.mov",)
+    assert window.editor.create_job_request().inputs == (tmp_path / "first.mov",)
     assert window.source_preview.play_pause_button.isEnabled()
     assert window.source_preview.previous_button.text() == "←"
     assert window.source_preview.next_button.text() == "→"
@@ -1002,18 +1002,18 @@ def test_source_preview_selection_does_not_change_processing_intent(qt_app: QApp
     window.editor.output_directory.setText(str(tmp_path))
     window.editor.add_inputs(paths)
     window.editor.inputs.setCurrentRow(2)
-    frozen = window.editor.build_request()
+    frozen = window.editor.create_job_request()
 
     window.source_preview.previous_button.click()
 
     assert window.editor.inputs.currentRow() == 1
     assert window.source_preview.player.source().toLocalFile() == str(paths[1])
     assert window.editor.input_paths() == paths
-    assert window.editor.build_request().inputs == frozen.inputs
+    assert window.editor.create_job_request().inputs == frozen.inputs
     window.source_preview._duration_changed(12_000)  # pylint: disable=protected-access
     window.source_preview._position_changed(4_000)  # pylint: disable=protected-access
     window.source_preview._preview_error(QMediaPlayer.Error.ResourceError, "Preview-only failure")  # pylint: disable=protected-access
-    preview_affected_request = window.editor.build_request()
+    preview_affected_request = window.editor.create_job_request()
     assert preview_affected_request.inputs == frozen.inputs
     assert preview_affected_request.output_directory == frozen.output_directory
     assert preview_affected_request.target_height == frozen.target_height
@@ -1036,7 +1036,7 @@ def test_preview_audio_preferences_restore_and_persist_without_job_impact(qt_app
     assert window.source_preview.volume_slider.value() == 42
     window.editor.output_directory.setText(str(tmp_path))
     window.editor.add_inputs((tmp_path / "clip.mov",))
-    frozen = window.editor.build_request()
+    frozen = window.editor.create_job_request()
 
     window.source_preview.volume_slider.setValue(37)
     window.source_preview.mute_toggle.setChecked(False)

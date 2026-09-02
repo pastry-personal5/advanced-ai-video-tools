@@ -217,7 +217,7 @@ def _with_log_path(message: str) -> str:
 
 def _run_preflight(parsed: argparse.Namespace) -> int:
     service = PreflightService()
-    report = service.run(_request(parsed))
+    report = service.execute_preflight(_request(parsed))
     rendered = _json_report(report) if parsed.as_json else _text_report(report)
     sys.stdout.write(f"{rendered}\n")
     if report.plan is not None:
@@ -230,7 +230,7 @@ def _run_processing(parsed: argparse.Namespace) -> int:
     previous_handler = signal.getsignal(signal.SIGINT)
     signal.signal(signal.SIGINT, lambda _signum, _frame: token.cancel())
     try:
-        result = PipelineService().run(_request(parsed), cancellation=token, progress=None if parsed.as_json else _progress)
+        result = PipelineService().execute_pipeline(_request(parsed), cancellation=token, progress=None if parsed.as_json else _progress)
     except PipelineCancelled as error:
         rendered = _processing_error_payload("cancelled", error) if parsed.as_json else _with_log_path(f"Processing cancelled during {error.stage.value}: {error}")
         (sys.stdout if parsed.as_json else sys.stderr).write(rendered + "\n")
