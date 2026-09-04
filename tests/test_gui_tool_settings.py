@@ -19,8 +19,8 @@ from PySide6.QtCore import QCoreApplication, QThread  # noqa: E402  # pylint: di
 from PySide6.QtWidgets import QApplication, QDialog, QPushButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from advanced_ai_video_tools.core.models import ToolInfo, ToolOverrides, Toolchain  # noqa: E402  # pylint: disable=wrong-import-position
-from advanced_ai_video_tools.gui.tool_settings import ToolSettingsDialog, ToolSettingsValidator  # noqa: E402  # pylint: disable=wrong-import-position
-from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.tool_settings import DeletionRulesDialog, ToolSettingsDialog, ToolSettingsValidator  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.system.settings import ApplicationSettings, DeletionRule, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.system.tools import ToolDiscoveryError  # noqa: E402  # pylint: disable=wrong-import-position
 
 
@@ -139,3 +139,40 @@ def test_failed_validation_keeps_previous_settings_and_dialog_open(qt_app: QAppl
     assert dialog.ffmpeg.isEnabled()
     dialog.reject()
     validator.shutdown()
+
+
+def test_deletion_rule_checkbox_updates_draft_and_save(qt_app: QApplication, tmp_path: Path) -> None:
+    """Direct list enablement changes persist with the ordered rule draft."""
+
+    del qt_app
+    rule = DeletionRule("*.mov", ("*-last-frame.png",))
+    store = SettingsStore(tmp_path / "settings.yaml")
+    dialog = DeletionRulesDialog(ApplicationSettings(deletion_rules=(rule,)), store)
+    item = dialog.rules.item(0)
+    item.setCheckState(item.checkState().Unchecked)
+
+    dialog.findChild(QPushButton, "saveDeletionRulesButton").click()  # type: ignore[union-attr]
+
+    assert store.load().deletion_rules == (DeletionRule("*.mov", ("{source_stem}-last-frame.png",), False),)
+
+
+def test_deletion_rule_editor_reorders_restores_and_cancels_without_persistence(qt_app: QApplication, tmp_path: Path) -> None:
+    """Rule drafts stay local until explicit save and defaults can be restored."""
+
+    del qt_app
+    first = DeletionRule("first-*.mov", ("{source_stem}-first.png",))
+    second = DeletionRule("second-*.mov", ("{source_stem}-second.png",))
+    store = SettingsStore(tmp_path / "settings.yaml")
+    dialog = DeletionRulesDialog(ApplicationSettings(deletion_rules=(first, second)), store)
+    dialog.rules.setCurrentRow(1)
+    dialog._move(-1)  # pylint: disable=protected-access
+
+    assert "second-*.mov" in dialog.rules.item(0).text()
+    dialog.reject()
+    assert not store.path.exists()
+
+    restored = DeletionRulesDialog(ApplicationSettings(deletion_rules=(first, second)), store)
+    restored._restore()  # pylint: disable=protected-access
+    restored.findChild(QPushButton, "saveDeletionRulesButton").click()  # type: ignore[union-attr]
+
+    assert store.load().deletion_rules == (DeletionRule("*.mov", ("{source_stem}-last-frame.png",)),)

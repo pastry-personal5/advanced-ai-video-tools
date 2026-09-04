@@ -146,7 +146,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1400, 880)
 
         self.editor = JobEditor(settings, queued_inputs=self._queued_source_paths)
-        self.source_preview = SourcePreviewPane(muted=settings.preview_muted, volume=settings.preview_volume)
+        self.source_preview = SourcePreviewPane(muted=settings.preview_muted, volume=settings.preview_volume, ffprobe_override=settings.tools.ffprobe)
         self.queue_preview = QueuePreviewPane(muted=settings.preview_muted, volume=settings.preview_volume)
         edit_menu = self.menuBar().addMenu("Edit")
         self.preferences_action = QAction("Preferences", self)
@@ -826,9 +826,12 @@ class MainWindow(QMainWindow):
     @Slot(object)
     def _apply_settings(self, value: object) -> None:
         if isinstance(value, ApplicationSettings):
+            ffprobe_changed = value.tools.ffprobe != self._settings.tools.ffprobe
             self._settings = value
             self.editor.apply_settings(value)
             self.source_preview.set_audio_preferences(value.preview_muted, value.preview_volume)
+            if ffprobe_changed:
+                self.source_preview.set_ffprobe_override(value.tools.ffprobe)
             self.queue_preview.set_audio_preferences(value.preview_muted, value.preview_volume)
             if self._submission is not None:
                 self._submission.apply_settings(value)

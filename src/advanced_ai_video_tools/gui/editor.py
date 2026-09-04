@@ -182,7 +182,8 @@ class JobEditor(QWidget):
         self.setAcceptDrops(True)
         self._settings = settings
         self._clock = clock
-        self._trash_service = trash_service or SourceClipTrashService()
+        self._trash_service = trash_service or SourceClipTrashService(deletion_rules=settings.deletion_rules)
+        self._trash_service.set_message_callback(self.message.emit)
         self._queued_inputs = queued_inputs or (lambda: ())
         self._paths: list[Path] = []
 
@@ -576,6 +577,9 @@ class JobEditor(QWidget):
 
         if isinstance(value, ApplicationSettings):
             self._settings = value
+            self.target_height.setValue(value.target_height)
+            self.output_directory.setText(str(value.recent_output_directory or ""))
+            self._trash_service.configure(value.deletion_rules)
 
     @Slot(str)
     def job_queued(self, _job_id: str) -> None:

@@ -1,7 +1,8 @@
 # Version 3 Implementation Guide
 
-V3 Phase 1 implementation is authorized. Phase 3 and Phase 4 implementation
-remain unauthorized. For the active phase, follow this order:
+V3 Phase 1, Phase 2, and Phase 3 implementation are complete. Phase 4, Phase
+6, and Phase 7 implementation remain unauthorized. For an authorized phase,
+follow this order:
 
 1. Read [plans.md](plans.md), the selected phase file, and the v2 architecture
    and implementation rules.
@@ -21,11 +22,24 @@ remain unauthorized. For the active phase, follow this order:
 - **Refactoring:** preserve public behavior and media contracts; avoid
   speculative abstractions. Complete the naming-first Phase 1A gate, then
   execute the staged 1B consolidation, 1C readability, and 1D typed-contract
-  gates recorded in the active phase file.
-- **Crop (Phase 3):** define crop coordinate units, validation, aspect-ratio policy,
+   gates recorded in the active phase file.
+- **Deletion rules (Phase 2):** keep the feature GUI-only and best-effort after
+  successful source Trash moves. Match only validated, case-insensitive
+  immediate-directory basenames and preserve schema migration diagnostics.
+- **Focused clip dimensions (Phase 3):** keep dimensions out of source-list rows
+  and Global Messages. Probe off the GUI thread with focused-clip priority,
+  cache by canonical path and file version, suppress stale results, and shut
+  down the worker cleanly. Place the focused dimension text immediately left of
+  the existing Output volume label; preserve that label's width and let the
+  slider absorb the reduced horizontal space.
+- **Modularity refactoring (Phase 4):** establish a dependency inventory and
+  explicit ownership boundaries before editing; keep core/media independent of
+  Qt widgets, preserve public behavior and media contracts, and require
+  characterization plus boundary tests for each bounded slice.
+- **Crop (Phase 6):** define crop coordinate units, validation, aspect-ratio policy,
   rotation/color ordering, CLI/GUI controls, and output verification before
   implementation.
-- **Interpolation (Phase 4):** define the source-frame-rate contract, timing model,
+- **Interpolation (Phase 7):** define the source-frame-rate contract, timing model,
   algorithm/tool ownership, audio/timestamp behavior, 30/60 fps selection,
   resource limits, cancellation, and quality verification before implementation.
 

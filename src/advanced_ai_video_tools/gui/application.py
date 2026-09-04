@@ -116,7 +116,8 @@ def create_gui_runtime(*, runner: PipelineRunner | None = None, settings_store: 
     if not isinstance(QCoreApplication.instance(), QApplication):
         raise RuntimeError("QApplication must exist before creating GUI objects")
     store = settings_store or SettingsStore()
-    settings = store.load()
+    settings_report = store.load_report()
+    settings = settings_report.settings
     bridge = QueueSnapshotBridge()
     queue = JobQueue(runner or PipelineService(), event_callback=bridge.forward)
     preview = GuiPreflightController()
@@ -125,6 +126,8 @@ def create_gui_runtime(*, runner: PipelineRunner | None = None, settings_store: 
         model = JobListModel(queue, bridge)
         submission = JobSubmissionController(queue, preview, settings, store)
         window = MainWindow(model, settings, current_log_path(), submission=submission, tool_validator=tool_validator, settings_store=store)
+        for warning in settings_report.warnings:
+            window._append_global_message(warning)  # pylint: disable=protected-access
         submission.set_dialog_parent(window)
     except Exception:
         preview.shutdown()

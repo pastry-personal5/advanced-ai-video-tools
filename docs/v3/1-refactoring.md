@@ -5,13 +5,13 @@
 - Phase: 1
 - State: Complete
 - Predecessor: V2 release completion
-- Successor: [Phase 3 — Crop Feature](3-crop.md)
+- Successor: [Phase 6 — Crop Feature](6-crop.md)
 
 ## Objective
 
 Make application API naming consistent first, then establish maintainability
 and clear extension boundaries for future v3
-features, specifically V3 Phase 3 Crop and V3 Phase 4 Video Interpolation,
+features, specifically V3 Phase 6 Crop and V3 Phase 7 Video Interpolation,
 without changing current user-visible behavior, media policy, queue semantics,
 or output contracts.
 
@@ -135,5 +135,5 @@ The canonical detailed plan for Phase 1A is
 All approved implementation slices and automated checks are complete. The owner
 approved completion on 2026-09-03 and waived the three opt-in native acceptance
 checks because this refactor changes no platform, presentation, or subprocess
-behavior. Phase 1 is complete; Phase 3 Crop and Phase 4 Interpolation remain
+behavior. Phase 1 is complete; Phase 6 Crop and Phase 7 Interpolation remain
 gated behind their own design approvals.

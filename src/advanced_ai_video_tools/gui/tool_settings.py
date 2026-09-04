@@ -11,11 +11,11 @@ from pathlib import Path
 from loguru import logger
 from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QLineEdit, QMessageBox, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
 from advanced_ai_video_tools.core.models import ToolOverrides, Toolchain
 from advanced_ai_video_tools.gui.worker_lifecycle import connect_completion_cleanup, shutdown_worker_thread
-from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
+from advanced_ai_video_tools.system.settings import DEFAULT_DELETION_RULES, ApplicationSettings, DeletionRule, SettingsError, SettingsStore
 from advanced_ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
 
 
@@ -105,6 +105,215 @@ class ToolSettingsValidator(QObject):
         self.failed.emit(overrides, message)
 
 
+def validate_deletion_pattern(pattern: str, *, target: bool = False) -> str | None:
+    """Return a concise validation message for one safe basename glob."""
+
+    try:
+        DeletionRule("*.mov", (pattern,)) if target else DeletionRule(pattern, ("placeholder",))
+    except (TypeError, ValueError) as error:
+        return str(error)
+    return None
+
+
+class DeletionRuleDialog(QDialog):
+    """Edit one deletion rule without touching the filesystem."""
+
+    def __init__(self, rule: DeletionRule | None = None, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Deletion rule")
+        self.source = QLineEdit(rule.source_pattern if rule else "")
+        self.source.setObjectName("deletionSourcePattern")
+        self.targets = QTextEdit("\n".join(rule.target_patterns) if rule else "")
+        self.targets.setObjectName("deletionTargetPatterns")
+        self.source_sample = QLineEdit()
+        self.source_sample.setObjectName("deletionSourceSampleFilename")
+        self.source_sample.setPlaceholderText("Try a source, e.g. foo-bar.mov")
+        self.sample = QLineEdit()
+        self.sample.setObjectName("deletionSampleFilename")
+        self.sample.setPlaceholderText("Try a related file, e.g. foo-bar-last-frame.png")
+        self.preview = QLabel()
+        self.preview.setObjectName("deletionSamplePreview")
+        self.status = QLabel()
+        self.status.setObjectName("deletionRuleValidation")
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        save = buttons.addButton("Save Rule", QDialogButtonBox.ButtonRole.AcceptRole)
+        save.setObjectName("saveDeletionRuleButton")
+        save.clicked.connect(self._accept_if_valid)
+        buttons.rejected.connect(self.reject)
+        form = QFormLayout()
+        form.addRow("Source pattern", self.source)
+        form.addRow("Target patterns", self.targets)
+        form.addRow("Sample source filename", self.source_sample)
+        form.addRow("Sample related filename", self.sample)
+        explanation = QLabel("Patterns match immediate sibling basenames case-insensitively. Target patterns may use {source_stem}, {source_name}, and {source_suffix}; enter one target pattern per line.")
+        explanation.setWordWrap(True)
+        layout = QVBoxLayout(self)
+        layout.addWidget(explanation)
+        layout.addLayout(form)
+        layout.addWidget(self.status)
+        layout.addWidget(self.preview)
+        layout.addWidget(buttons)
+        self.source.textChanged.connect(self._validate)
+        self.targets.textChanged.connect(self._validate)
+        self.source_sample.textChanged.connect(self._validate)
+        self.sample.textChanged.connect(self._validate)
+        self._validate()
+
+    def rule(self) -> DeletionRule:
+        """Return the validated rule represented by the dialog fields."""
+
+        return DeletionRule(self.source.text().strip(), tuple(line.strip() for line in self.targets.toPlainText().splitlines() if line.strip()))
+
+    def _validate(self) -> bool:
+        source_error = validate_deletion_pattern(self.source.text().strip())
+        targets = tuple(line.strip() for line in self.targets.toPlainText().splitlines() if line.strip())
+        target_error = next((validate_deletion_pattern(pattern, target=True) for pattern in targets if validate_deletion_pattern(pattern, target=True)), None)
+        error = source_error or ("Enter one or more target patterns." if not targets else target_error)
+        self.status.setText(error or "Valid basename-only rule.")
+        if error:
+            self.preview.setText("Preview unavailable until the rule is valid.")
+        else:
+            source_sample = self.source_sample.text().strip()
+            sample = self.sample.text().strip()
+            rule = DeletionRule(self.source.text().strip(), targets)
+            if not source_sample or not sample:
+                self.preview.setText("Enter source and related sample filenames to preview matching.")
+            elif not rule.matches_source(source_sample):
+                self.preview.setText("Sample source does not match the source pattern.")
+            elif rule.matches_target(source_sample, sample):
+                self.preview.setText("Matches a target pattern.")
+            else:
+                self.preview.setText("Does not match any target pattern.")
+        return error is None
+
+    def _accept_if_valid(self) -> None:
+        if self._validate():
+            self.accept()
+
+
+class DeletionRulesDialog(QDialog):
+    """Ordered editor for GUI-only related-file Trash rules."""
+
+    settings_saved = Signal(object)
+
+    def __init__(self, settings: ApplicationSettings, settings_store: SettingsStore, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._settings = settings
+        self._settings_store = settings_store
+        self._rendering = False
+        self._rules = list(settings.deletion_rules if settings.deletion_rules is not None else DEFAULT_DELETION_RULES)
+        self.setWindowTitle("Related-file deletion rules")
+        self.setMinimumWidth(700)
+        self.rules = QListWidget()
+        self.rules.setObjectName("deletionRulesList")
+        self.add_button = QPushButton("Add")
+        self.edit_button = QPushButton("Edit")
+        self.delete_button = QPushButton("Delete")
+        self.enable_button = QPushButton("Enable/Disable")
+        self.up_button = QPushButton("Move Up")
+        self.down_button = QPushButton("Move Down")
+        self.restore_button = QPushButton("Restore Built-in Defaults")
+        controls = QHBoxLayout()
+        for button in (self.add_button, self.edit_button, self.delete_button, self.enable_button, self.up_button, self.down_button):
+            controls.addWidget(button)
+        controls.addStretch(1)
+        controls.addWidget(self.restore_button)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        save = buttons.addButton("Save", QDialogButtonBox.ButtonRole.AcceptRole)
+        save.setObjectName("saveDeletionRulesButton")
+        save.clicked.connect(self._save)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Rules apply only after a source clip is successfully moved to Trash."))
+        layout.addWidget(self.rules)
+        layout.addLayout(controls)
+        layout.addWidget(buttons)
+        self.add_button.clicked.connect(self._add)
+        self.edit_button.clicked.connect(self._edit)
+        self.delete_button.clicked.connect(self._delete)
+        self.enable_button.clicked.connect(self._toggle)
+        self.up_button.clicked.connect(lambda: self._move(-1))
+        self.down_button.clicked.connect(lambda: self._move(1))
+        self.restore_button.clicked.connect(self._restore)
+        self.rules.itemChanged.connect(self._item_changed)
+        self._render()
+
+    def _render(self) -> None:
+        self._rendering = True
+        self.rules.clear()
+        for rule in self._rules:
+            item = QListWidgetItem(f"{'Enabled' if rule.enabled else 'Disabled'} — {rule.source_pattern} → {', '.join(rule.target_patterns)}")
+            item.setCheckState(Qt.CheckState.Checked if rule.enabled else Qt.CheckState.Unchecked)
+            self.rules.addItem(item)
+        self._rendering = False
+
+    def _item_changed(self, item: QListWidgetItem) -> None:
+        """Persist direct checkbox enablement into the draft rule list."""
+
+        if self._rendering:
+            return
+        row = self.rules.row(item)
+        if 0 <= row < len(self._rules):
+            rule = self._rules[row]
+            enabled = item.checkState() == Qt.CheckState.Checked
+            if enabled != rule.enabled:
+                self._rules[row] = DeletionRule(rule.source_pattern, rule.target_patterns, enabled)
+                item.setText(f"{'Enabled' if enabled else 'Disabled'} — {rule.source_pattern} → {', '.join(rule.target_patterns)}")
+
+    def _add(self) -> None:
+        dialog = DeletionRuleDialog(parent=self)
+        if dialog.exec() == int(QDialog.DialogCode.Accepted):
+            self._rules.append(dialog.rule())
+            self._render()
+
+    def _edit(self) -> None:
+        row = self.rules.currentRow()
+        if row < 0:
+            return
+        dialog = DeletionRuleDialog(self._rules[row], self)
+        if dialog.exec() == int(QDialog.DialogCode.Accepted):
+            self._rules[row] = DeletionRule(dialog.rule().source_pattern, dialog.rule().target_patterns, self._rules[row].enabled)
+            self._render()
+            self.rules.setCurrentRow(row)
+
+    def _delete(self) -> None:
+        row = self.rules.currentRow()
+        if row >= 0:
+            self._rules.pop(row)
+            self._render()
+
+    def _toggle(self) -> None:
+        row = self.rules.currentRow()
+        if row >= 0:
+            rule = self._rules[row]
+            self._rules[row] = DeletionRule(rule.source_pattern, rule.target_patterns, not rule.enabled)
+            self._render()
+            self.rules.setCurrentRow(row)
+
+    def _move(self, offset: int) -> None:
+        row = self.rules.currentRow()
+        target = row + offset
+        if 0 <= row < len(self._rules) and 0 <= target < len(self._rules):
+            self._rules[row], self._rules[target] = self._rules[target], self._rules[row]
+            self._render()
+            self.rules.setCurrentRow(target)
+
+    def _restore(self) -> None:
+        self._rules = list(DEFAULT_DELETION_RULES)
+        self._render()
+
+    def _save(self) -> None:
+        updated = replace(self._settings, deletion_rules=tuple(self._rules))
+        try:
+            self._settings_store.save(updated)
+        except SettingsError as error:
+            QMessageBox.warning(self, "Deletion rules not saved", str(error))
+            return
+        self._settings = updated
+        self.settings_saved.emit(updated)
+        self.accept()
+
+
 class ToolSettingsDialog(QDialog):
     """Edit overrides, prove them usable, then atomically persist them."""
 
@@ -162,10 +371,14 @@ class ToolSettingsDialog(QDialog):
         self.save_button.setObjectName("validateAndSaveToolsButton")
         self.buttons.rejected.connect(self.reject)
         self.save_button.clicked.connect(self._validate)
+        self.deletion_button = QPushButton("Edit Related-File Deletion Rules…")
+        self.deletion_button.setObjectName("editDeletionRulesButton")
+        self.deletion_button.clicked.connect(self._open_deletion_rules)
 
         layout = QVBoxLayout()
         layout.addWidget(explanation)
         layout.addLayout(form)
+        layout.addWidget(self.deletion_button)
         layout.addWidget(self.status)
         layout.addWidget(self.buttons)
         self.setLayout(layout)
@@ -211,6 +424,18 @@ class ToolSettingsDialog(QDialog):
         selected = QFileDialog.getExistingDirectory(self, "Choose Real-ESRGAN model directory", self.model_directory.text().strip())
         if selected:
             self.model_directory.setText(selected)
+
+    @Slot()
+    def _open_deletion_rules(self) -> None:
+        dialog = DeletionRulesDialog(self._settings, self._settings_store, self)
+        dialog.settings_saved.connect(self._deletion_rules_saved)
+        dialog.exec()
+
+    @Slot(object)
+    def _deletion_rules_saved(self, value: object) -> None:
+        if isinstance(value, ApplicationSettings):
+            self._settings = value
+            self.settings_saved.emit(value)
 
     @Slot()
     def _validate(self) -> None:

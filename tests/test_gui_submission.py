@@ -27,7 +27,7 @@ from advanced_ai_video_tools.gui.preflight import GuiPreflightController  # noqa
 from advanced_ai_video_tools.gui.source_clip_actions import SourceClipTrashService  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.submission import JobSubmissionController, PreflightDecision, PreflightDialog  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, MAJOR_REGION_GAP, SPACE_2, SPACE_3, SPACE_4, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
-from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.system.settings import ApplicationSettings, DeletionRule, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
 
 _CREATED = datetime(2026, 8, 21, 14, 30, 52, 123456, tzinfo=timezone.utc)
 
@@ -476,6 +476,29 @@ def test_queue_lookup_exception_blocks_trash_fail_closed(qt_app: QApplication, t
     assert editor.input_paths() == (path,)
     assert path.exists()
     assert messages == ["Could not verify whether source clip is safe to move to Trash: clip.mov"]
+
+
+def test_saved_rules_apply_to_future_trash_actions_and_emit_editor_messages(qt_app: QApplication, tmp_path: Path) -> None:
+    """A settings update reconfigures the existing editor Trash service."""
+
+    del qt_app
+    source = tmp_path / "clip.mov"
+    related = tmp_path / "clip-last-frame.png"
+    source.touch()
+    related.touch()
+    calls: list[Path] = []
+    service = SourceClipTrashService(lambda value: calls.append(Path(value)) or True, deletion_rules=())
+    editor = JobEditor(ApplicationSettings(deletion_rules=()), trash_service=service)
+    editor.add_inputs((source,))
+    messages: list[str] = []
+    editor.message.connect(messages.append)
+
+    editor.apply_settings(ApplicationSettings(deletion_rules=(DeletionRule("*.mov", ("{source_stem}-last-frame.png",)),)))
+    editor._move_item_to_trash(editor.inputs.item(0))  # pylint: disable=protected-access
+
+    assert calls == [source, related]
+    assert messages == ["Also moved related file to Trash: clip-last-frame.png", "Moved source clip to Trash: clip.mov and removed 1 list entry."]
+    assert not editor.input_paths()
 
 
 def test_long_source_filename_is_elided_and_remove_control_is_compact(qt_app: QApplication, tmp_path: Path) -> None:

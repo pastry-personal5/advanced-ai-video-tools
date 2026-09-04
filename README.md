@@ -6,9 +6,9 @@ single merged timeline with `realesrgan-ncnn-vulkan`.
 
 ## Current status
 
-V2.0.0 is complete. V3 Phase 1 — Refactoring is the active development target;
-Crop and Video Interpolation are proposed future phases. The v2 media contract
-remains authoritative during refactoring.
+V2.0.0 is complete. V3 Phase 1 Refactoring and Phase 2 GUI-only related-file
+deletion are complete; Crop and Video Interpolation remain proposed future
+phases. The v2 media contract remains authoritative for processing.
 
 The verified v2 distribution artifact is an unsigned/ad-hoc-signed development
 DMG. Production Developer ID signing, notarization, and Gatekeeper validation

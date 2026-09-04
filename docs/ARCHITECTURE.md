@@ -5,7 +5,7 @@ This document is the authoritative technical overview for Advanced AI Video Tool
 ## Development target
 
 Version 1.0.0 is the completed release baseline. Version 2 is complete, and
-v3 Phase 1 Refactoring is the active development target. Until an approved v3
+v3 Phase 2 is complete after the Phase 1 refactoring. Until an approved v3
 design decision explicitly supersedes a v2 contract, the implemented v2
 behavior in this document remains binding. The target change alone does not
 authorize speculative features, compatibility expansion, or changes to media
@@ -14,7 +14,7 @@ policy.
 The v2 roadmap lives in [v2/plans.md](v2/plans.md), the active v3 roadmap lives
 in [v3/plans.md](v3/plans.md), and shared execution rules live in
 [v3/implement.md](v3/implement.md). V2 Phases 1 through 7 are complete;
-v3 Phase 1 is in progress. Planning documents describe intended work; this
+v3 Phase 1 and Phase 2 are complete. Planning documents describe intended work; this
 architecture document remains authoritative for implemented system behavior.
 
 ## Implementation status
@@ -46,7 +46,7 @@ roles, and renders job state, progress, errors, output, reordering, and cancella
 The GUI job-creation path is implemented with ordered input intent, output and
 height options, off-thread diagnostic preflight, complete issue review, explicit
 per-job stream-drop acknowledgement, queue submission, and non-safety preference
-persistence. Its external-tools editor supports native browsing and reset-to-discovery controls, validates executable launches, model assets, and Vulkan inference off the presentation thread, and atomically persists only a successful override set. The
+persistence. Its external-tools editor supports native browsing and reset-to-discovery controls, validates executable launches, model assets, and Vulkan inference off the presentation thread, and atomically persists only a successful override set. Preferences also provide ordered, validated GUI-only related-file deletion rules. A successful source Trash move evaluates the first enabled matching rule and best-effort moves eligible immediate sibling regular files, reporting each result without rolling back the source operation. The
 implemented boundaries are:
 
 The presentation shell uses a single dark-themed window with a two-view
@@ -308,7 +308,7 @@ Before starting, calculate a conservative peak-disk estimate covering normalized
 
 Resolve persistent configuration with `QStandardPaths.StandardLocation.AppDataLocation`, corresponding to `~/Library/Application Support/Advanced AI Video Tools/` on macOS. Store executable paths, recent locations, and user preferences there; do not store credentials or model binaries. The v2 first launch does not import v1 settings and removes only the guarded legacy settings files.
 
-The settings document is typed, YAML-encoded, and explicitly schema-versioned. Version 1 persists FFmpeg, FFprobe, Real-ESRGAN, and model-directory overrides; recent input and output directories; target height; overwrite preference; and non-safety preview mute/volume preferences. It uses mode `0600`, a same-directory temporary file, file synchronization, and atomic replacement so readers never observe a partial write. Malformed documents are quarantined and safe defaults are restored. Unsupported newer schema versions remain untouched and produce an explicit error rather than being mistaken for corruption. Unknown fields within the current schema are ignored for minor forward compatibility. A valid legacy `settings.json` is migrated once to `settings.yaml`; all subsequent writes use YAML.
+The settings document is typed, YAML-encoded, and explicitly schema-versioned. Version 2 persists the version-1 preferences plus nullable GUI-only related-file deletion rules. Version-1 documents load without rewrite and migrate on the next successful save. Individual malformed rules are skipped with a GUI diagnostic while valid rules remain active; malformed documents are quarantined and safe defaults are restored. Unsupported newer schema versions remain untouched and produce an explicit error rather than being mistaken for corruption. Unknown fields within the current schema are ignored for minor forward compatibility. A valid legacy `settings.json` is migrated once to `settings.yaml`; all subsequent writes use YAML.
 
 An empty executable override means discovery through `PATH`; an empty model-directory override means the `models` directory beside the resolved Real-ESRGAN executable. The GUI never saves edited overrides optimistically. It runs all discovery checks—including the bounded Real-ESRGAN Vulkan smoke test—on an owned worker thread and atomically replaces settings only after success. The newly persisted overrides apply to later draft requests. Requests already submitted to the FIFO retain their frozen `ToolOverrides` and cannot be retargeted by a settings change.
 

@@ -19,11 +19,13 @@ from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QGroupBox, QHBoxLayout, QLabel, QSlider, QSizePolicy, QStyle, QTabWidget, QToolButton, QVBoxLayout, QWidget
 
 from advanced_ai_video_tools.gui.theme import SPACE_2, SPACE_3
+from advanced_ai_video_tools.gui.clip_resolution import DimensionProbeController
 
 VOLUME_ICON_COLOR = "#b8bcc2"
 VOLUME_ICON_OPTICAL_OFFSET = 0
 FULLSCREEN_HELP_MARGIN = 24
 PREVIEW_PANE_MINIMUM_WIDTH = 520
+VOLUME_SLIDER_MINIMUM_WIDTH = 48
 
 
 class FullscreenCommand(Enum):
@@ -260,7 +262,7 @@ class FullscreenPreviewDialog(QDialog):
 class SourcePreviewPane(QGroupBox):
     """Display the selected local source identity without affecting processing."""
 
-    def __init__(self, parent: QWidget | None = None, *, muted: bool = True, volume: int = 100) -> None:
+    def __init__(self, parent: QWidget | None = None, *, muted: bool = True, volume: int = 100, ffprobe_override: Path | None = None) -> None:
         # Declarative widget construction is intentionally kept together.
         # pylint: disable=too-many-statements
         super().__init__("Preview", parent)
@@ -323,6 +325,13 @@ class SourcePreviewPane(QGroupBox):
         self.volume_label.setObjectName("outputVolumeLabel")
         self.volume_label.setFixedHeight(24)
         self.volume_label.setContentsMargins(0, 0, 16, 0)
+        self.volume_label.setFixedWidth(self.volume_label.sizeHint().width())
+        self.dimension_label = QLabel()
+        self.dimension_label.setObjectName("previewDimensionInfo")
+        self.dimension_label.setAccessibleName("Focused clip dimensions")
+        self.dimension_label.setToolTip("Focused clip coded dimensions")
+        self.dimension_label.setFixedHeight(24)
+        self.dimension_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.minimum_volume_icon = self._volume_icon(QStyle.StandardPixmap.SP_MediaVolumeMuted, "Minimum volume", "minimumVolumeIcon")
         self.maximum_volume_icon = self._volume_icon(QStyle.StandardPixmap.SP_MediaVolume, "Maximum volume", "maximumVolumeIcon")
         self.mute_label = QLabel("Mute")
@@ -345,15 +354,17 @@ class SourcePreviewPane(QGroupBox):
         controls.addStretch(1)
         controls.addLayout(navigation_controls)
         self._buttons = (self.play_pause_button, self.first_frame_button, self.last_frame_button, self.previous_button, self.next_button)
-        self.volume_row = QWidget()
-        self.volume_row.setObjectName("previewVolumeRow")
-        self.volume_row.setFixedHeight(24)
-        self.volume_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        volume_controls = QHBoxLayout(self.volume_row)
+        self.dimension_info_and_volume_control_row = QWidget()
+        self.dimension_info_and_volume_control_row.setObjectName("previewDimensionInfoAndVolumeControlRow")
+        self.dimension_info_and_volume_control_row.setFixedHeight(24)
+        self.dimension_info_and_volume_control_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        volume_controls = QHBoxLayout(self.dimension_info_and_volume_control_row)
         volume_controls.setContentsMargins(0, 0, 0, 0)
         volume_controls.setSpacing(SPACE_2)
+        volume_controls.addWidget(self.dimension_label, alignment=Qt.AlignmentFlag.AlignVCenter)
         volume_controls.addWidget(self.volume_label, alignment=Qt.AlignmentFlag.AlignVCenter)
         volume_controls.addWidget(self.minimum_volume_icon, alignment=Qt.AlignmentFlag.AlignVCenter)
+        self.volume_slider.setMinimumWidth(VOLUME_SLIDER_MINIMUM_WIDTH)
         volume_controls.addWidget(self.volume_slider, 1, alignment=Qt.AlignmentFlag.AlignVCenter)
         volume_controls.addWidget(self.maximum_volume_icon, alignment=Qt.AlignmentFlag.AlignVCenter)
         mute_controls = QHBoxLayout()
@@ -368,7 +379,7 @@ class SourcePreviewPane(QGroupBox):
         audio_controls = QVBoxLayout()
         audio_controls.setContentsMargins(0, 0, 0, 0)
         audio_controls.setSpacing(SPACE_2)
-        audio_controls.addWidget(self.volume_row)
+        audio_controls.addWidget(self.dimension_info_and_volume_control_row)
         audio_controls.addLayout(mute_controls)
         progress_row = QHBoxLayout()
         progress_row.setContentsMargins(0, 0, 0, 0)
@@ -397,6 +408,9 @@ class SourcePreviewPane(QGroupBox):
         self.progress_slider.valueChanged.connect(self._progress_changed)
         self._paths: tuple[Path, ...] = ()
         self._selected_index = -1
+        self._dimension_probe = DimensionProbeController(ffprobe_override, self)
+        self._dimension_probe.status_changed.connect(self._dimension_status_changed)
+        self._dimension_probe.dimensions_changed.connect(self._dimension_result_changed)
         self._fullscreen: FullscreenPreviewDialog | None = None
         self._playback_requested = False
         self.player.playbackStateChanged.connect(self._playback_state_changed)
@@ -469,6 +483,7 @@ class SourcePreviewPane(QGroupBox):
 
         self._paths = paths
         self._selected_index = selected_index
+        self._dimension_probe.set_sources(paths, selected_index)
         self.set_source(paths[selected_index] if 0 <= selected_index < len(paths) else None)
         has_source = bool(paths) and 0 <= selected_index < len(paths)
         self.play_pause_button.setEnabled(has_source)
@@ -479,6 +494,27 @@ class SourcePreviewPane(QGroupBox):
         self.mute_toggle.setEnabled(has_source)
         self.volume_slider.setEnabled(has_source)
         self.fullscreen_button.setEnabled(has_source)
+
+    def set_ffprobe_override(self, path: Path | None) -> None:
+        """Apply a future FFprobe setting without starting a new probe."""
+
+        self._dimension_probe.reconfigure(path)
+
+    @Slot(str)
+    def _dimension_status_changed(self, status: str) -> None:
+        """Render non-success probe states without owning probe logic."""
+
+        if status:
+            self.dimension_label.setText(status)
+
+    @Slot(object)
+    def _dimension_result_changed(self, dimensions: object) -> None:
+        """Render a successful result or clear the no-selection state."""
+
+        if dimensions is None:
+            self.dimension_label.clear()
+        elif isinstance(dimensions, tuple) and len(dimensions) == 2:
+            self.dimension_label.setText(f"{dimensions[0]}×{dimensions[1]}")
 
     @Slot()
     def open_fullscreen(self) -> None:
@@ -653,6 +689,7 @@ class SourcePreviewPane(QGroupBox):
         self.player.stop()
         self.player.setVideoOutput(None)
         self.player.setAudioOutput(None)
+        self._dimension_probe.shutdown()
 
     previous_requested = Signal()
     play_pause_requested = Signal()

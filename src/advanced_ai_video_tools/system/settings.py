@@ -7,8 +7,10 @@ import os
 import tempfile
 import uuid
 from dataclasses import dataclass, field
+from fnmatch import fnmatchcase
 from json import JSONDecodeError
 from pathlib import Path
+import re
 from typing import Mapping
 
 import yaml
@@ -17,7 +19,7 @@ from loguru import logger
 from advanced_ai_video_tools.core.models import OverwriteMode, ToolOverrides
 from advanced_ai_video_tools.storage.paths import application_data_directory, legacy_application_data_directory
 
-SETTINGS_SCHEMA_VERSION = 1
+SETTINGS_SCHEMA_VERSION = 2
 DEFAULT_TARGET_HEIGHT = 2160
 DEFAULT_PREVIEW_VOLUME = 100
 
@@ -34,6 +36,91 @@ class _InvalidSettings(ValueError):
     """The settings document is corrupt or violates its declared schema."""
 
 
+def _validate_pattern(pattern: str, field_name: str) -> None:
+    unsafe = not pattern or "\0" in pattern or "/" in pattern or "\\" in pattern or ".." in pattern
+    if unsafe:
+        raise ValueError(f"{field_name} must be a safe non-empty basename pattern")
+
+
+_SOURCE_PLACEHOLDER_PATTERN = re.compile(r"\{source_(?:name|stem|suffix)\}")
+
+
+def _validate_target_pattern(pattern: str) -> None:
+    """Require target placeholders to be explicit, supported source values."""
+
+    _validate_pattern(pattern, "target pattern")
+    if "{" in _SOURCE_PLACEHOLDER_PATTERN.sub("", pattern) or "}" in _SOURCE_PLACEHOLDER_PATTERN.sub("", pattern):
+        raise ValueError("target pattern contains an unsupported source placeholder")
+
+
+@dataclass(frozen=True)
+class DeletionRule:
+    """A safe basename-only rule for related files moved to Trash."""
+
+    source_pattern: str
+    target_patterns: tuple[str, ...]
+    enabled: bool = True
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.source_pattern, str):
+            raise TypeError("source pattern must be a string")
+        _validate_pattern(self.source_pattern, "source pattern")
+        if not isinstance(self.target_patterns, tuple) or not self.target_patterns:
+            raise TypeError("target patterns must be a non-empty tuple")
+        for pattern in self.target_patterns:
+            if not isinstance(pattern, str):
+                raise TypeError("target patterns must contain strings")
+            _validate_target_pattern(pattern)
+        if not isinstance(self.enabled, bool):
+            raise TypeError("deletion rule enabled must be a boolean")
+
+    def matches_source(self, basename: str) -> bool:
+        """Match one basename case-insensitively."""
+
+        return fnmatchcase(basename.casefold(), self.source_pattern.casefold())
+
+    def matches_target(self, source_basename: str, candidate_basename: str | None = None) -> bool:
+        """Match one related basename, expanding source placeholders safely.
+
+        ``{source_stem}``, ``{source_name}``, and ``{source_suffix}`` in a
+        target pattern are literal values derived from the source basename.
+        Target patterns without a placeholder retain ordinary independent glob
+        semantics for advanced user-defined rules.
+        """
+
+        candidate = source_basename if candidate_basename is None else candidate_basename
+        expanded = tuple(_expand_target_pattern(pattern, source_basename) for pattern in self.target_patterns)
+        return any(fnmatchcase(candidate.casefold(), pattern.casefold()) for pattern in expanded)
+
+
+DEFAULT_DELETION_RULES: tuple[DeletionRule, ...] = (DeletionRule("*.mov", ("{source_stem}-last-frame.png",)),)
+_LEGACY_DEFAULT_DELETION_RULES: tuple[DeletionRule, ...] = (DeletionRule("*.mov", ("*-last-frame.png",)),)
+
+
+def _expand_target_pattern(pattern: str, source_basename: str) -> str:
+    source_path = Path(source_basename)
+    values = {
+        "{source_name}": source_path.name,
+        "{source_stem}": source_path.stem,
+        "{source_suffix}": source_path.suffix,
+    }
+    return _SOURCE_PLACEHOLDER_PATTERN.sub(lambda match: _escape_fnmatch_literal(values[match.group(0)]), pattern)
+
+
+def _escape_fnmatch_literal(value: str) -> str:
+    """Return a filename fragment that cannot become glob syntax on expansion."""
+
+    return value.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]")
+
+
+@dataclass(frozen=True)
+class SettingsLoadReport:
+    """Settings plus non-fatal diagnostics found while decoding them."""
+
+    settings: "ApplicationSettings"
+    warnings: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True)
 class ApplicationSettings:
     """Persistent user preferences shared by the GUI and other frontends."""
@@ -45,6 +132,7 @@ class ApplicationSettings:
     overwrite_mode: OverwriteMode = OverwriteMode.REPLACE
     preview_muted: bool = True
     preview_volume: int = DEFAULT_PREVIEW_VOLUME
+    deletion_rules: tuple[DeletionRule, ...] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.tools, ToolOverrides):
@@ -67,6 +155,9 @@ class ApplicationSettings:
                 raise TypeError("persisted paths must be pathlib.Path instances or None")
         if isinstance(self.target_height, bool) or self.target_height <= 0 or self.target_height % 2:
             raise ValueError("target height must be a positive even integer")
+        if self.deletion_rules is not None:
+            if not isinstance(self.deletion_rules, tuple) or any(not isinstance(rule, DeletionRule) for rule in self.deletion_rules):
+                raise TypeError("deletion rules must be a tuple of DeletionRule instances or None")
 
 
 class SettingsStore:
@@ -77,6 +168,7 @@ class SettingsStore:
         self._use_fresh_v2_storage = path is None
         self._path = selected.expanduser().absolute()
         self._legacy_path = self._path.with_suffix(".json") if self._path.suffix.lower() == ".yaml" else None
+        self.last_report = SettingsLoadReport(ApplicationSettings())
 
     @property
     def path(self) -> Path:
@@ -91,29 +183,37 @@ class SettingsStore:
         from an unsupported schema are left untouched and rejected explicitly.
         """
 
+        return self.load_report().settings
+
+    def load_report(self) -> SettingsLoadReport:
+        """Load settings and retain warnings for malformed individual rules."""
+
         if self._use_fresh_v2_storage:
             self._remove_v1_settings()
         self._reject_symlink()
         if not self._path.exists():
             if self._legacy_path is not None and self._legacy_path.exists():
-                return self._load_legacy_json()
-            return ApplicationSettings()
-        return self._load_yaml()
+                self.last_report = self._load_legacy_json()
+                return self.last_report
+            self.last_report = SettingsLoadReport(ApplicationSettings())
+            return self.last_report
+        self.last_report = self._load_yaml()
+        return self.last_report
 
-    def _load_yaml(self) -> ApplicationSettings:
+    def _load_yaml(self) -> SettingsLoadReport:
         """Decode the current YAML document and quarantine invalid data."""
 
         try:
             document = yaml.safe_load(self._path.read_text(encoding="utf-8"))
-            settings = _decode_document(document)
+            settings, warnings = _decode_document(document)
         except (yaml.YAMLError, UnicodeError, _InvalidSettings):
             quarantined = self._quarantine_invalid_document(self._path)
             logger.warning("Invalid application settings quarantined as {}", quarantined.name)
-            return ApplicationSettings()
+            return SettingsLoadReport(ApplicationSettings())
         except OSError as error:
             raise SettingsError("could not read application settings") from error
         logger.debug("Application settings loaded")
-        return settings
+        return SettingsLoadReport(settings, warnings)
 
     def _remove_v1_settings(self) -> None:
         """Remove only the known v1 settings files before first v2 use."""
@@ -172,7 +272,7 @@ class SettingsStore:
         if self._path.is_symlink():
             raise SettingsError("application settings path must not be a symbolic link")
 
-    def _load_legacy_json(self) -> ApplicationSettings:
+    def _load_legacy_json(self) -> SettingsLoadReport:
         """Migrate one valid legacy JSON document into the YAML location."""
 
         assert self._legacy_path is not None
@@ -180,11 +280,11 @@ class SettingsStore:
             raise SettingsError("legacy application settings path must not be a symbolic link")
         try:
             document = json.loads(self._legacy_path.read_text(encoding="utf-8"))
-            settings = _decode_document(document)
+            settings, warnings = _decode_document(document)
         except (JSONDecodeError, UnicodeError, _InvalidSettings):
             quarantined = self._quarantine_invalid_document(self._legacy_path)
             logger.warning("Invalid legacy application settings quarantined as {}", quarantined.name)
-            return ApplicationSettings()
+            return SettingsLoadReport(ApplicationSettings())
         except OSError as error:
             raise SettingsError("could not read legacy application settings") from error
         self.save(settings)
@@ -193,7 +293,7 @@ class SettingsStore:
         except OSError:
             logger.warning("Legacy application settings retained at {} after YAML migration", self._legacy_path)
         logger.debug("Legacy JSON application settings migrated to YAML")
-        return settings
+        return SettingsLoadReport(settings, warnings)
 
     @staticmethod
     def _quarantine_invalid_document(path: Path) -> Path:
@@ -206,7 +306,7 @@ class SettingsStore:
 
 
 def _encode_document(settings: ApplicationSettings) -> dict[str, object]:
-    return {
+    document: dict[str, object] = {
         "schema_version": SETTINGS_SCHEMA_VERSION,
         "processing": {"overwrite_mode": settings.overwrite_mode.value, "target_height": settings.target_height},
         "preview": {"muted": settings.preview_muted, "volume": settings.preview_volume},
@@ -218,19 +318,23 @@ def _encode_document(settings: ApplicationSettings) -> dict[str, object]:
             "realesrgan": _encode_path(settings.tools.realesrgan),
         },
     }
+    if settings.deletion_rules is not None:
+        document["deletion_rules"] = [{"source_pattern": rule.source_pattern, "target_patterns": list(rule.target_patterns), "enabled": rule.enabled} for rule in settings.deletion_rules]
+    return document
 
 
-def _decode_document(value: object) -> ApplicationSettings:
+def _decode_document(value: object) -> tuple[ApplicationSettings, tuple[str, ...]]:
     document = _mapping(value, "settings")
     version = document.get("schema_version")
     if isinstance(version, bool) or not isinstance(version, int):
         raise _InvalidSettings("schema_version must be an integer")
-    if version != SETTINGS_SCHEMA_VERSION:
+    if version not in (1, SETTINGS_SCHEMA_VERSION):
         raise UnsupportedSettingsVersion(f"settings schema version {version} is unsupported; expected {SETTINGS_SCHEMA_VERSION}")
     tools = _mapping(document.get("tools", {}), "tools")
     recent = _mapping(document.get("recent", {}), "recent")
     processing = _mapping(document.get("processing", {}), "processing")
     preview = _mapping(document.get("preview", {}), "preview")
+    deletion_rules, warnings = _decode_deletion_rules(document.get("deletion_rules"), version)
     height = processing.get("target_height", DEFAULT_TARGET_HEIGHT)
     if isinstance(height, bool) or not isinstance(height, int):
         raise _InvalidSettings("processing.target_height must be an integer")
@@ -245,19 +349,23 @@ def _decode_document(value: object) -> ApplicationSettings:
         raise _InvalidSettings("preview.volume must be an integer from 0 to 100")
     try:
         overwrite = OverwriteMode(raw_overwrite)
-        return ApplicationSettings(
-            tools=ToolOverrides(
-                ffmpeg=_optional_path(tools.get("ffmpeg"), "tools.ffmpeg"),
-                ffprobe=_optional_path(tools.get("ffprobe"), "tools.ffprobe"),
-                realesrgan=_optional_path(tools.get("realesrgan"), "tools.realesrgan"),
-                model_directory=_optional_path(tools.get("model_directory"), "tools.model_directory"),
+        return (
+            ApplicationSettings(
+                tools=ToolOverrides(
+                    ffmpeg=_optional_path(tools.get("ffmpeg"), "tools.ffmpeg"),
+                    ffprobe=_optional_path(tools.get("ffprobe"), "tools.ffprobe"),
+                    realesrgan=_optional_path(tools.get("realesrgan"), "tools.realesrgan"),
+                    model_directory=_optional_path(tools.get("model_directory"), "tools.model_directory"),
+                ),
+                recent_input_directory=_optional_path(recent.get("input_directory"), "recent.input_directory"),
+                recent_output_directory=_optional_path(recent.get("output_directory"), "recent.output_directory"),
+                target_height=height,
+                overwrite_mode=overwrite,
+                preview_muted=muted,
+                preview_volume=volume,
+                deletion_rules=deletion_rules,
             ),
-            recent_input_directory=_optional_path(recent.get("input_directory"), "recent.input_directory"),
-            recent_output_directory=_optional_path(recent.get("output_directory"), "recent.output_directory"),
-            target_height=height,
-            overwrite_mode=overwrite,
-            preview_muted=muted,
-            preview_volume=volume,
+            warnings,
         )
     except ValueError as error:
         raise _InvalidSettings(str(error)) from error
@@ -279,3 +387,30 @@ def _optional_path(value: object, field_name: str) -> Path | None:
 
 def _encode_path(path: Path | None) -> str | None:
     return str(path) if path is not None else None
+
+
+def _decode_deletion_rules(value: object, version: int) -> tuple[tuple[DeletionRule, ...] | None, tuple[str, ...]]:
+    if version == 1 and value is None:
+        return None, ()
+    if value is None:
+        return None, ()
+    if not isinstance(value, list):
+        return (), ("Skipped deletion rules because the saved value is not a list.",)
+    valid: list[DeletionRule] = []
+    warnings: list[str] = []
+    for index, raw_rule in enumerate(value):
+        try:
+            rule_document = _mapping(raw_rule, f"deletion_rules[{index}]")
+            source = rule_document.get("source_pattern")
+            targets = rule_document.get("target_patterns")
+            enabled = rule_document.get("enabled", True)
+            if not isinstance(source, str) or not isinstance(targets, list) or not all(isinstance(item, str) for item in targets) or not isinstance(enabled, bool):
+                raise ValueError("expected source_pattern, target_patterns, and enabled types")
+            rule = DeletionRule(source, tuple(targets), enabled)
+            if rule.source_pattern == _LEGACY_DEFAULT_DELETION_RULES[0].source_pattern and rule.target_patterns == _LEGACY_DEFAULT_DELETION_RULES[0].target_patterns:
+                rule = DeletionRule(DEFAULT_DELETION_RULES[0].source_pattern, DEFAULT_DELETION_RULES[0].target_patterns, rule.enabled)
+                warnings.append("Updated the legacy broad last-frame rule to the source-specific default.")
+            valid.append(rule)
+        except (TypeError, ValueError, _InvalidSettings) as error:
+            warnings.append(f"Skipped invalid deletion rule {index + 1}: {error}")
+    return tuple(valid), tuple(warnings)

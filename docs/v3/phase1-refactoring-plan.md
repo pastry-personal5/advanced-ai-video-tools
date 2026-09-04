@@ -79,7 +79,7 @@ semantics, and output contracts remain unchanged.
 ## Documentation ownership
 
 This file is the canonical detailed Phase 1A plan. Link it from the v3 roadmap
-and active Phase 1 file. Keep Phase 3 Crop and Phase 4 Video Interpolation
+and active Phase 1 file. Keep Phase 6 Crop and Phase 7 Video Interpolation
 sequencing intact; neither feature is authorized by this plan.
 
 ## Remaining Phase 1 slices

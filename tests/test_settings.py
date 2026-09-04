@@ -107,7 +107,7 @@ def test_settings_round_trip_with_private_atomic_file(tmp_path: Path) -> None:
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert path.read_text(encoding="utf-8").startswith("preview:\n")
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert document["schema_version"] == 1
+    assert document["schema_version"] == 2
     assert document["processing"] == {"overwrite_mode": "no_overwrite", "target_height": 1080}
     assert document["preview"] == {"muted": False, "volume": 42}
     assert "acknowledge_dropped_streams" not in path.read_text(encoding="utf-8")
@@ -154,10 +154,10 @@ def test_newer_schema_is_preserved_and_rejected(tmp_path: Path) -> None:
     """An older binary must never quarantine or overwrite valid future data."""
 
     path = tmp_path / "settings.yaml"
-    contents = "schema_version: 2\nfuture: true\n"
+    contents = "schema_version: 3\nfuture: true\n"
     path.write_text(contents, encoding="utf-8")
 
-    with pytest.raises(UnsupportedSettingsVersion, match="version 2"):
+    with pytest.raises(UnsupportedSettingsVersion, match="version 3"):
         SettingsStore(path).load()
 
     assert path.read_text(encoding="utf-8") == contents

@@ -554,12 +554,12 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert progress_row.itemAt(0).widget() is window.source_preview.progress_slider
     assert progress_row.itemAt(1).widget() is window.source_preview.preview_time_label
     audio_controls = window.source_preview.layout().itemAt(4).layout()
-    assert audio_controls.itemAt(0).widget() is window.source_preview.volume_row
-    volume_controls = window.source_preview.volume_row.layout()
-    assert [volume_controls.itemAt(index).widget() for index in range(4)] == [window.source_preview.volume_label, window.source_preview.minimum_volume_icon, window.source_preview.volume_slider, window.source_preview.maximum_volume_icon]
+    assert audio_controls.itemAt(0).widget() is window.source_preview.dimension_info_and_volume_control_row
+    volume_controls = window.source_preview.dimension_info_and_volume_control_row.layout()
+    assert [volume_controls.itemAt(index).widget() for index in range(5)] == [window.source_preview.dimension_label, window.source_preview.volume_label, window.source_preview.minimum_volume_icon, window.source_preview.volume_slider, window.source_preview.maximum_volume_icon]
     volume_widgets = [window.source_preview.volume_label, window.source_preview.minimum_volume_icon, window.source_preview.volume_slider, window.source_preview.maximum_volume_icon]
     assert len({widget.geometry().center().y() for widget in volume_widgets}) == 1
-    assert window.source_preview.volume_row.height() == 24
+    assert window.source_preview.dimension_info_and_volume_control_row.height() == 24
     assert {widget.height() for widget in volume_widgets} == {24}
     mute_controls = audio_controls.itemAt(1).layout()
     assert mute_controls.itemAt(0).spacerItem() is not None
