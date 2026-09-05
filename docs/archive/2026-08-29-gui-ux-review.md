@@ -36,7 +36,7 @@ proposal but does not duplicate its full design.
   Messages and Job Messages presentation
 - [`gui/submission.py`](../../src/advanced_ai_video_tools/gui/submission.py):
   preflight review and queue-submission flow
-- [`gui/tool_settings.py`](../../src/advanced_ai_video_tools/gui/tool_settings.py):
+- [`gui/preferences.py`](../../src/advanced_ai_video_tools/gui/preferences.py):
   Preferences and external-tool validation
 - [`gui/theme.py`](../../src/advanced_ai_video_tools/gui/theme.py): spacing,
   typography, colors, controls, tables, and progress styling

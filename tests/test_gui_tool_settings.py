@@ -19,7 +19,7 @@ from PySide6.QtCore import QCoreApplication, QThread  # noqa: E402  # pylint: di
 from PySide6.QtWidgets import QApplication, QDialog, QPushButton  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from advanced_ai_video_tools.core.models import ToolInfo, ToolOverrides, Toolchain  # noqa: E402  # pylint: disable=wrong-import-position
-from advanced_ai_video_tools.gui.tool_settings import DeletionRulesDialog, ToolSettingsDialog, ToolSettingsValidator  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.preferences import DeletionRulesDialog, ToolSettingsDialog, ToolSettingsValidator  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.system.settings import ApplicationSettings, DeletionRule, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.system.tools import ToolDiscoveryError  # noqa: E402  # pylint: disable=wrong-import-position
 

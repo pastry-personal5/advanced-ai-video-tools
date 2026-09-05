@@ -22,11 +22,11 @@ tests in:
 - `src/advanced_ai_video_tools/gui/jobs.py`
 - `src/advanced_ai_video_tools/gui/submission.py`
 - `src/advanced_ai_video_tools/gui/preflight.py`
-- `src/advanced_ai_video_tools/gui/tool_settings.py`
+- `src/advanced_ai_video_tools/gui/preferences.py`
 - `src/advanced_ai_video_tools/gui/application.py`
 - `tests/test_gui.py`
 - `tests/test_gui_submission.py`
-- `tests/test_gui_tool_settings.py`
+- `tests/test_gui_preferences.py`
 
 ## Current v1 hierarchy
 

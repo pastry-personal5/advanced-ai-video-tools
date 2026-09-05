@@ -99,7 +99,7 @@ abort that sequence with `KeyboardInterrupt`.
 - `gui.editor`: ordered clip intent, output directory, target height, fixed real-image model, and frozen generated-output identity
 - `gui.preflight`: one owned QThread for diagnostic tool discovery and media probing, progress forwarding, reservation release, and joined shutdown
 - `gui.submission`: issue review, non-bypassable safety gates, exact-inventory per-job acknowledgement, FIFO handoff, and non-safety preference persistence
-- `gui.tool_settings`: native override editing, PATH/automatic resets, one owned validation thread, success-gated atomic persistence, and actionable discovery failures
+- `gui.preferences`: native override editing, PATH/automatic resets, one owned validation thread, success-gated atomic persistence, and actionable discovery failures
 - `gui.window`: native queue list, selected-job progress/status/output presentation, reorder controls, cancellation, and diagnostics location
 - `system.platform`: macOS 26.5.2 and Apple Silicon support gate
 - `system.processes`: shell-free execution, bounded diagnostic tails, explicit timeouts, cooperative cancellation, and process-group termination

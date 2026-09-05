@@ -20,7 +20,7 @@ from advanced_ai_video_tools.gui.messages import MessageEvent, MessageWidget
 from advanced_ai_video_tools.gui.preview import QueuePreviewPane, SourcePreviewPane
 from advanced_ai_video_tools.gui.submission import JobSubmissionController
 from advanced_ai_video_tools.gui.theme import CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_1, SPACE_2, SPACE_3, SPACE_4
-from advanced_ai_video_tools.gui.tool_settings import ToolSettingsDialog, ToolSettingsValidator
+from advanced_ai_video_tools.gui.preferences import ToolSettingsDialog, ToolSettingsValidator
 from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
 
 JOB_NAME_COLUMN_WIDTH = 200

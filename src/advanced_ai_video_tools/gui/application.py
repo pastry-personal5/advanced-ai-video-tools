@@ -21,7 +21,7 @@ from advanced_ai_video_tools.identity import IDENTITY
 from advanced_ai_video_tools.gui.preflight import GuiPreflightController
 from advanced_ai_video_tools.gui.submission import JobSubmissionController
 from advanced_ai_video_tools.gui.theme import apply_dark_theme
-from advanced_ai_video_tools.gui.tool_settings import ToolSettingsValidator
+from advanced_ai_video_tools.gui.preferences import ToolSettingsValidator
 from advanced_ai_video_tools.gui.window import MainWindow
 from advanced_ai_video_tools.services.pipeline import PipelineService
 from advanced_ai_video_tools.services.queue import JobQueue, PipelineRunner
