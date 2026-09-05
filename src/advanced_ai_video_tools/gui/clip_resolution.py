@@ -98,6 +98,7 @@ class DimensionProbeController(QObject):
     def set_sources(self, paths: tuple[Path, ...], selected: int) -> None:
         """Set ordered sources and make the selected source highest priority."""
 
+        self._pending.clear()
         self._paths = paths
         self._selected = selected
         self._prewarm = [path for index, path in enumerate(paths) if index != selected]
