@@ -21,3 +21,7 @@ models/
 *.mkv
 *.mov
 *.png
+
+# Qwen-related files
+*.bak
+*.bak*
