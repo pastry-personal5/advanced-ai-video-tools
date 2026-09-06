@@ -190,7 +190,7 @@ class JobSubmissionController(QObject):
             self._settings_store.save(updated)
         except SettingsError as error:
             logger.warning("Job queued but GUI preferences could not be saved: {}", error)
-            QMessageBox.warning(self._dialog_parent, "Preferences not saved", f"The job was queued, but preferences could not be saved:\n{error}")
+            QMessageBox.warning(self._dialog_parent, "Settings not saved", f"The job was queued, but settings could not be saved:\n{error}")
             return
         self._settings = updated
         self.settings_changed.emit(updated)

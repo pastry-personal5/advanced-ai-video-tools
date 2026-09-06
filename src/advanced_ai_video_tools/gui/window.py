@@ -12,7 +12,7 @@ from PySide6.QtCore import QEvent, QModelIndex, QRect, QSignalBlocker, Qt, Slot
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QKeyEvent, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QAbstractItemView, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QMainWindow, QProgressBar, QPushButton, QSplitter, QSplitterHandle, QStackedWidget, QStyledItemDelegate, QStyle, QStyleOptionHeader, QStyleOptionViewItem, QTableView, QToolButton, QVBoxLayout, QWidget
 
-from advanced_ai_video_tools.core.models import JobState, PipelineStage, Toolchain
+from advanced_ai_video_tools.core.models import JobState, PipelineStage
 from advanced_ai_video_tools.gui.editor import JobEditor
 from advanced_ai_video_tools.gui.jobs import JobListModel, JobRole, QueueRegionProxyModel
 from advanced_ai_video_tools.gui.identity import GUI_DISPLAY_NAME
@@ -20,7 +20,7 @@ from advanced_ai_video_tools.gui.messages import MessageEvent, MessageWidget
 from advanced_ai_video_tools.gui.preview import QueuePreviewPane, SourcePreviewPane
 from advanced_ai_video_tools.gui.submission import JobSubmissionController
 from advanced_ai_video_tools.gui.theme import CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_1, SPACE_2, SPACE_3, SPACE_4
-from advanced_ai_video_tools.gui.preferences import ToolSettingsDialog, ToolSettingsValidator
+from advanced_ai_video_tools.gui.settings_dialog import ExternalToolsValidator, SettingsDialog, SettingsDialogSessionState, configure_settings_action
 from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
 
 JOB_NAME_COLUMN_WIDTH = 200
@@ -127,7 +127,7 @@ class _QueueActionDelegate(QStyledItemDelegate):
 class MainWindow(QMainWindow):
     """Desktop shell centered on the shared processing queue."""
 
-    def __init__(self, model: JobListModel, settings: ApplicationSettings, log_path: Path | None = None, *, submission: JobSubmissionController | None = None, tool_validator: ToolSettingsValidator | None = None, settings_store: SettingsStore | None = None) -> None:
+    def __init__(self, model: JobListModel, settings: ApplicationSettings, log_path: Path | None = None, *, submission: JobSubmissionController | None = None, external_tools_validator: ExternalToolsValidator | None = None, settings_store: SettingsStore | None = None) -> None:
         # Declarative widget construction is intentionally kept together.
         # pylint: disable=too-many-statements
         super().__init__()
@@ -135,8 +135,9 @@ class MainWindow(QMainWindow):
         self._model = model
         self._settings = settings
         self._submission = submission
-        self._tool_validator = tool_validator
+        self._external_tools_validator = external_tools_validator
         self._settings_store = settings_store
+        self._settings_dialog_session = SettingsDialogSessionState()
         self._last_snapshots: dict[str, object] = {}
         self._last_upscale_message_percent: dict[str, int] = {}
         self._preview_processing_job_id: str | None = None
@@ -148,11 +149,13 @@ class MainWindow(QMainWindow):
         self.editor = JobEditor(settings, queued_inputs=self._queued_source_paths)
         self.source_preview = SourcePreviewPane(muted=settings.preview_muted, volume=settings.preview_volume, ffprobe_override=settings.tools.ffprobe)
         self.queue_preview = QueuePreviewPane(muted=settings.preview_muted, volume=settings.preview_volume)
-        edit_menu = self.menuBar().addMenu("Edit")
-        self.preferences_action = QAction("Preferences", self)
-        self.preferences_action.setObjectName("preferencesAction")
-        self.preferences_action.setEnabled(tool_validator is not None and settings_store is not None)
-        edit_menu.addAction(self.preferences_action)
+        self.preferences_menu = self.menuBar().addMenu("Preferences")
+        self.preferences_menu.setObjectName("preferencesMenu")
+        self.settings_action = QAction("Settings", self)
+        self.settings_action.setObjectName("settingsAction")
+        configure_settings_action(self.settings_action)
+        self.settings_action.setEnabled(external_tools_validator is not None and settings_store is not None)
+        self.preferences_menu.addAction(self.settings_action)
         self.queue_table = QTableView()
         self.queue_table.setObjectName("queueTable")
         self.queue_table.setModel(model)
@@ -358,7 +361,7 @@ class MainWindow(QMainWindow):
         model.snapshot_changed.connect(self._handle_queue_snapshot)
         self.move_job_up_button.clicked.connect(lambda: self._move_selected_job(-1))
         self.move_job_down_button.clicked.connect(lambda: self._move_selected_job(1))
-        self.preferences_action.triggered.connect(self._open_preferences)
+        self.settings_action.triggered.connect(self._open_settings)
         self.editor.inputs.currentRowChanged.connect(self._update_preview_for_source_selection)
         self.editor.inputs.model().rowsInserted.connect(lambda *_: self._update_preview_for_source_selection(self.editor.inputs.currentRow()))
         self.editor.inputs.model().rowsRemoved.connect(lambda *_: self._update_preview_for_source_selection(self.editor.inputs.currentRow()))
@@ -382,9 +385,6 @@ class MainWindow(QMainWindow):
             submission.queued.connect(self.editor.job_queued)
             submission.settings_changed.connect(self._apply_settings)
             submission.busy_changed.connect(lambda busy: self._append_global_message("Preflight started." if busy else "Preflight finished."))
-        if tool_validator is not None:
-            tool_validator.succeeded.connect(self._report_validated_tools)
-            tool_validator.failed.connect(lambda _overrides, message: self._append_global_message(f"External-tool validation failed: {message}"))
         self._refresh_selected_job()
 
     @staticmethod
@@ -533,15 +533,6 @@ class MainWindow(QMainWindow):
 
     def _append_job_message(self, job_id: str, text: str) -> None:
         self.message_widget.append(MessageEvent(text, job_id))
-
-    @Slot(object, object)
-    def _report_validated_tools(self, _overrides: object, toolchain: object) -> None:
-        """Publish resolved tool paths without exposing command lines."""
-
-        if not isinstance(toolchain, Toolchain):
-            self._append_global_message("External tools validated, but no resolved toolchain was returned.")
-            return
-        self._append_global_message("External tools validated: " f"FFmpeg {toolchain.ffmpeg.path}; FFprobe {toolchain.ffprobe.path}; " f"Real-ESRGAN {toolchain.realesrgan.path}; models {toolchain.model_directory}.")
 
     def _append_upscale_progress_summary(self, job_id: str, progress: object) -> None:
         """Append a concise upscale summary at 10-percent intervals."""
@@ -816,12 +807,15 @@ class MainWindow(QMainWindow):
         self._model.move_pending(self.queue_table.currentIndex(), offset)
 
     @Slot()
-    def _open_preferences(self) -> None:
-        if self._tool_validator is None or self._settings_store is None:
+    def _open_settings(self) -> None:
+        if self._external_tools_validator is None or self._settings_store is None:
             return
-        dialog = ToolSettingsDialog(self._settings, self._tool_validator, self._settings_store, self)
+        dialog = SettingsDialog(self._settings, self._external_tools_validator, self._settings_store, self._settings_dialog_session, self)
         dialog.settings_saved.connect(self._apply_settings)
-        dialog.exec()
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
 
     @Slot(object)
     def _apply_settings(self, value: object) -> None:

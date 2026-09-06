@@ -1,10 +1,8 @@
 # Project milestones
 
-Milestone plans are maintained separately from user documentation and
-implementation contracts:
+- [Version 2](v2/plans.md): Phases 1–7 complete; v2.0.0 released with an
+  unsigned development DMG.
+- [Version 3](v3/plans.md): Phases 1–5 complete; Crop and Video Interpolation
+  remain proposed.
 
-- [v2 plan and Phase 7 release record](v2/plans.md) — completed v2 roadmap,
-  stabilization evidence, and release limitations.
-- [v3 plan](v3/plans.md) — active v3 roadmap; Phase 1 Refactoring is in
-  progress, while Crop and Video Interpolation remain proposed.
-
+Implemented behavior is authoritative in [ARCHITECTURE.md](ARCHITECTURE.md).

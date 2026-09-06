@@ -18,15 +18,16 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QLockFile, QModelIndex, QObject, Qt, Signal  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtGui import QImage, QKeyEvent, QPainter, QPalette, QPixmap  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtGui import QAction, QImage, QKeyEvent, QKeySequence, QPainter, QPalette, QPixmap  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtMultimedia import QMediaPlayer  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtTest import QTest  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QPushButton, QSlider, QSplitter, QStyle, QStyleOptionViewItem, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QDialog, QGroupBox, QLabel, QPushButton, QSlider, QSplitter, QStyle, QStyleOptionViewItem, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
 from advanced_ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.application import _GuiSigintBridge, create_gui_runtime  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.editor import SOURCE_CLIP_LIST_WIDTH  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.jobs import JobListModel, JobRole, QueueSnapshotBridge  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.gui.settings_dialog import SettingsDialog  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.messages import MessageEvent, MessageHistory, MessageWidget  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.preview import FULLSCREEN_HELP_MARGIN, FULLSCREEN_SHORTCUTS, PREVIEW_PANE_MINIMUM_WIDTH, SHORTCUT_HELP, VOLUME_ICON_COLOR, VOLUME_ICON_OPTICAL_OFFSET, FullscreenCommand, QueuePreviewPane, SourcePreviewPane, resolve_fullscreen_shortcut  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_2, SPACE_3, apply_dark_theme  # noqa: E402  # pylint: disable=wrong-import-position
@@ -380,16 +381,19 @@ def test_main_window_does_not_show_stale_progress_after_cancellation(qt_app: QAp
     window.close()
 
 
-def test_gui_preferences_target_height_and_native_preview_boundaries(qt_app: QApplication, tmp_path: Path) -> None:
-    """The revised creation surface keeps Preferences, custom height, and native preview boundaries."""
+def test_gui_settings_menu_target_height_and_native_preview_boundaries(qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The revised creation surface keeps Settings, custom height, and native preview boundaries."""
 
     del qt_app
 
-    class FakeToolValidator(QObject):
-        """Signal-compatible validator double for Preferences-menu availability."""
+    class FakeExternalToolsValidator(QObject):
+        """Validator double used only to enable the Settings menu action."""
 
-        succeeded = Signal(object)
+        succeeded = Signal(object, object)
         failed = Signal(object, str)
+        busy_changed = Signal(bool)
+
+        busy = False
 
     queue = FakeQueue()
     bridge = QueueSnapshotBridge()
@@ -399,11 +403,30 @@ def test_gui_preferences_target_height_and_native_preview_boundaries(qt_app: QAp
         model,
         ApplicationSettings(target_height=2160),
         settings_store=settings_store,
-        tool_validator=FakeToolValidator(),  # type: ignore[arg-type]
+        external_tools_validator=FakeExternalToolsValidator(),  # type: ignore[arg-type]
     )
 
-    assert window.preferences_action.text() == "Preferences"
-    assert window.preferences_action.isEnabled()
+    assert window.preferences_menu.title() == "Preferences"
+    assert window.settings_action.text() == "Settings"
+    assert window.settings_action.menuRole() == QAction.MenuRole.NoRole
+    assert window.settings_action.shortcut().toString(QKeySequence.SequenceFormat.PortableText) == "Meta+,"
+    assert window.settings_action.isEnabled()
+    opened: list[SettingsDialog] = []
+    disposed: list[SettingsDialog] = []
+
+    def record_open(dialog: SettingsDialog) -> int:
+        opened.append(dialog)
+        return int(QDialog.DialogCode.Rejected)
+
+    def record_disposal(dialog: SettingsDialog) -> None:
+        disposed.append(dialog)
+
+    monkeypatch.setattr(SettingsDialog, "exec", record_open)
+    monkeypatch.setattr(SettingsDialog, "deleteLater", record_disposal)
+    window.settings_action.trigger()
+    assert len(opened) == 1
+    assert opened[0].windowTitle() == "Settings"
+    assert disposed == opened
     assert window.findChild(QPushButton, "externalToolsButton") is None
     window.editor.target_height.setValue(1440)
     assert window.editor.target_height.value() == 1440
@@ -496,7 +519,8 @@ def test_main_window_message_area_is_splitter_resizable_and_logs_completion(qt_a
     assert window.content_message_splitter.handleWidth() == 12
     assert window.content_message_splitter.handle(1).height() == 12
     assert window.findChild(QPushButton, "externalToolsButton") is None
-    assert window.preferences_action.text() == "Preferences"
+    assert window.preferences_menu.title() == "Preferences"
+    assert window.settings_action.text() == "Settings"
     assert [window.message_tabs.tabText(index) for index in range(2)] == ["Global Messages", "Job Messages"]
     assert "Application started." in window.global_messages.toPlainText()
     assert "Add clips in order they should be concatenated." in window.global_messages.toPlainText()

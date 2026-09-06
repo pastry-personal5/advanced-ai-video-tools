@@ -1,9 +1,7 @@
-# Version 3 planning
+# Version 3
 
-V3 Phases 1 through 3 are complete. Phase 4 — Modularity Refactoring is the
-next proposed planning target. Crop and video interpolation remain future
-planning only until their predecessor phases and design gates are complete.
+Phases 1–5 are complete. Phase 6 Crop and Phase 7 Video Interpolation remain
+proposed and design-gated.
 
-The v3 roadmap is maintained in [plans.md](plans.md). Shared execution rules
-are in [implement.md](implement.md); implemented architecture remains governed
-by [../ARCHITECTURE.md](../ARCHITECTURE.md).
+See the [roadmap](plans.md), [implementation guide](implement.md), and
+[implemented architecture](../ARCHITECTURE.md).

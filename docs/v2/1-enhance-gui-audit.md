@@ -5,9 +5,10 @@
 - Phase: 1 — Enhance GUI
 - Audit state: Complete
 - Date: 2026-08-22
-- Implementation state: Specification only; no redesign code is implied by this document
+- Historical state: specification completed and implemented during V2 Phase 1;
+  later v2 phases superseded parts of the target presentation
 
-This document records the current v1 GUI audit, concrete usability findings,
+This document preserves the historical v1 GUI audit, usability findings,
 approved Phase 1 interaction states, and measurable layout/accessibility
 criteria. Product decisions remain governed by [Phase 1 — Enhance GUI](1-enhance-gui.md).
 

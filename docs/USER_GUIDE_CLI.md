@@ -1,7 +1,7 @@
 # CLI user guide
 
 The primary command is `advanced-ai-video-tools`. The deprecated
-`ai-video-tools` alias remains available through v2.
+`ai-video-tools` compatibility alias remains available in version 2.0.0.
 
 ## Install and inspect commands
 
@@ -79,4 +79,3 @@ Inputs must use supported explicit SDR color metadata. Extra audio, subtitles,
 chapters, and attachments require explicit acknowledgement before being
 dropped. Failed jobs retain a diagnostic workspace; successful and cancelled
 jobs remove owned temporary workspaces.
-

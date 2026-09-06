@@ -4,18 +4,15 @@ This document is the authoritative technical overview for Advanced AI Video Tool
 
 ## Development target
 
-Version 1.0.0 is the completed release baseline. Version 2 is complete, and
-v3 Phase 2 is complete after the Phase 1 refactoring. Until an approved v3
-design decision explicitly supersedes a v2 contract, the implemented v2
-behavior in this document remains binding. The target change alone does not
-authorize speculative features, compatibility expansion, or changes to media
-policy.
+Version 2.0.0 is the released baseline. V3 Phases 1–5 are complete. Until an
+approved v3 design explicitly supersedes a contract, the behavior in this
+document remains binding; a roadmap change alone does not authorize runtime or
+media-policy changes.
 
-The v2 roadmap lives in [v2/plans.md](v2/plans.md), the active v3 roadmap lives
+The v2 roadmap lives in [v2/plans.md](v2/plans.md), the current v3 roadmap lives
 in [v3/plans.md](v3/plans.md), and shared execution rules live in
-[v3/implement.md](v3/implement.md). V2 Phases 1 through 7 are complete;
-v3 Phase 1 and Phase 2 are complete. Planning documents describe intended work; this
-architecture document remains authoritative for implemented system behavior.
+[v3/implement.md](v3/implement.md). Planning documents describe intended work;
+this document remains authoritative for implemented behavior.
 
 ## Implementation status
 
@@ -43,11 +40,17 @@ forwards typed state and progress snapshots, and owns cancellation and shutdown.
 The initial PySide6 shell is implemented: it bootstraps settings and services,
 marshals queue events through an explicitly queued Qt signal, exposes typed list
 roles, and renders job state, progress, errors, output, reordering, and cancellation.
-The GUI job-creation path is implemented with ordered input intent, output and
-height options, off-thread diagnostic preflight, complete issue review, explicit
-per-job stream-drop acknowledgement, queue submission, and non-safety preference
-persistence. Its external-tools editor supports native browsing and reset-to-discovery controls, validates executable launches, model assets, and Vulkan inference off the presentation thread, and atomically persists only a successful override set. Preferences also provide ordered, validated GUI-only related-file deletion rules. A successful source Trash move evaluates the first enabled matching rule and best-effort moves eligible immediate sibling regular files, reporting each result without rolling back the source operation. The
-implemented boundaries are:
+The GUI job-creation path supports ordered input intent, output and height
+options, off-thread diagnostic preflight, complete issue review, per-job stream
+drop acknowledgement, queue submission, and non-safety preference persistence.
+**Preferences → Settings** opens one searchable, resizable dialog with
+**Editor → File** deletion rules and **Tools → External Tools** configuration.
+The menu action is also available through macOS's standard **Command-,** shortcut.
+Both pages share one local draft and atomic save. Tool changes validate
+executables, models, and Vulkan inference off-thread; abandoned results cannot
+persist. A successful source Trash move evaluates the first enabled rule and
+best-effort moves eligible immediate sibling files without rolling back the
+source operation. The implemented boundaries are:
 
 The presentation shell uses a single dark-themed window with a two-view
 navigation rail. A shared left-side vertical splitter contains the active
@@ -99,7 +102,9 @@ abort that sequence with `KeyboardInterrupt`.
 - `gui.editor`: ordered clip intent, output directory, target height, fixed real-image model, and frozen generated-output identity
 - `gui.preflight`: one owned QThread for diagnostic tool discovery and media probing, progress forwarding, reservation release, and joined shutdown
 - `gui.submission`: issue review, non-bypassable safety gates, exact-inventory per-job acknowledgement, FIFO handoff, and non-safety preference persistence
-- `gui.preferences`: native override editing, PATH/automatic resets, one owned validation thread, success-gated atomic persistence, and actionable discovery failures
+- `gui.settings_dialog`: searchable settings navigation, session-only geometry,
+  one atomic draft, deletion-rule editing, external-tool overrides, and one
+  owned asynchronous validator with stale/abandoned-result rejection
 - `gui.window`: native queue list, selected-job progress/status/output presentation, reorder controls, cancellation, and diagnostics location
 - `system.platform`: macOS 26.5.2 and Apple Silicon support gate
 - `system.processes`: shell-free execution, bounded diagnostic tails, explicit timeouts, cooperative cancellation, and process-group termination
@@ -140,16 +145,16 @@ directory-mode fake upscaler, proving stage order, one AI invocation, final medi
 verification, atomic publication, reservation release, and terminal cleanup
 without a GPU or model download.
 
-Opt-in native acceptance tests provide two macOS-only checks outside `make
-check`. Both first require the supported Apple Silicon platform and affirmative
-Metal capability from the read-only `system_profiler` display report. The
+Opt-in native acceptance tests provide a presentation benchmark and three Cocoa
+capture checks outside `make check`. All first require the supported Apple
+Silicon platform and affirmative Metal capability from the read-only
+`system_profiler` display report. The
 presentation benchmark records 15 `MainWindow` exposure samples after one
 initial and two discarded warmups against the 3-second p95 budget. The
-screen-capture check exposes the
-same dark window, invokes `screencapture`, and verifies that the captured image
-contains its surface; it requires Screen Recording permission for the invoking
-terminal. These are GUI presentation checks, not a substitute for a real
-Real-ESRGAN/Vulkan pipeline-throughput benchmark.
+capture suite covers the dark main shell, populated Queue Monitoring, and the
+unified Settings dialog; it requires Screen Recording permission for the
+invoking terminal. These are GUI presentation checks, not a substitute for a
+real Real-ESRGAN/Vulkan pipeline-throughput benchmark.
 
 ## Design goals
 

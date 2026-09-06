@@ -20,16 +20,29 @@ The application requires macOS 26.5.2 or later on Apple Silicon, installed
 FFmpeg and FFprobe, and a working user-managed Real-ESRGAN Vulkan installation
 with the `realesrgan-x4plus` model files.
 
-## Configure external tools
+## Settings
 
-Open **Edit → Preferences**. Leave an executable blank to discover it from
-`PATH`, or select an explicit executable. Leave the model directory blank to
-use the `models` directory beside the resolved Real-ESRGAN executable.
+Open **Preferences → Settings** (or press **Command-,**). Search all settings from the field at the top,
+or choose a page from the left tree:
 
-Use **Validate & Save** to check executable launchability, model files, and a
-small Vulkan inference. Failed values are not persisted. **Use PATH** and
-**Automatic** clear explicit overrides. Finder-launched bundles preserve the
-inherited `PATH` and add standard Homebrew and MacPorts locations.
+- **Editor → File** configures ordered automatic related-file deletion rules.
+- **Tools → External Tools** configures FFmpeg, FFprobe, Real-ESRGAN, and its
+  model directory.
+
+Leave an executable blank to use `PATH`; leave the model directory blank to use
+the `models` directory beside Real-ESRGAN. **Use PATH** and **Automatic** clear
+explicit overrides. **Validate** checks executable launchability, model files,
+and a small Vulkan inference away from the GUI thread.
+
+All pages share one draft. **OK** validates changed tools when necessary and
+atomically saves the whole draft; **Cancel** discards it. Validation and save
+failures leave existing settings unchanged and show recovery guidance inside
+the dialog. Finder-launched bundles preserve the inherited `PATH` and add
+standard Homebrew and MacPorts locations.
+
+Deletion rules apply only after the source clip itself moves successfully to
+Trash. The first enabled source rule matches immediate sibling regular files;
+related-file failures are reported without rolling back the source move.
 
 ## Create a job
 
@@ -78,4 +91,3 @@ The application stores non-secret preferences and local diagnostics in its
 standard macOS application-support location. It stores job workspaces in the
 standard macOS cache location. Do not place model weights, generated media, or
 credentials in the repository.
-

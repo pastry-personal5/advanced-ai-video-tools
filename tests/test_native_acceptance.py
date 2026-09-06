@@ -27,11 +27,13 @@ from PySide6.QtWidgets import QApplication  # pylint: disable=no-name-in-module
 
 from advanced_ai_video_tools.core.models import JobRequest, JobState
 from advanced_ai_video_tools.gui.jobs import JobListModel, JobQueueView, QueueSnapshotBridge
+from advanced_ai_video_tools.gui.settings_dialog import ExternalToolsValidator, SettingsDialog
 from advanced_ai_video_tools.services.queue import QueueJobOutcome, QueueJobSnapshot
 from advanced_ai_video_tools.gui.theme import apply_dark_theme
 from advanced_ai_video_tools.gui.window import MainWindow
 from advanced_ai_video_tools.system.hardware import apple_silicon_metal_error
 from advanced_ai_video_tools.system.settings import ApplicationSettings
+from advanced_ai_video_tools.system.settings import SettingsStore
 
 _ENABLE_NATIVE_TESTS = "ADVANCED_AI_VIDEO_TOOLS_RUN_NATIVE_ACCEPTANCE"
 
@@ -216,4 +218,45 @@ def test_populated_queue_monitoring_native_layout(native_qt_app: QApplication, t
         assert image_path.is_file() and image_path.stat().st_size > 1024
     finally:
         window.close()
+        native_qt_app.processEvents()
+
+
+@pytest.mark.gui_capture
+def test_unified_settings_dialog_native_layout(native_qt_app: QApplication, tmp_path: Path) -> None:
+    """Capture the supported Cocoa Settings window at its approved default size."""
+
+    validator = ExternalToolsValidator()
+    dialog = SettingsDialog(ApplicationSettings(), validator, SettingsStore(tmp_path / "settings.yaml"))
+    try:
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        native_qt_app.processEvents()
+        assert dialog.size().width() == 1080
+        assert dialog.size().height() == 720
+        assert 240 <= dialog.tree.width() <= 360
+        assert dialog.stack.width() >= 620
+        assert dialog.current_page_path == SettingsDialog.FILE_PATH
+        available = dialog.screen().availableGeometry()
+        client = dialog.geometry()
+        assert client.left() >= available.left() + 24
+        assert client.top() >= available.top() + 24
+        assert client.right() <= available.right() - 24
+        assert client.bottom() <= available.bottom() - 24
+
+        image_path = tmp_path / "advanced-ai-video-tools-settings.png"
+        frame = dialog.frameGeometry()
+        result = subprocess.run(
+            ["/usr/sbin/screencapture", "-x", "-R", f"{frame.x()},{frame.y()},{frame.width()},{frame.height()}", str(image_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15.0,
+            shell=False,
+        )
+        assert result.returncode == 0, result.stderr.strip() or result.stdout.strip() or "screencapture failed"
+        assert image_path.is_file() and image_path.stat().st_size > 1024
+    finally:
+        dialog._cancel_explicitly()  # pylint: disable=protected-access
+        validator.shutdown()
         native_qt_app.processEvents()

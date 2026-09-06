@@ -84,6 +84,18 @@ QLabel#previewLabel {{
     padding: 0 4px;
 }}
 
+QLabel#settingsPageHeading {{
+    color: #f1f3f4;
+    font-size: 17pt;
+    font-weight: 600;
+}}
+
+QLabel#settingsStatus,
+QLabel#externalToolsValidationStatus,
+QLabel#externalToolsValidationProgress {{
+    color: #b8bcc2;
+}}
+
 QGroupBox {{
     background: #252629;
     border: 1px solid #45474b;
@@ -230,6 +242,11 @@ QAbstractItemView:disabled {{
     color: #8a8d91;
 }}
 
+QLineEdit[validationError="true"],
+QTextEdit[validationError="true"] {{
+    border: 2px solid #f28b82;
+}}
+
 QPushButton,
 QToolButton {{
     min-height: {CONTROL_HEIGHT - 2}px;
@@ -318,6 +335,26 @@ QListWidget::item {{
 QListWidget::item:selected {{
     background: #39485f;
     color: #ffffff;
+}}
+
+QTreeWidget#settingsNavigationTree {{
+    padding: {SPACE_1}px;
+}}
+
+QTreeWidget#settingsNavigationTree::item {{
+    min-height: {CONTROL_HEIGHT}px;
+    border-radius: {CONTROL_RADIUS}px;
+    padding: 0 {SPACE_2}px;
+}}
+
+QTreeWidget#settingsNavigationTree::item:selected {{
+    background: #39485f;
+    color: #ffffff;
+}}
+
+QSplitter#settingsBodySplitter::handle {{
+    background: #303134;
+    margin: 0 3px;
 }}
 
 QTableView#queueTable {{

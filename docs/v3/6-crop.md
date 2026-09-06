@@ -4,7 +4,7 @@
 
 - Phase: 6
 - State: Proposed
-- Predecessor: [Phase 1 — Refactoring](1-refactoring.md)
+- Predecessor: [Phase 5 — Unified Settings Dialog](5-settings-dialog.md)
 - Successor: [Phase 7 — Video Interpolation](7-video-interpolation.md)
 
 ## Objective

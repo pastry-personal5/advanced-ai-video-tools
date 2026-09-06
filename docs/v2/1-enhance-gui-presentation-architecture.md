@@ -4,12 +4,13 @@
 
 - Phase: 1 — Enhance GUI
 - Specification state: Complete
-- Implementation state: In progress
+- Historical state: implemented during V2 Phase 1 and subsequently refined by
+  later v2 phases
 - Date: 2026-08-22
 
-This document defines the presentation-layer boundaries for the approved Phase 1
-GUI. It is a planning specification, not evidence that the redesigned widgets
-or view-models already exist.
+This historical specification records the presentation-layer boundaries used
+for V2 Phase 1. Current behavior is authoritative in
+[../ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ## Responsibilities and boundaries
 

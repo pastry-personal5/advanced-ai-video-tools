@@ -21,7 +21,7 @@ from advanced_ai_video_tools.identity import IDENTITY
 from advanced_ai_video_tools.gui.preflight import GuiPreflightController
 from advanced_ai_video_tools.gui.submission import JobSubmissionController
 from advanced_ai_video_tools.gui.theme import apply_dark_theme
-from advanced_ai_video_tools.gui.preferences import ToolSettingsValidator
+from advanced_ai_video_tools.gui.settings_dialog import ExternalToolsValidator
 from advanced_ai_video_tools.gui.window import MainWindow
 from advanced_ai_video_tools.services.pipeline import PipelineService
 from advanced_ai_video_tools.services.queue import JobQueue, PipelineRunner
@@ -98,14 +98,14 @@ class GuiRuntime:
     model: JobListModel
     preview: GuiPreflightController
     submission: JobSubmissionController
-    tool_validator: ToolSettingsValidator
+    external_tools_validator: ExternalToolsValidator
     window: MainWindow
 
     def shutdown(self) -> None:
         """Cancel unfinished work and join the queue worker before exit."""
 
         self.preview.shutdown()
-        self.tool_validator.shutdown()
+        self.external_tools_validator.shutdown()
         if not self.queue.shutdown():
             logger.error("GUI queue worker did not stop during shutdown")
 
@@ -121,20 +121,20 @@ def create_gui_runtime(*, runner: PipelineRunner | None = None, settings_store: 
     bridge = QueueSnapshotBridge()
     queue = JobQueue(runner or PipelineService(), event_callback=bridge.forward)
     preview = GuiPreflightController()
-    tool_validator = ToolSettingsValidator()
+    external_tools_validator = ExternalToolsValidator()
     try:
         model = JobListModel(queue, bridge)
         submission = JobSubmissionController(queue, preview, settings, store)
-        window = MainWindow(model, settings, current_log_path(), submission=submission, tool_validator=tool_validator, settings_store=store)
+        window = MainWindow(model, settings, current_log_path(), submission=submission, external_tools_validator=external_tools_validator, settings_store=store)
         for warning in settings_report.warnings:
             window._append_global_message(warning)  # pylint: disable=protected-access
         submission.set_dialog_parent(window)
     except Exception:
         preview.shutdown()
-        tool_validator.shutdown()
+        external_tools_validator.shutdown()
         queue.shutdown()
         raise
-    return GuiRuntime(settings, bridge, queue, model, preview, submission, tool_validator, window)
+    return GuiRuntime(settings, bridge, queue, model, preview, submission, external_tools_validator, window)
 
 
 def run_gui(arguments: list[str] | None = None) -> int:
