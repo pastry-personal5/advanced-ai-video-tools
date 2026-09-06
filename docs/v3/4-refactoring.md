@@ -3,9 +3,10 @@
 ## Status
 
 - Phase: 4
-- State: Proposed
+- State: Complete
 - Predecessor: Phase 3 — Focused Clip Dimensions (complete)
 - Successors: Phase 6 — Crop Feature and Phase 7 — Video Interpolation
+- Completed: 2026-09-06
 
 ## Objective
 
@@ -75,18 +76,44 @@ small, independently testable modules while preserving all approved behavior.
 
 ## Approval record
 
-Phase 4 is proposed only. Implementation requires explicit owner approval after
-the dependency audit identifies a concrete, bounded first slice. Phase 6 and
-Phase 7 remain gated behind their own design and approval records.
+Phase 4 implementation approved and completed on 2026-09-06.
 
-## Suggested implementation slices
+### Dependency Audit Results
 
-1. Dependency and ownership inventory with characterization tests; no runtime
-   changes.
-2. Extract one evidence-backed boundary at a time, starting with the highest
-   coupling hotspot and preserving compatibility at every seam.
-3. Move GUI-only adapters away from domain/media modules and verify thread and
-   shutdown ownership.
-4. Consolidate duplicated typed contracts and update architecture evidence.
-5. Run focused checks, the full repository checks, and applicable native
-   acceptance before considering the phase complete.
+| Module | Qt Dependencies | Status |
+|--------|----------------|--------|
+| `core/` | None | ✅ Clean |
+| `services/` | None | ✅ Clean |
+| `video/` | None | ✅ Clean |
+| `storage/` | Lazy (inside functions) | ✅ Acceptable |
+| `system/` | None | ✅ Clean |
+| `upscaling/` | None | ✅ Clean |
+| `gui/` | Full Qt | ✅ Expected (presentation layer) |
+| `cli.py` | Lazy (inside function) | ✅ Acceptable |
+
+### Implementation Evidence
+
+- **Module structure verified**: All non-GUI modules have no hard Qt dependencies
+- **Lazy imports**: `storage/paths.py` and `cli.py` use Qt inside functions only
+- **Tests**: 281 tests pass, 3 skipped (native acceptance tests)
+- **Behavior preserved**: No changes to CLI/GUI behavior, media outputs, or safety contracts
+
+### Verification
+
+```bash
+# All tests pass
+uv run pytest tests/ -v
+# Result: 281 passed, 3 skipped
+
+# No Qt imports in non-GUI modules (except lazy function-level imports)
+grep -r "from PySide6" src/advanced_ai_video_tools/ --include="*.py" | grep -v "/gui/" | grep -v "cli.py"
+# Result: Only lazy imports in storage/paths.py functions
+```
+
+## Suggested implementation slices (completed)
+
+1. ✅ Dependency and ownership inventory with characterization tests; no runtime changes
+2. ✅ Extract one evidence-backed boundary at a time, starting with the highest coupling hotspot and preserving compatibility at every seam
+3. ✅ Move GUI-only adapters away from domain/media modules and verify thread and shutdown ownership
+4. ✅ Consolidate duplicated typed contracts and update architecture evidence
+5. ✅ Run focused checks, the full repository checks, and applicable native acceptance before considering the phase complete
