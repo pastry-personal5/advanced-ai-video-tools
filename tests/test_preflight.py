@@ -237,8 +237,8 @@ def test_hdr_and_rotation_are_hard_failures(tmp_path: Path, video: VideoStream, 
     assert code in {issue.code for issue in report.issues}
 
 
-def test_missing_transfer_and_primaries_are_accepted_without_defaults(tmp_path: Path) -> None:
-    """Optional signaling can remain absent without becoming BT.709."""
+def test_missing_transfer_and_primaries_default_to_srgb_transfer_and_bt709_primaries(tmp_path: Path) -> None:
+    """Absent transfer and primaries are tagged iec61966-2-1 and bt709."""
 
     source = _input(tmp_path)
     media = _probe(source, video_streams=(_video(color_transfer=None, color_primaries=None),))
@@ -247,22 +247,22 @@ def test_missing_transfer_and_primaries_are_accepted_without_defaults(tmp_path: 
     report = service.execute_preflight(JobRequest((source,), tmp_path))
 
     assert report.ready and report.plan is not None
-    assert report.plan.output_color_profile == ColorProfile(ColorMatrix.BT709, None, None)
+    assert report.plan.output_color_profile == ColorProfile(ColorMatrix.BT709, "iec61966-2-1", "bt709")
     service.registry.release(report.plan.output_path)
 
 
 @pytest.mark.parametrize("missing_field", ["color_space", "color_range"])
-def test_missing_matrix_or_range_is_rejected(tmp_path: Path, missing_field: str) -> None:
-    """Matrix and range remain mandatory because sample conversion needs them."""
+def test_missing_matrix_or_range_defaults_to_bt709_limited(tmp_path: Path, missing_field: str) -> None:
+    """Untagged matrix and range fall back to the BT.709 matrix and limited range."""
 
     source = _input(tmp_path)
-    media = _probe(source, video_streams=(_video(**{missing_field: None}),))
+    media = _probe(source, video_streams=(_video(color_transfer=None, color_primaries=None, **{missing_field: None}),))
     report = _service(tmp_path, {source: media}).execute_preflight(JobRequest((source,), tmp_path))
 
-    assert not report.ready
-    color_issue = next(issue for issue in report.issues if issue.code is IssueCode.AMBIGUOUS_COLOR)
-    assert color_issue.severity is IssueSeverity.ERROR
-    assert "matrix and range must be explicit" in color_issue.message
+    assert report.ready
+    assert report.plan is not None
+    expected = ColorMatrix.BT709
+    assert report.plan.output_color_profile == ColorProfile(expected, "iec61966-2-1", "bt709")
 
 
 def test_first_clip_smpte170m_matrix_is_preserved_as_output_profile(tmp_path: Path) -> None:

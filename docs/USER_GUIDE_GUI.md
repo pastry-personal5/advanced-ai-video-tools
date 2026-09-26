@@ -67,7 +67,8 @@ paths, errors, and diagnostics.
 
 The queue preview provides **Original**, **Upscaled**, and **Final Video** tabs.
 During upscaling, matched frame samples appear as they become available. After
-completion, the published final video plays in a loop.
+completion, the published final video plays once and then stops on its last
+frame.
 
 The application closes cooperatively: pending and active work is cancelled,
 preview resources are released, owned temporary state is cleaned according to

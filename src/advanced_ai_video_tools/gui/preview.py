@@ -745,7 +745,7 @@ class QueuePreviewLastFrameWaitDialog(QDialog):
 
 
 class QueuePreviewPane(QGroupBox):
-    """Show live sampled upscale frames or a looping published final video."""
+    """Show live sampled upscale frames or a play-once published final video."""
 
     @staticmethod
     def _frame_label(object_name: str, accessible_name: str) -> QLabel:
@@ -855,7 +855,7 @@ class QueuePreviewPane(QGroupBox):
         self._frame_loader.frame_loaded.connect(self._frame_loaded)
         self._frame_loader_thread.finished.connect(self._frame_loader.deleteLater)
         self._frame_loader_thread.start()
-        self.player.setLoops(QMediaPlayer.Loops.Infinite)
+        self.player.setLoops(QMediaPlayer.Loops.Once)
         self._set_controls_enabled(False)
         self.tabs.currentChanged.connect(self._tab_changed)
         self.play_pause_button.clicked.connect(self._toggle_playback)
@@ -869,7 +869,7 @@ class QueuePreviewPane(QGroupBox):
         self.player.errorOccurred.connect(self._preview_error)
 
     def show_final_output(self, path: Path | None) -> None:
-        """Autoplay and loop one completed local output."""
+        """Autoplay one completed local output once, then hold its last frame."""
 
         if path is None:
             self.clear("Select a completed job to preview its final video.")
@@ -967,6 +967,10 @@ class QueuePreviewPane(QGroupBox):
         self._playback_requested = playing
         self._update_playback_control(playing)
         if playing:
+            duration = self.player.duration()
+            if duration > 0 and self.player.position() >= duration - 1:
+                self._hold_last_frame = False
+                self.player.setPosition(0)
             self.player.play()
         else:
             self.player.pause()
@@ -1136,8 +1140,10 @@ class QueuePreviewPane(QGroupBox):
             if self._hold_last_frame:
                 self._hide_last_frame_wait()
                 return
-            self.player.setPosition(0)
-            self._request_playback(True)
+            self._hold_last_frame = True
+            self._request_playback(False)
+            if self.player.duration() > 0:
+                self.player.setPosition(max(0, self.player.duration() - 1))
 
     @Slot(QMediaPlayer.Error, str)
     def _preview_error(self, _error: QMediaPlayer.Error, _error_string: str) -> None:

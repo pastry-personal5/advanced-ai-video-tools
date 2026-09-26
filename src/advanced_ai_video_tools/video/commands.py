@@ -10,7 +10,7 @@ from pathlib import Path
 from advanced_ai_video_tools.core.models import ColorProfile, ConcatStrategy, JobPlan, MediaProbe, Rational
 from advanced_ai_video_tools.video.compatibility import CompatibilityReport, analyze_clip_compatibility
 from advanced_ai_video_tools.video.frames import FRAME_FILENAME_TEMPLATE
-from advanced_ai_video_tools.video.policy import color_profile, color_profiles_compatible, color_profiles_mutually_compatible, has_ambiguous_color_tags, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
+from advanced_ai_video_tools.video.policy import color_profile, color_profiles_compatible, color_profiles_mutually_compatible, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
 
 _SAFE_CHANNEL_LAYOUT = re.compile(r"^[A-Za-z0-9_.()+-]+$")
 
@@ -85,8 +85,6 @@ def _validate_video_policy(probe: MediaProbe, *, expected_profile: ColorProfile 
         raise ValueError(f"HDR or wide-gamut input cannot be processed: {probe.path}")
     if has_unsupported_sdr_tags(video):
         raise ValueError(f"input has an unsupported SDR color profile: {probe.path}")
-    if has_ambiguous_color_tags(video):
-        raise ValueError(f"input color matrix and range must be explicit: {probe.path}")
     profile = color_profile(video)
     if expected_profile is not None and not color_profiles_compatible(profile, expected_profile):
         raise ValueError(f"input color profile differs from the first clip; cross-profile conversion is unsupported: {probe.path}")

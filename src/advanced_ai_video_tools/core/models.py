@@ -78,7 +78,6 @@ class IssueCode(str, Enum):
     INVALID_MEDIA = "invalid_media"
     UNSUPPORTED_HDR = "unsupported_hdr"
     UNSUPPORTED_COLOR = "unsupported_color"
-    AMBIGUOUS_COLOR = "ambiguous_color"
     UNSUPPORTED_ROTATION = "unsupported_rotation"
     STREAM_ACKNOWLEDGEMENT = "stream_acknowledgement"
     NORMALIZATION_REQUIRED = "normalization_required"

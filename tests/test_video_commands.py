@@ -87,9 +87,6 @@ def test_normalization_rejects_hdr_ambiguous_color_and_source_overwrite() -> Non
     spec = NormalizationSpec(640, 360, Rational(1, 1), Rational(24, 1), BT709_PROFILE, None)
     with pytest.raises(ValueError, match="HDR"):
         create_normalization_command(Path("ffmpeg"), _probe(Path("hdr.mp4"), video=_video(color_transfer="smpte2084")), Path("normalized.mkv"), spec)
-    ambiguous = _probe(Path("ambiguous.mp4"), video=_video(color_range=None))
-    with pytest.raises(ValueError, match="must be explicit"):
-        create_normalization_command(Path("ffmpeg"), ambiguous, Path("normalized.mkv"), spec)
     source = _probe(Path("same.mkv"))
     with pytest.raises(ValueError, match="overwrite"):
         create_normalization_command(Path("ffmpeg"), source, Path("same.mkv"), spec)

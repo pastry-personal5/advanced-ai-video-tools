@@ -33,7 +33,7 @@ from advanced_ai_video_tools.system.platform import PlatformInfo, platform_error
 from advanced_ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
 from advanced_ai_video_tools.upscaling.realesrgan import select_ai_scale
 from advanced_ai_video_tools.video.compatibility import analyze_clip_compatibility, effective_frame_rate
-from advanced_ai_video_tools.video.policy import color_profile, color_profiles_compatible, has_ambiguous_color_tags, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
+from advanced_ai_video_tools.video.policy import color_profile, default_output_profile, color_profiles_compatible, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
 from advanced_ai_video_tools.video.probe import FFprobeClient, MediaProber, ProbeError
 
 Clock = Callable[[], datetime]
@@ -231,7 +231,7 @@ class PreflightService:
             first_video = probes[0].primary_video
             if first_video is not None and output_rate is not None and request.target_height > 0:
                 try:
-                    output_color_profile = color_profile(first_video)
+                    output_color_profile = default_output_profile(color_profile(first_video))
                 except ValueError:
                     output_color_profile = None
                 output_width = aspect_width(first_video, request.target_height)
@@ -455,16 +455,7 @@ class PreflightService:
                         probe.path,
                     )
                 )
-            elif has_ambiguous_color_tags(video):
-                issues.append(
-                    _issue(
-                        IssueSeverity.ERROR,
-                        IssueCode.AMBIGUOUS_COLOR,
-                        "Input color matrix and range must be explicit. Missing transfer characteristics and primaries are accepted without assuming values.",
-                        probe.path,
-                    )
-                )
-            if comparison_profile is not None and not detected_hdr and not unsupported_tags and not has_ambiguous_color_tags(video):
+            if comparison_profile is not None and not detected_hdr and not unsupported_tags:
                 current_profile = color_profile(video)
                 if not color_profiles_compatible(current_profile, comparison_profile):
                     issues.append(

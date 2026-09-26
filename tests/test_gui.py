@@ -724,7 +724,7 @@ def test_source_preview_expands_without_forcing_a_pane_ratio(qt_app: QApplicatio
     pane.close()
 
 
-def test_queue_preview_switches_from_paired_samples_to_looping_final_video(qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # pylint: disable=too-many-statements
+def test_queue_preview_switches_from_paired_samples_to_play_once_final_video(qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # pylint: disable=too-many-statements
     """Queue preview exposes Original, Upscaled, then an autoplaying final video."""
 
     del qt_app
@@ -776,7 +776,7 @@ def test_queue_preview_switches_from_paired_samples_to_looping_final_video(qt_ap
     ]
     assert preview.tabs.currentWidget() is preview.final_video_tab
     assert preview.player.source().toLocalFile() == str(output)
-    assert preview.player.loops() == QMediaPlayer.Loops.Infinite
+    assert preview.player.loops() == QMediaPlayer.Loops.Once
     assert preview._playback_requested  # pylint: disable=protected-access
     assert preview.audio.isMuted() is False
     assert preview.audio.volume() == pytest.approx(0.42)
@@ -802,6 +802,34 @@ def test_queue_preview_switches_from_paired_samples_to_looping_final_video(qt_ap
     assert preview.last_frame_wait.isHidden()
 
     window.close()
+
+
+def test_queue_preview_final_video_stops_on_last_frame_after_one_play(qt_app: QApplication, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Completed output plays once, then pauses on its last frame instead of looping."""
+
+    del qt_app
+    output = tmp_path / "final.mp4"
+    output.touch()
+    preview = QueuePreviewPane()
+    preview.show_final_output(output)
+    assert preview._playback_requested  # pylint: disable=protected-access
+    seek_positions: list[int] = []
+    monkeypatch.setattr(preview.player, "setPosition", seek_positions.append)
+    monkeypatch.setattr(preview.player, "duration", lambda: 10_000)
+
+    preview._media_status_changed(QMediaPlayer.MediaStatus.EndOfMedia)  # pylint: disable=protected-access
+
+    assert not preview._playback_requested  # pylint: disable=protected-access
+    assert seek_positions == [9_999]
+    preview._media_status_changed(QMediaPlayer.MediaStatus.EndOfMedia)  # pylint: disable=protected-access
+    assert seek_positions == [9_999]
+    assert not preview._playback_requested  # pylint: disable=protected-access
+    monkeypatch.setattr(preview.player, "position", lambda: 9_999)
+    preview._toggle_playback()  # pylint: disable=protected-access
+    assert seek_positions == [9_999, 0]
+    assert preview._playback_requested  # pylint: disable=protected-access
+    preview.shutdown()
+    preview.close()
 
 
 def test_source_preview_keeps_native_rotation_behavior(qt_app: QApplication) -> None:

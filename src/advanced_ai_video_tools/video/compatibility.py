@@ -9,6 +9,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from advanced_ai_video_tools.core.models import AudioStream, ConcatStrategy, MediaProbe, Rational, VideoStream
+from advanced_ai_video_tools.video.policy import effective_color_space
 
 AUDIO_DURATION_TOLERANCE = Decimal("0.05")
 
@@ -147,11 +148,11 @@ def _compare_video(path: Path, video: VideoStream, baseline: VideoStream, output
     if video.start_time is not None and video.start_time != 0:
         findings.append(_finding(path, CompatibilityReason.TIMESTAMP_ORIGIN, "video timestamps must start at zero"))
     if video.color_space is None or video.color_range is None:
-        findings.append(_finding(path, CompatibilityReason.COLOR_TAGS, "required color tags are missing"))
+        findings.append(_finding(path, CompatibilityReason.COLOR_TAGS, "missing color matrix or range will be tagged with the bt709 limited-range default"))
     reference_transfer, reference_primaries = optional_reference
     transfer_conflicts = video.color_transfer is not None and reference_transfer is not None and video.color_transfer != reference_transfer
     primaries_conflict = video.color_primaries is not None and reference_primaries is not None and video.color_primaries != reference_primaries
-    if video.color_space != baseline.color_space or transfer_conflicts or primaries_conflict:
+    if effective_color_space(video) != effective_color_space(baseline) or transfer_conflicts or primaries_conflict:
         findings.append(_finding(path, CompatibilityReason.COLOR_TAGS, "color profile differs from the first clip"))
     if video.color_range in {"pc", "jpeg"}:
         findings.append(_finding(path, CompatibilityReason.COLOR_RANGE, "full range must convert to limited range"))
@@ -194,11 +195,11 @@ def analyze_clip_compatibility(probes: tuple[MediaProbe, ...] | list[MediaProbe]
     baseline_video = probes[0].primary_video
     if baseline_video is None:
         raise ValueError("the first probe has no video stream")
-    any_audio = any(probe.primary_audio is not None for probe in probes)
-    baseline_audio = next((probe.primary_audio for probe in probes if probe.primary_audio is not None), None)
     reference_transfer = next((video.color_transfer for probe in probes if (video := probe.primary_video) is not None and video.color_transfer is not None), None)
     reference_primaries = next((video.color_primaries for probe in probes if (video := probe.primary_video) is not None and video.color_primaries is not None), None)
     optional_reference = (reference_transfer, reference_primaries)
+    any_audio = any(probe.primary_audio is not None for probe in probes)
+    baseline_audio = next((probe.primary_audio for probe in probes if probe.primary_audio is not None), None)
     findings: list[CompatibilityFinding] = []
     for probe in probes:
         video = probe.primary_video

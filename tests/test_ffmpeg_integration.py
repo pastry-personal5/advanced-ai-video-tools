@@ -409,7 +409,7 @@ def test_full_pipeline_service_runs_concat_first_upscales_once_and_publishes(tmp
     assert result.preflight.plan.probes[0].primary_video.color_space == "smpte170m"
     assert result.preflight.plan.concat_strategy is ConcatStrategy.NORMALIZE
     assert result.preflight.plan.ai_scale == 2
-    assert result.preflight.plan.output_color_profile == SMPTE170M_PROFILE
+    assert result.preflight.plan.output_color_profile == ColorProfile(ColorMatrix.SMPTE170M, "iec61966-2-1", "bt709")
     completed_stages = [event.stage for event in events if event.completed == event.total]
     assert completed_stages.count(PipelineStage.CONCATENATE) == 1
     assert completed_stages.index(PipelineStage.NORMALIZE) < completed_stages.index(PipelineStage.CONCATENATE)
@@ -433,7 +433,7 @@ def test_full_pipeline_service_runs_concat_first_upscales_once_and_publishes(tmp
     assert final_probe.primary_video.pixel_format == "yuv420p"
     assert (final_probe.primary_video.width, final_probe.primary_video.height) == (128, 72)
     assert final_probe.primary_video.real_frame_rate == Rational(10, 1)
-    assert (final_probe.primary_video.color_space, final_probe.primary_video.color_transfer, final_probe.primary_video.color_primaries, final_probe.primary_video.color_range) == ("smpte170m", None, None, "tv")
+    assert (final_probe.primary_video.color_space, final_probe.primary_video.color_transfer, final_probe.primary_video.color_primaries, final_probe.primary_video.color_range) == ("smpte170m", "iec61966-2-1", "bt709", "tv")
     assert final_probe.primary_audio is not None
     assert final_probe.primary_audio.codec_name == "aac"
     assert final_probe.primary_audio.sample_rate == 48000

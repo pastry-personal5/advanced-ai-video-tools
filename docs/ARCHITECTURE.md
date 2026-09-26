@@ -59,7 +59,7 @@ Messages`/`Job Messages` tabs, while a tall far-right preview column spans the
 same near-full application height. Job Creation shows the selected local source
 through `QMediaPlayer`/`QVideoWidget`; Queue Monitoring presents its immutable
 queue model through Active, Up Next, and History presentation regions alongside
-the `Original`, `Upscaled`, and `Final Video` tabs in an independent looping
+the `Original`, `Upscaled`, and `Final Video` tabs in an independent play-once
 player. For
 the selected running job during `UPSCALE`, the first two tabs asynchronously
 decode their matched first local frame as soon as it is ready, then the latest
@@ -67,7 +67,7 @@ measured local `frame-<multiple of 16>.png` samples; Final Video is empty until
 the job completes. The pipeline emits the
 optional paired sample paths as part of the immutable typed progress event and never waits for, polls, or
 otherwise depends on GUI presentation. On completion, Final Video is selected
-and loops the published local output.
+and plays the published local output once, then pauses on its last frame.
 Preview state is presentation-only and queue requests remain frozen typed values.
 Session messages are timestamped in memory, receive queued snapshots through Qt
 signals, and never expose exact subprocess command lines. The selected-source
@@ -235,7 +235,7 @@ Version 1 accepts supported SDR BT.709 and SMPTE 170M matrices. Probe color prim
 - Reject detected PQ, HLG, BT.2020, HDR mastering metadata, and other explicit HDR or unsupported wide-gamut signaling with an actionable message.
 - Accept explicitly tagged supported SDR BT.709 and SMPTE 170M matrices directly.
 - Require every later clip to declare the same matrix. When both compared clips explicitly declare transfer characteristics or primaries, reject conflicting values. A missing optional value is ignored rather than treated as a conflict; version 1 performs no cross-profile or SMPTE 170M-to-BT.709 conversion.
-- Reject absent or unknown matrix/range metadata. Accept missing transfer characteristics and primaries without an override and without substituting BT.709; omit fields absent from the first clip when signaling normalized and final output.
+- Default an absent matrix to BT.709 and an absent range to limited; clips missing either are flagged for normalization. Reject unknown matrix/range values. Treat missing transfer characteristics and primaries as unknown when comparing clips. Tag normalized and final output with the first clip's values, filling absent ones with the defaults matrix `bt709`, transfer `iec61966-2-1`, primaries `bt709`.
 - Convert YUV to the RGB PNG frame representation explicitly with the frozen matrix, then convert processed RGB frames back with that same matrix for encoding.
 - Tag the final stream explicitly with the frozen first-clip primaries, transfer characteristics, and matrix coefficients. Do not tone-map, gamut-map, convert matrices, or retag silently.
 
@@ -357,7 +357,7 @@ GUI ──> Job model ──> FIFO job queue ───────┘          �
 - Require the `realesrgan-x4plus` parameter and binary files and resolve them during preflight. Never inherit the executable's default model implicitly.
 - Do not install, download, update, or modify external tools as part of preflight.
 - Validate readable inputs, zero or absent rotation metadata, writable output directory, frozen and reserved destination, overwrite mode, model files, target height, resolved dimensions, AI scale, Vulkan device, owned workspace, conservative disk estimate, and 20% free-space margin.
-- Reject detected HDR, unsupported wide gamut, mixed matrices, explicit transfer/primary conflicts, and missing matrix/range tags. Ignore absent transfer/primary tags without defaults. Require acknowledgement for every unsupported secondary stream that will be dropped.
+- Reject detected HDR, unsupported wide gamut, mixed matrices, and explicit transfer/primary conflicts. Treat a missing matrix as BT.709 and a missing range as limited. Ignore absent transfer/primary tags when comparing clips; the frozen output profile defaults them to `iec61966-2-1` and `bt709`. Require acknowledgement for every unsupported secondary stream that will be dropped.
 - Calculate a conservative peak temporary-space estimate; frame sequences can be substantially larger than their source videos.
 - Freeze the effective job configuration before starting so logs and retries are reproducible.
 
