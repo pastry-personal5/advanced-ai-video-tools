@@ -1,10 +1,10 @@
-# V3 Phase 7 — Video Interpolation
+# V3 Phase 12 — Video Interpolation
 
 ## Status
 
-- Phase: 7
+- Phase: 12
 - State: Proposed
-- Predecessor: [Phase 6 — Crop Feature](6-crop.md)
+- Predecessor: [Phase 11 — Crop Feature](11-crop.md)
 
 ## Objective
 
@@ -49,4 +49,4 @@ resource use, and cancellation.
   default suite.
 
 No interpolation implementation should begin until every design gate is
-approved and Phase 6 is complete.
+approved and Phase 11 is complete.

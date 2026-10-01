@@ -3,8 +3,8 @@
 ## Status
 
 - Released baseline: v2.0.0
-- Active phase: None; [Phase 6 — Crop Feature](6-crop.md) remains proposed
-- Last updated: 2026-09-06
+- Active phase: None; Phases 6–10 are unassigned
+- Last updated: 2026-10-01
 
 V3 extends the completed v2 product without weakening its media or safety
 contract.
@@ -18,11 +18,12 @@ contract.
 | 3 | [Focused Clip Dimensions](3-clip-resolution.md) | Complete | Background-probed focused-clip dimensions |
 | 4 | [Modularity Refactoring](4-refactoring.md) | Complete | Verified dependency and ownership boundaries |
 | 5 | [Unified Settings Dialog](5-settings-dialog.md) | Complete | Searchable, validated, atomic application settings |
-| 6 | [Crop Feature](6-crop.md) | Proposed | Explicit crop intent with verified output safety |
-| 7 | [Video Interpolation](7-video-interpolation.md) | Proposed | Opt-in 16 fps to 30/60 fps interpolation |
+| 6–10 | Unassigned | Unplanned | Scope and approval pending |
+| 11 | [Crop Feature](11-crop.md) | Proposed | Explicit crop intent with verified output safety |
+| 12 | [Video Interpolation](12-video-interpolation.md) | Proposed | Opt-in 16 fps to 30/60 fps interpolation |
 
-Phase 6 follows Phase 5. Phase 7 remains gated on Phase 6 and its own design
-approval.
+Phase 11 follows completion of Phases 6–10 and its own design approval. Phase
+12 remains gated on Phase 11 and its own design approval.
 
 ## Invariants
 
@@ -51,3 +52,4 @@ models, caches, and local artifacts remain outside the repository.
 | 2026-09-06 | Complete the Phase 4 dependency audit and authorize Phase 5. |
 | 2026-09-06 | Approve a unified **Preferences → Settings** dialog with searchable tree navigation, an atomic shared draft, careful asynchronous validation, fixed dimension bounds, and session-only geometry. |
 | 2026-09-06 | Complete Phase 5 with full automated checks and native Settings-dialog capture evidence. |
+| 2026-10-01 | Move Crop to Phase 11 and Video Interpolation to Phase 12; leave Phases 6–10 unassigned. |

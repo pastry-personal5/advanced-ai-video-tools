@@ -4,7 +4,7 @@
 
 - State: Complete
 - Predecessor: [Phase 4 — Modularity Refactoring](4-refactoring.md) (complete)
-- Successor: [Phase 6 — Crop Feature](6-crop.md)
+- Successor: Phase 6 (unassigned)
 - Approved: 2026-09-06
 - Completed: 2026-09-06
 

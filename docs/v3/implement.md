@@ -1,6 +1,7 @@
 # Version 3 Implementation Guide
 
-Phases 1–5 are complete. Phases 6–7 remain unauthorized.
+Phases 1–5 are complete. Phases 6–10 are unassigned; Phases 11–12 remain
+unauthorized.
 For an authorized phase:
 
 1. Read [plans.md](plans.md), the selected phase file, and
@@ -14,9 +15,9 @@ For an authorized phase:
 
 ## Remaining gates
 
-- **Crop (Phase 6):** approve coordinates, validation, aspect ratio, operation
+- **Crop (Phase 11):** approve coordinates, validation, aspect ratio, operation
   order, rotation/color handling, controls, persistence, and verification.
-- **Interpolation (Phase 7):** approve frame-rate/timing semantics, algorithm
+- **Interpolation (Phase 12):** approve frame-rate/timing semantics, algorithm
   and tool ownership, audio, resource limits, cancellation, and quality gates.
 
 No v3 phase may silently change frame rate, infer crop from preview geometry,

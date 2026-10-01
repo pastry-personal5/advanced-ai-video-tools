@@ -1,11 +1,11 @@
-# V3 Phase 6 — Crop Feature
+# V3 Phase 11 — Crop Feature
 
 ## Status
 
-- Phase: 6
+- Phase: 11
 - State: Proposed
-- Predecessor: [Phase 5 — Unified Settings Dialog](5-settings-dialog.md)
-- Successor: [Phase 7 — Video Interpolation](7-video-interpolation.md)
+- Predecessor: Phase 10 (unassigned)
+- Successor: [Phase 12 — Video Interpolation](12-video-interpolation.md)
 
 ## Objective
 
