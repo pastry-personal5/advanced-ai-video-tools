@@ -67,3 +67,8 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["advanced_ai_video_tools"]
+
+[tool.uv.workspace]
+members = [
+    "tools/spandrel-runner",
+]
