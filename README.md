@@ -6,10 +6,10 @@ single merged timeline with `realesrgan-ncnn-vulkan`.
 
 ## Status
 
-Version 2.0.0 is the released baseline. V3 Phases 1–5 are implemented; Phases
-6–10 are unassigned, while Phase 11 Crop and Phase 12 Video Interpolation remain
-proposed. The verified distribution is an
-unsigned/ad-hoc-signed development DMG. Production Developer ID signing and
+Version 2.0.0 is the released baseline. V3 Phases 1–5 are implemented; Phase 6
+Customizable Upscaling Pipelines is planned, Phases 7–10 are unassigned, and
+Phase 11 Crop and Phase 12 Video Interpolation remain proposed. The verified
+distribution is an unsigned/ad-hoc-signed development DMG. Production Developer ID signing and
 notarization remain deferred because Apple Developer Program enrollment is
 unavailable.
 

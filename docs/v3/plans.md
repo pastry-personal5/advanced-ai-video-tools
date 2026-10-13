@@ -3,8 +3,8 @@
 ## Status
 
 - Released baseline: v2.0.0
-- Active phase: None; Phases 6–10 are unassigned
-- Last updated: 2026-10-01
+- Active phase: None; Phase 6 is planned, and Phases 7–10 are unassigned
+- Last updated: 2026-10-11
 
 V3 extends the completed v2 product without weakening its media or safety
 contract.
@@ -18,7 +18,8 @@ contract.
 | 3 | [Focused Clip Dimensions](3-clip-resolution.md) | Complete | Background-probed focused-clip dimensions |
 | 4 | [Modularity Refactoring](4-refactoring.md) | Complete | Verified dependency and ownership boundaries |
 | 5 | [Unified Settings Dialog](5-settings-dialog.md) | Complete | Searchable, validated, atomic application settings |
-| 6–10 | Unassigned | Unplanned | Scope and approval pending |
+| 6 | [Customizable Upscaling Pipelines](6-customizable-upscaling-pipelines.md) | Planned | User-selected concat, single-pass, and two-pass processing |
+| 7–10 | Unassigned | Unplanned | Scope and approval pending |
 | 11 | [Crop Feature](11-crop.md) | Proposed | Explicit crop intent with verified output safety |
 | 12 | [Video Interpolation](12-video-interpolation.md) | Proposed | Opt-in 16 fps to 30/60 fps interpolation |
 
@@ -28,7 +29,9 @@ Phase 11 follows completion of Phases 6–10 and its own design approval. Phase
 ## Invariants
 
 - Keep CLI and GUI thin over the same typed application service.
-- Keep concat first and upscale at most once.
+- Keep concat first. The implemented at-most-once upscale contract remains
+  binding until Phase 6 is implemented and verified; Phase 6 plans an explicit
+  two-pass option.
 - Keep long-running work off the GUI thread and process one queued job at a
   time.
 - Preserve shell-free external-tool execution, user-managed tools/models, no
@@ -53,3 +56,4 @@ models, caches, and local artifacts remain outside the repository.
 | 2026-09-06 | Approve a unified **Preferences → Settings** dialog with searchable tree navigation, an atomic shared draft, careful asynchronous validation, fixed dimension bounds, and session-only geometry. |
 | 2026-09-06 | Complete Phase 5 with full automated checks and native Settings-dialog capture evidence. |
 | 2026-10-01 | Move Crop to Phase 11 and Video Interpolation to Phase 12; leave Phases 6–10 unassigned. |
+| 2026-10-11 | Record the Phase 6 customizable-upscaling design; implementation and acceptance evidence remain pending. |
