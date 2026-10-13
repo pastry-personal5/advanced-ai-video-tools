@@ -125,6 +125,10 @@ class MergedOutputVerifier:
                 failures.append("merged audio channel layout differs from the job layout")
             if strategy is ConcatStrategy.NORMALIZE and (audio.codec_name != "pcm_s24le" or audio.sample_rate != 48000):
                 failures.append("normalized merged audio is not pcm_s24le at 48 kHz")
+            if strategy is ConcatStrategy.STREAM_COPY:
+                source_audio = next((probe.primary_audio for probe in job.probes if probe.primary_audio is not None), None)
+                if source_audio is None or audio.codec_name != source_audio.codec_name:
+                    failures.append("stream-copy merged audio codec differs from the selected source audio")
             video_duration = video.duration if video is not None and video.duration is not None else merged.duration
             if video_duration is None or audio.duration is None or abs(video_duration - audio.duration) > Decimal("0.05"):
                 failures.append("merged audio and video durations are not aligned")

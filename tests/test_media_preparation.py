@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, Rational, VideoStream
+from advanced_ai_video_tools.core.models import AudioStream, ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, MediaProbe, PipelineStage, ProgressEvent, Rational, VideoStream
 from advanced_ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerificationError, MergedOutputVerifier, PreparationCancelled, PreparationFailed
 from advanced_ai_video_tools.storage.workspaces import WorkspaceManager
 from advanced_ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessExecutionError, ProcessResult
@@ -20,6 +20,10 @@ def _video(*, width: int = 64, duration: Decimal = Decimal("1"), codec: str = "h
 
 def _probe(path: Path, *, width: int = 64) -> MediaProbe:
     return MediaProbe(path, Decimal("1"), (_video(width=width),), (), ())
+
+
+def _audio(codec: str = "aac") -> AudioStream:
+    return AudioStream(1, codec, 48000, 2, "stereo", Decimal("1"), Rational(1, 48000))
 
 
 def _job() -> JobPlan:
@@ -190,6 +194,31 @@ def test_merged_verifier_accepts_rate_rounding_below_one_timestamp_tick(tmp_path
     result = MergedOutputVerifier(QuantizedProber()).verify(path, job, ConcatStrategy.NORMALIZE)
 
     assert result is merged
+
+
+def test_merged_verifier_requires_stream_copy_audio_to_match_selected_source_codec(tmp_path: Path) -> None:
+    """A direct concat cannot substitute an audio codec before final muxing."""
+
+    path = tmp_path / "merged.mkv"
+    path.write_bytes(b"media")
+    sources = (
+        MediaProbe(Path("first.mp4"), Decimal("1"), (_video(),), (_audio("aac"),), ()),
+        MediaProbe(Path("second.mp4"), Decimal("1"), (_video(),), (_audio("aac"),), ()),
+    )
+    merged = MediaProbe(path, Decimal("2"), (_video(duration=Decimal("2")),), (_audio("opus"),), ())
+
+    class CodecChangingProber:
+        """Return an invalid direct-concat audio codec for verification."""
+
+        def probe(self, _path: Path) -> MediaProbe:
+            """Return the synthetic invalid merged media."""
+
+            return merged
+
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, sources, Rational(10, 1), 3840, 2160, 4, ConcatStrategy.STREAM_COPY, "stereo", (), 100, 120, ColorProfile(ColorMatrix.BT709, "bt709", "bt709"))
+
+    with pytest.raises(MergedOutputVerificationError, match="selected source audio"):
+        MergedOutputVerifier(CodecChangingProber()).verify(path, job, ConcatStrategy.STREAM_COPY)
 
 
 def test_merged_verifier_reports_exact_frame_timing_operands(tmp_path: Path) -> None:

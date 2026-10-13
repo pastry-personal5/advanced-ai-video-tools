@@ -344,6 +344,43 @@ def test_caller_owned_preparation_extracts_exact_rgb_frame_sequence(tmp_path: Pa
 
 
 @pytest.mark.integration
+def test_final_output_keeps_the_ordered_audio_timeline_from_two_source_clips(tmp_path: Path) -> None:
+    """Two source audio streams become one final track in concat-manifest order."""
+
+    ffmpeg_name = shutil.which("ffmpeg")
+    ffprobe_name = shutil.which("ffprobe")
+    if ffmpeg_name is None or ffprobe_name is None:
+        pytest.skip("FFmpeg and FFprobe are required for integration tests")
+    ffmpeg = Path(ffmpeg_name)
+    ffprobe = Path(ffprobe_name)
+    sources = (tmp_path / "first-with-audio.mp4", tmp_path / "second-with-audio.mp4")
+    for source in sources:
+        _generate_source(ffmpeg, source, Decimal("0.4"))
+    prober = FFprobeClient(ffprobe)
+    probes = tuple(prober.probe(source) for source in sources)
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "ordered-audio.mp4", False, probes, Rational(10, 1), 64, 36, None, ConcatStrategy.STREAM_COPY, "mono", (), 100, 120, BT709_PROFILE)
+    toolchain = Toolchain(ToolInfo(ffmpeg, "integration"), ToolInfo(ffprobe, "integration"), ToolInfo(Path("realesrgan-ncnn-vulkan"), "unused"), tmp_path / "models")
+    manager = WorkspaceManager(tmp_path / "jobs")
+    workspace = manager.create()
+    runner = SubprocessRunner()
+    preparation = MediaPreparationExecutor(manager, runner, MergedOutputVerifier(prober), command_timeout_seconds=30)
+    extraction = FrameExtractionExecutor(manager, runner, command_timeout_seconds=30)
+    finalization = FinalizationExecutor(manager, runner, FinalOutputVerifier(prober), command_timeout_seconds=30)
+
+    prepared = preparation.execute_preparation_in_workspace(job, ffmpeg, workspace)
+    assert prepared.merged_probe.primary_audio is not None
+    assert prepared.merged_probe.primary_audio.codec_name == "aac"
+    assert Decimal("0.78") <= _audio_packet_end(ffprobe, prepared.merged_probe.path) <= Decimal("0.85")
+    extracted = extraction.execute_extraction(prepared, job, ffmpeg, workspace=workspace)
+    upscaled = UpscalingResult(extracted.frames_directory, extracted.frame_pattern, extracted.frame_count, extracted.frame_width, extracted.frame_height, None, True, extracted.audio_source_path, (), workspace.identifier)
+    result = finalization.execute_finalization(prepared, upscaled, job, toolchain, workspace=workspace)
+
+    assert result.output_probe.primary_audio is not None
+    assert Decimal("0.78") <= _audio_packet_end(ffprobe, result.output_path) <= Decimal("0.85")
+    assert not workspace.path.exists()
+
+
+@pytest.mark.integration
 def test_terminal_pipeline_encodes_verifies_atomically_replaces_and_cleans(tmp_path: Path) -> None:
     """Real frames and normalized audio become one verified quality-first MP4."""
 
