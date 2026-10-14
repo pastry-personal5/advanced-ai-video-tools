@@ -147,8 +147,8 @@ def _compare_video(path: Path, video: VideoStream, baseline: VideoStream, output
         findings.append(_finding(path, CompatibilityReason.FRAME_RATE, "frame rate is missing or differs from the job rate"))
     if video.start_time is not None and video.start_time != 0:
         findings.append(_finding(path, CompatibilityReason.TIMESTAMP_ORIGIN, "video timestamps must start at zero"))
-    if video.color_space is None or video.color_range is None:
-        findings.append(_finding(path, CompatibilityReason.COLOR_TAGS, "missing color matrix or range will be tagged with the bt709 limited-range default"))
+    if video.color_space is None or video.color_transfer is None or video.color_primaries is None or video.color_range is None:
+        findings.append(_finding(path, CompatibilityReason.COLOR_TAGS, "missing color tags must be assigned the frozen job profile"))
     reference_transfer, reference_primaries = optional_reference
     transfer_conflicts = video.color_transfer is not None and reference_transfer is not None and video.color_transfer != reference_transfer
     primaries_conflict = video.color_primaries is not None and reference_primaries is not None and video.color_primaries != reference_primaries

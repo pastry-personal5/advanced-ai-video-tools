@@ -16,6 +16,7 @@ from PySide6.QtCore import QObject, QSize, Qt, QThread, Signal, Slot
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShowEvent
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -401,6 +402,32 @@ class FileSettingsPage(QWidget):
         self._changed()
 
 
+class InputOutputSettingsPage(QWidget):
+    """Edit processing-policy preferences in the shared Settings draft."""
+
+    draft_changed = Signal()
+
+    def __init__(self, settings: ApplicationSettings, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("inputOutputSettingsPage")
+        heading = QLabel("Input and Output")
+        heading.setObjectName("settingsPageHeading")
+        explanation = QLabel("Color tags describe how footage should be interpreted. Leave this off unless you know untagged clips match the declared SDR color profile of the other inputs.")
+        explanation.setWordWrap(True)
+        self.allow_mixed_color_tags = QCheckBox("Allow mixed color tags")
+        self.allow_mixed_color_tags.setObjectName("allowMixedColorTags")
+        self.allow_mixed_color_tags.setChecked(settings.allow_mixed_color_tags)
+        self.allow_mixed_color_tags.setToolTip("Allows untagged clips only when all declared supported SDR tags agree.")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
+        layout.setSpacing(SPACE_3)
+        layout.addWidget(heading)
+        layout.addWidget(explanation)
+        layout.addWidget(self.allow_mixed_color_tags)
+        layout.addStretch(1)
+        self.allow_mixed_color_tags.toggled.connect(self.draft_changed)
+
+
 class ExternalToolsPage(QWidget):
     """Edit one coherent external-tool override draft."""
 
@@ -654,6 +681,7 @@ class SettingsDialog(QDialog):
     SIDEBAR_MINIMUM_WIDTH = 240
     SIDEBAR_MAXIMUM_WIDTH = 360
     FILE_PATH = ("Editor", "File")
+    INPUT_OUTPUT_PATH = ("Input and Output", "Color Policy")
     EXTERNAL_TOOLS_PATH = ("Tools", "External Tools")
 
     def __init__(self, settings: ApplicationSettings, validator: ExternalToolsValidator, settings_store: SettingsStore, session_state: SettingsDialogSessionState | None = None, parent: QWidget | None = None) -> None:
@@ -697,6 +725,7 @@ class SettingsDialog(QDialog):
         self.tree.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         self.file_page = FileSettingsPage(settings)
+        self.input_output_page = InputOutputSettingsPage(settings)
         self.external_tools_page = ExternalToolsPage(settings)
         self.no_results_page = QLabel("No settings found")
         self.no_results_page.setObjectName("settingsNoResults")
@@ -704,6 +733,7 @@ class SettingsDialog(QDialog):
 
         descriptors = (
             _SettingsPageDescriptor(self.FILE_PATH, "editor file automatic deletion rules related files trash source target pattern add edit delete enable disable move up down reorder restore built-in defaults changes applied settings saved", self.file_page),
+            _SettingsPageDescriptor(self.INPUT_OUTPUT_PATH, "input output color tags mixed untagged sdr bt709 transfer primaries policy allow", self.input_output_page),
             _SettingsPageDescriptor(self.EXTERNAL_TOOLS_PATH, "tools external ffmpeg ffprobe real esrgan realesrgan executable model directory path choose use automatic blank resolve validation validate small vulkan inference", self.external_tools_page),
         )
         self._descriptors = {descriptor.path: descriptor for descriptor in descriptors}
@@ -712,6 +742,7 @@ class SettingsDialog(QDialog):
         self._scroll_pages: dict[tuple[str, str], QScrollArea] = {}
         self._page_states = {
             self.FILE_PATH: SettingsValidationState.SAVED,
+            self.INPUT_OUTPUT_PATH: SettingsValidationState.SAVED,
             self.EXTERNAL_TOOLS_PATH: SettingsValidationState.SAVED,
         }
 
@@ -779,6 +810,7 @@ class SettingsDialog(QDialog):
         self.search.textChanged.connect(self._filter_pages)
         self.tree.itemSelectionChanged.connect(self._selection_changed)
         self.file_page.draft_changed.connect(self._draft_changed)
+        self.input_output_page.draft_changed.connect(self._input_output_changed)
         self.external_tools_page.draft_changed.connect(self._external_tools_changed)
         self.external_tools_page.validation_requested.connect(lambda: self._begin_external_tools_validation(commit_after=False))
         self.ok_button.clicked.connect(self._commit)
@@ -794,9 +826,9 @@ class SettingsDialog(QDialog):
             self.external_tools_page.set_validator_busy(True, inherited=True)
 
     def draft_settings(self) -> ApplicationSettings:
-        """Return the complete immutable settings draft represented by both pages."""
+        """Return the complete immutable settings draft represented by all pages."""
 
-        return replace(self._settings, tools=self.external_tools_page.overrides(), deletion_rules=self.file_page.settings_value())
+        return replace(self._settings, tools=self.external_tools_page.overrides(), deletion_rules=self.file_page.settings_value(), allow_mixed_color_tags=self.input_output_page.allow_mixed_color_tags.isChecked())
 
     @property
     def dirty(self) -> bool:
@@ -861,6 +893,11 @@ class SettingsDialog(QDialog):
 
     def _draft_changed(self) -> None:
         self._page_states[self.FILE_PATH] = SettingsValidationState.VALID if self.file_page.settings_value() != self._settings.deletion_rules else SettingsValidationState.SAVED
+        self._refresh_page_labels()
+        self._refresh_dialog_status()
+
+    def _input_output_changed(self) -> None:
+        self._page_states[self.INPUT_OUTPUT_PATH] = SettingsValidationState.VALID if self.input_output_page.allow_mixed_color_tags.isChecked() != self._settings.allow_mixed_color_tags else SettingsValidationState.SAVED
         self._refresh_page_labels()
         self._refresh_dialog_status()
 
@@ -938,6 +975,7 @@ class SettingsDialog(QDialog):
         self._commit_after_validation = commit_after
         if commit_after:
             self.file_page.setEnabled(False)
+            self.input_output_page.setEnabled(False)
             self.external_tools_page.set_commit_locked(True)
             self.search.setEnabled(False)
             self.ok_button.setEnabled(False)
@@ -961,6 +999,7 @@ class SettingsDialog(QDialog):
             if self._validator.busy and self._pending_tools == draft.tools:
                 self._commit_after_validation = True
                 self.file_page.setEnabled(False)
+                self.input_output_page.setEnabled(False)
                 self.external_tools_page.set_commit_locked(True)
                 self.search.setEnabled(False)
                 self.ok_button.setEnabled(False)
@@ -988,6 +1027,7 @@ class SettingsDialog(QDialog):
 
     def _unlock_after_commit(self) -> None:
         self.file_page.setEnabled(True)
+        self.input_output_page.setEnabled(True)
         self.external_tools_page.set_commit_locked(False)
         self.search.setEnabled(True)
         self.ok_button.setEnabled(True)

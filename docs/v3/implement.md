@@ -1,7 +1,7 @@
 # Version 3 Implementation Guide
 
-Phases 1–5 are complete. Phase 6 has a documented design but has not started;
-Phases 7–10 are unassigned, and Phases 11–12 remain unauthorized. Writing the
+Phases 1–5 and Phase 7 are complete. Phase 6 has a documented design but has not started;
+Phases 8–10 are unassigned, and Phases 11–12 remain unauthorized. Writing the
 Phase 6 plan does not authorize implementation or change the active architecture
 contract.
 

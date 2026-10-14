@@ -136,6 +136,18 @@ def test_json_cli_reports_plan_and_releases_reservation(
     assert service.request.target_height == 2160
 
 
+def test_cli_freezes_allow_mixed_color_tags_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """The opt-in is explicit and defaults to strict behavior elsewhere."""
+
+    output = tmp_path / "ai-video.mp4"
+    service = FakeService(PreflightReport((), _plan(output), None))
+    monkeypatch.setattr(cli, "PreflightService", lambda: service)
+
+    assert cli.main(["preflight", "--input", str(tmp_path / "clip.mp4"), "--output-dir", str(tmp_path), "--allow-mixed-color-tags"]) == 0
+    capsys.readouterr()
+    assert service.request is not None and service.request.allow_mixed_color_tags
+
+
 def test_text_cli_returns_two_for_blocking_issue(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

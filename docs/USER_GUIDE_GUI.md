@@ -28,6 +28,9 @@ or choose a page from the left tree:
 - **Editor → File** configures ordered automatic related-file deletion rules.
 - **Tools → External Tools** configures FFmpeg, FFprobe, Real-ESRGAN, and its
   model directory.
+- **Input and Output → Color Policy** contains the off-by-default **Allow mixed
+  color tags** preference. Enable it only if untagged clips are known to match
+  the other clips' unanimous declared supported SDR profile.
 
 Leave an executable blank to use `PATH`; leave the model directory blank to use
 the `models` directory beside Real-ESRGAN. **Use PATH** and **Automatic** clear

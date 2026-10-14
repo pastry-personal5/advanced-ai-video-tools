@@ -141,7 +141,7 @@ def test_editor_preserves_concat_order_and_builds_frozen_supported_request(qt_ap
     """Visible clip order becomes immutable backend intent without safety acknowledgement."""
 
     tools = ToolOverrides(ffmpeg=tmp_path / "ffmpeg", ffprobe=tmp_path / "ffprobe", realesrgan=tmp_path / "realesrgan", model_directory=tmp_path / "models")
-    settings = ApplicationSettings(tools=tools, target_height=2160, overwrite_mode=OverwriteMode.NO_OVERWRITE)
+    settings = ApplicationSettings(tools=tools, target_height=2160, overwrite_mode=OverwriteMode.NO_OVERWRITE, allow_mixed_color_tags=True)
     editor = JobEditor(settings, clock=lambda: _CREATED)
     paths = (tmp_path / "one.mov", tmp_path / "two.mov", tmp_path / "three.mov")
     assert editor.findChild(QGroupBox, "sourceClipListGroup").title() == "Source Clips"
@@ -161,6 +161,7 @@ def test_editor_preserves_concat_order_and_builds_frozen_supported_request(qt_ap
     assert request.tools == tools
     assert request.overwrite_mode is OverwriteMode.NO_OVERWRITE
     assert not request.acknowledge_dropped_streams
+    assert request.allow_mixed_color_tags
     assert request.created_at == _CREATED
     assert request.generated_output_basename is not None and request.generated_output_basename.startswith("ai-video-20260821-143052-")
     assert QCoreApplication.instance() is qt_app

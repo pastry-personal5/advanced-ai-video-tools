@@ -252,6 +252,7 @@ class JobRequest:
     created_at: datetime | None = None
     generated_output_basename: str | None = None
     acknowledged_stream_keys: tuple[str, ...] = ()
+    allow_mixed_color_tags: bool = False
 
 
 @dataclass(frozen=True)
@@ -286,6 +287,7 @@ class JobPlan:
     acknowledge_dropped_streams: bool = False
     model_name: str = "realesrgan-x4plus"
     overwrite_mode: OverwriteMode = OverwriteMode.REPLACE
+    allow_mixed_color_tags: bool = False
 
 
 @dataclass(frozen=True)

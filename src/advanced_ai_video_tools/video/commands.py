@@ -10,7 +10,7 @@ from pathlib import Path
 from advanced_ai_video_tools.core.models import ColorProfile, ConcatStrategy, JobPlan, MediaProbe, Rational
 from advanced_ai_video_tools.video.compatibility import CompatibilityReport, analyze_clip_compatibility
 from advanced_ai_video_tools.video.frames import FRAME_FILENAME_TEMPLATE
-from advanced_ai_video_tools.video.policy import color_profile, color_profiles_compatible, color_profiles_mutually_compatible, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
+from advanced_ai_video_tools.video.policy import color_profile, color_profiles_compatible, has_unsupported_sdr_tags, is_hdr_or_wide_gamut, resolve_input_color_profile
 
 _SAFE_CHANNEL_LAYOUT = re.compile(r"^[A-Za-z0-9_.()+-]+$")
 
@@ -158,14 +158,14 @@ def create_media_preparation_plan(job: JobPlan, ffmpeg: Path, workspace: Path) -
     first_video = job.probes[0].primary_video
     if first_video is None:
         raise ValueError("the first input has no video stream")
-    profiles: list[ColorProfile] = []
     for probe in job.probes:
-        profiles.append(_validate_video_policy(probe, expected_profile=job.output_color_profile))
+        _validate_video_policy(probe, expected_profile=job.output_color_profile)
         drops_streams = len(probe.video_streams) > 1 or len(probe.audio_streams) > 1 or bool(probe.other_streams) or probe.chapter_count > 0
         if drops_streams and not job.acknowledge_dropped_streams:
             raise ValueError(f"dropping unsupported streams requires acknowledgement: {probe.path}")
-    if not color_profiles_mutually_compatible(profiles):
-        raise ValueError("input clips contain conflicting explicit transfer characteristics or color primaries")
+    videos = tuple(probe.primary_video for probe in job.probes)
+    if any(video is None for video in videos) or resolve_input_color_profile([video for video in videos if video is not None], allow_mixed_color_tags=job.allow_mixed_color_tags) != job.output_color_profile:
+        raise ValueError("input color policy differs from the frozen job profile")
     compatibility = analyze_clip_compatibility(job.probes, job.output_frame_rate, job.output_audio_layout)
     if compatibility.strategy is not job.concat_strategy:
         raise ValueError("job concat strategy is inconsistent with probed media")

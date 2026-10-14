@@ -114,14 +114,16 @@ def test_extraction_rejects_non_rgb_png(tmp_path: Path) -> None:
         executor.execute_extraction(prepared, job, Path("ffmpeg"), workspace=workspace)
 
 
-def test_extraction_rejects_implausible_frame_count(tmp_path: Path) -> None:
-    """A contiguous but substantially short sequence cannot enter upscaling."""
+def test_extraction_uses_contiguous_decoded_inventory_when_metadata_count_drifts(tmp_path: Path) -> None:
+    """Decoded PNGs, not duration metadata, become the downstream timeline."""
 
     executor, _manager, workspace = _executor(tmp_path, RecordingExtractionRunner(tuple(range(1, 18))))
     prepared, job = _prepared(workspace)
 
-    with pytest.raises(FrameExtractionFailed, match="count differs"):
-        executor.execute_extraction(prepared, job, Path("ffmpeg"), workspace=workspace)
+    result = executor.execute_extraction(prepared, job, Path("ffmpeg"), workspace=workspace)
+
+    assert result.expected_frame_count == 20
+    assert result.frame_count == 17
 
 
 def test_extraction_process_failure_preserves_bounded_diagnostic(tmp_path: Path) -> None:

@@ -5,9 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from loguru import logger
+
 from advanced_ai_video_tools.core.models import JobPlan, PipelineStage
-from advanced_ai_video_tools.services.media_preparation import PreparationResult
 from advanced_ai_video_tools.services.context import StageContext
+from advanced_ai_video_tools.services.media_preparation import PreparationResult
 from advanced_ai_video_tools.services.progress import ProgressCallback, ProgressEmitter
 from advanced_ai_video_tools.storage.workspaces import OwnedWorkspace, WorkspaceError, WorkspaceManager
 from advanced_ai_video_tools.system.processes import CancellationToken, ProcessCancelled, ProcessError, ProcessResult, ProcessRunner
@@ -83,7 +85,16 @@ class FrameExtractionExecutor:
             video = prepared.merged_probe.primary_video
             if video is None:
                 raise FrameInventoryError("verified merged media lost its primary video")
-            frame_count = self._verifier.verify(extraction_plan.frames_directory, video.width, video.height, extraction_plan.expected_frame_count, count_tolerance=1)
+            # Container timing is only an estimate.  The verified contiguous PNG
+            # inventory is the decoded timeline used by all downstream stages.
+            frame_count = self._verifier.verify(extraction_plan.frames_directory, video.width, video.height, None)
+            if frame_count != extraction_plan.expected_frame_count:
+                logger.warning(
+                    "Decoded frame inventory differs from metadata estimate: decoded={} estimated={} merged={}",
+                    frame_count,
+                    extraction_plan.expected_frame_count,
+                    prepared.merged_probe.path,
+                )
             ProgressEmitter.emit(progress, PipelineStage.EXTRACT, frame_count, frame_count, f"Extracted and verified {frame_count} RGB frames")
         except ProcessCancelled as error:
             raise FrameExtractionCancelled("Frame extraction cancelled; child processes terminated. The caller still owns the workspace.", workspace.path) from error

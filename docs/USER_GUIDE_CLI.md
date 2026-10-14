@@ -51,6 +51,9 @@ Useful options:
 - `--no-overwrite`: refuse to replace an existing destination.
 - `--acknowledge-dropped-streams`: accept preflight-listed extra streams being
   dropped.
+- `--allow-mixed-color-tags`: explicitly allow untagged clips when every
+  declared supported SDR matrix, transfer, and primaries tag agrees. Use this
+  only when you know the untagged footage matches that declared profile.
 - `--json`: emit one machine-readable terminal result.
 - `--ffmpeg`, `--ffprobe`, `--realesrgan`, `--model-dir`: configure explicit
   user-managed tool locations.
@@ -75,7 +78,9 @@ Real-ESRGAN once, encodes the final MP4, verifies it, and publishes it
 atomically. It preserves aspect ratio and does not rotate, crop, or stretch
 media implicitly.
 
-Inputs must use supported explicit SDR color metadata. Extra audio, subtitles,
+Inputs must use supported SDR color metadata. By default, clips may not mix
+missing and declared color tags; use the explicit flag above only for known
+matching untagged footage. Extra audio, subtitles,
 chapters, and attachments require explicit acknowledgement before being
 dropped. Failed jobs retain a diagnostic workspace; successful and cancelled
 jobs remove owned temporary workspaces.

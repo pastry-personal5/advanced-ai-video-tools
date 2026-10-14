@@ -3,8 +3,8 @@
 ## Status
 
 - Released baseline: v2.0.0
-- Active phase: None; Phase 6 is planned, and Phases 7–10 are unassigned
-- Last updated: 2026-10-11
+- Active phase: None; Phase 6 remains planned
+- Last updated: 2026-10-14
 
 V3 extends the completed v2 product without weakening its media or safety
 contract.
@@ -19,7 +19,8 @@ contract.
 | 4 | [Modularity Refactoring](4-refactoring.md) | Complete | Verified dependency and ownership boundaries |
 | 5 | [Unified Settings Dialog](5-settings-dialog.md) | Complete | Searchable, validated, atomic application settings |
 | 6 | [Customizable Upscaling Pipelines](6-customizable-upscaling-pipelines.md) | Planned | User-selected concat, single-pass, and two-pass processing |
-| 7–10 | Unassigned | Unplanned | Scope and approval pending |
+| 7 | [Color Tag Policy and Frame Inventory Robustness](7-color-tag-policy.md) | Complete | Explicit mixed-tag opt-in and decoded-frame authority |
+| 8–10 | Unassigned | Unplanned | Scope and approval pending |
 | 11 | [Crop Feature](11-crop.md) | Proposed | Explicit crop intent with verified output safety |
 | 12 | [Video Interpolation](12-video-interpolation.md) | Proposed | Opt-in 16 fps to 30/60 fps interpolation |
 
@@ -57,3 +58,5 @@ models, caches, and local artifacts remain outside the repository.
 | 2026-09-06 | Complete Phase 5 with full automated checks and native Settings-dialog capture evidence. |
 | 2026-10-01 | Move Crop to Phase 11 and Video Interpolation to Phase 12; leave Phases 6–10 unassigned. |
 | 2026-10-11 | Record the Phase 6 customizable-upscaling design; implementation and acceptance evidence remain pending. |
+| 2026-10-14 | Authorize Phase 7 before Phase 6 to resolve the mixed color-tag contract and decoded frame-inventory robustness. |
+| 2026-10-14 | Complete Phase 7 with supported-macOS FFmpeg `f0`/`f1`/`f2` fixture evidence and `make check`. |

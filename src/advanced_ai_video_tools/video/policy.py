@@ -85,3 +85,31 @@ def default_output_profile(profile: ColorProfile) -> ColorProfile:
         profile.transfer if profile.transfer is not None else DEFAULT_COLOR_TRANSFER,
         profile.primaries if profile.primaries is not None else DEFAULT_COLOR_PRIMARIES,
     )
+
+
+def resolve_input_color_profile(videos: tuple[VideoStream, ...] | list[VideoStream], *, allow_mixed_color_tags: bool) -> ColorProfile:
+    """Freeze one supported SDR profile for all inputs.
+
+    Strict jobs reject a mixture of absent and declared matrix, transfer, or
+    primaries tags.  An opt-in job may supply absent tags, but only where every
+    declared value agrees; absent values then inherit that frozen consensus.
+    """
+
+    if not videos:
+        raise ValueError("at least one video stream is required")
+    for video in videos:
+        if is_hdr_or_wide_gamut(video) or has_unsupported_sdr_tags(video):
+            raise ValueError("unsupported SDR color profile")
+
+    def consensus(values: list[str | None], default: str, label: str) -> str:
+        declared = {value for value in values if value is not None}
+        if len(declared) > 1:
+            raise ValueError(f"input clips contain conflicting declared {label} tags")
+        if not allow_mixed_color_tags and declared and any(value is None for value in values):
+            raise ValueError(f"input clips mix missing and declared {label} tags")
+        return next(iter(declared), default)
+
+    matrix = consensus([video.color_space for video in videos], DEFAULT_COLOR_MATRIX.value, "matrix")
+    transfer = consensus([video.color_transfer for video in videos], DEFAULT_COLOR_TRANSFER, "transfer")
+    primaries = consensus([video.color_primaries for video in videos], DEFAULT_COLOR_PRIMARIES, "primaries")
+    return ColorProfile(ColorMatrix(matrix), transfer, primaries)

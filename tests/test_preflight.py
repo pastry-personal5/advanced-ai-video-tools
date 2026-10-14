@@ -248,6 +248,7 @@ def test_missing_transfer_and_primaries_default_to_srgb_transfer_and_bt709_prima
 
     assert report.ready and report.plan is not None
     assert report.plan.output_color_profile == ColorProfile(ColorMatrix.BT709, "iec61966-2-1", "bt709")
+    assert report.plan.concat_strategy is ConcatStrategy.NORMALIZE
     service.registry.release(report.plan.output_path)
 
 
@@ -294,8 +295,8 @@ def test_color_profile_different_from_first_clip_is_rejected(tmp_path: Path) -> 
     assert "explicitly conflicts with another clip" in issue.message
 
 
-def test_explicit_transfer_conflict_is_rejected_but_missing_value_is_ignored(tmp_path: Path) -> None:
-    """Only two contradictory declared optional tags create a conflict."""
+def test_mixed_missing_and_declared_tags_require_explicit_opt_in(tmp_path: Path) -> None:
+    """Strict preflight never produces a plan normalization will reject."""
 
     first = _input(tmp_path, "first.mov")
     missing = _input(tmp_path, "missing.mov")
@@ -304,7 +305,8 @@ def test_explicit_transfer_conflict_is_rejected_but_missing_value_is_ignored(tmp
     accepted_probes = {first: _probe(first), missing: _probe(missing, video_streams=(_video(color_transfer=None),))}
     accepted_service = _service(tmp_path, accepted_probes)
 
-    accepted = accepted_service.execute_preflight(JobRequest((first, missing), tmp_path))
+    strict = accepted_service.execute_preflight(JobRequest((first, missing), tmp_path))
+    accepted = accepted_service.execute_preflight(JobRequest((first, missing), tmp_path, allow_mixed_color_tags=True))
     rejected_probes = {
         first: _probe(first, video_streams=(_video(color_transfer=None),)),
         conflicting: _probe(conflicting),
@@ -312,10 +314,14 @@ def test_explicit_transfer_conflict_is_rejected_but_missing_value_is_ignored(tmp
     }
     rejected = _service(tmp_path, rejected_probes).execute_preflight(JobRequest((first, conflicting, conflicting_again), tmp_path))
 
+    assert not strict.ready
+    assert any(issue.code is IssueCode.UNSUPPORTED_COLOR for issue in strict.issues)
     assert accepted.ready and accepted.plan is not None
+    assert accepted.plan.output_color_profile == ColorProfile(ColorMatrix.BT709, "bt709", "bt709")
+    assert accepted.plan.concat_strategy is ConcatStrategy.NORMALIZE
+    accepted_service.registry.release(accepted.plan.output_path)
     assert not rejected.ready
     assert any(issue.code is IssueCode.UNSUPPORTED_COLOR and "explicitly conflicts" in issue.message for issue in rejected.issues)
-    accepted_service.registry.release(accepted.plan.output_path)
 
 
 def test_other_explicit_sdr_matrices_remain_unsupported(tmp_path: Path) -> None:

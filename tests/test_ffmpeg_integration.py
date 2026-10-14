@@ -25,6 +25,7 @@ from advanced_ai_video_tools.video.commands import NormalizationSpec, create_con
 from advanced_ai_video_tools.video.compatibility import effective_frame_rate, frame_rates_equivalent
 from advanced_ai_video_tools.video.manifest import write_concat_manifest
 from advanced_ai_video_tools.video.probe import FFprobeClient
+from advanced_ai_video_tools.video.policy import resolve_input_color_profile
 
 BT709_PROFILE = ColorProfile(ColorMatrix.BT709, "bt709", "bt709")
 SMPTE170M_PROFILE = ColorProfile(ColorMatrix.SMPTE170M, None, None)
@@ -35,23 +36,57 @@ def _run(arguments: tuple[str, ...] | list[str]) -> None:
     assert result.returncode == 0, result.stderr
 
 
-def _generate_source(ffmpeg: Path, output: Path, audio_duration: Decimal | None, *, color_space: str = "bt709", include_transfer_primaries: bool = True) -> None:
-    arguments = [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-f", "lavfi", "-i", "testsrc2=size=64x36:rate=10:duration=0.4"]
+def _generate_source(ffmpeg: Path, output: Path, audio_duration: Decimal | None, *, color_space: str = "bt709", include_transfer_primaries: bool = True, untagged: bool = False, duration: str = "0.4") -> None:
+    arguments = [str(ffmpeg), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-f", "lavfi", "-i", f"testsrc2=size=64x36:rate=10:duration={duration}"]
     if audio_duration is not None:
         arguments.extend(["-f", "lavfi", "-i", f"sine=frequency=440:sample_rate=48000:duration={audio_duration}", "-map", "0:v:0", "-map", "1:a:0"])
     else:
         arguments.extend(["-map", "0:v:0", "-an"])
-    matrix_code = "6" if color_space == "smpte170m" else "1"
-    bitstream_metadata = f"h264_metadata=video_full_range_flag=0:matrix_coefficients={matrix_code}"
-    arguments.extend(["-c:v", "libx264", "-preset", "ultrafast", "-crf", "30", "-pix_fmt", "yuv420p", "-colorspace", color_space, "-color_range", "tv"])
-    if include_transfer_primaries:
-        arguments.extend(["-color_trc", "bt709", "-color_primaries", "bt709"])
-        bitstream_metadata += ":colour_primaries=1:transfer_characteristics=1"
-    arguments.extend(["-bsf:v", bitstream_metadata])
+    arguments.extend(["-c:v", "libx264", "-preset", "ultrafast", "-crf", "30", "-pix_fmt", "yuv420p"])
+    if not untagged:
+        matrix_code = "6" if color_space == "smpte170m" else "1"
+        bitstream_metadata = f"h264_metadata=video_full_range_flag=0:matrix_coefficients={matrix_code}"
+        arguments.extend(["-colorspace", color_space, "-color_range", "tv"])
+        if include_transfer_primaries:
+            arguments.extend(["-color_trc", "bt709", "-color_primaries", "bt709"])
+            bitstream_metadata += ":colour_primaries=1:transfer_characteristics=1"
+        arguments.extend(["-bsf:v", bitstream_metadata])
     if audio_duration is not None:
         arguments.extend(["-c:a", "aac", "-b:a", "64k"])
     arguments.append(str(output))
     _run(arguments)
+
+
+@pytest.mark.integration
+def test_mixed_tag_fixture_opt_in_normalizes_and_extracts_authoritative_372_frames(tmp_path: Path) -> None:
+    """An untagged f0 plus BT.709 f1/f2 uses the explicit frozen consensus."""
+
+    ffmpeg_name = shutil.which("ffmpeg")
+    ffprobe_name = shutil.which("ffprobe")
+    if ffmpeg_name is None or ffprobe_name is None:
+        pytest.skip("FFmpeg and FFprobe are required for integration tests")
+    ffmpeg = Path(ffmpeg_name)
+    prober = FFprobeClient(Path(ffprobe_name))
+    sources = tuple(tmp_path / f"f{index}.mp4" for index in range(3))
+    _generate_source(ffmpeg, sources[0], None, untagged=True, duration="12.4")
+    _generate_source(ffmpeg, sources[1], None, duration="12.4")
+    _generate_source(ffmpeg, sources[2], None, duration="12.4")
+    probes = tuple(prober.probe(path) for path in sources)
+    assert probes[0].primary_video is not None
+    assert probes[0].primary_video.color_space is None
+    profile = resolve_input_color_profile([probe.primary_video for probe in probes if probe.primary_video is not None], allow_mixed_color_tags=True)
+    assert profile == BT709_PROFILE
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "unused-output.mp4", True, probes, Rational(10, 1), 64, 36, None, ConcatStrategy.NORMALIZE, None, ("color tags differ",), 100, 120, profile, allow_mixed_color_tags=True)
+    manager = WorkspaceManager(tmp_path / "jobs")
+    workspace = manager.create()
+    prepared = MediaPreparationExecutor(manager, SubprocessRunner(), MergedOutputVerifier(prober), command_timeout_seconds=30).execute_preparation_in_workspace(job, ffmpeg, workspace)
+
+    extracted = FrameExtractionExecutor(manager, SubprocessRunner(), command_timeout_seconds=30).execute_extraction(prepared, job, ffmpeg, workspace=workspace)
+
+    assert prepared.normalization_count == 3
+    assert extracted.frame_count == 372
+    assert extracted.expected_frame_count == 372
+    manager.cleanup(workspace)
 
 
 def _generate_quantized_prores(ffmpeg: Path, output: Path, width: int) -> None:
@@ -133,7 +168,7 @@ def test_quantized_sixteen_fps_prores_normalizes_concats_and_verifies(tmp_path: 
     assert first_video.average_frame_rate != Rational(16, 1)
     assert first_video.time_base == Rational(1, 600)
     assert effective_frame_rate(first_video) == (Rational(16, 1), False)
-    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "unused-output.mp4", True, probes, Rational(16, 1), 3840, 2160, 4, ConcatStrategy.NORMALIZE, None, ("dimensions differ",), 100, 120, SMPTE170M_PROFILE)
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), tmp_path / "unused-output.mp4", True, probes, Rational(16, 1), 3840, 2160, 4, ConcatStrategy.NORMALIZE, None, ("dimensions differ",), 100, 120, resolve_input_color_profile([probe.primary_video for probe in probes if probe.primary_video is not None], allow_mixed_color_tags=False))
     manager = WorkspaceManager(tmp_path / "jobs")
     workspace = manager.create()
     executor = MediaPreparationExecutor(manager, SubprocessRunner(), MergedOutputVerifier(prober), command_timeout_seconds=30)

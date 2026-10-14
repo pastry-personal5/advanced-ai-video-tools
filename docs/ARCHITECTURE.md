@@ -4,7 +4,7 @@ This document is the authoritative technical overview for Advanced AI Video Tool
 
 ## Development target
 
-Version 2.0.0 is the released baseline. V3 Phases 1–5 are complete. Until an
+Version 2.0.0 is the released baseline. V3 Phases 1–5 and Phase 7 are complete. Until an
 approved v3 design explicitly supersedes a contract, the behavior in this
 document remains binding; a roadmap change alone does not authorize runtime or
 media-policy changes.
@@ -44,9 +44,10 @@ The GUI job-creation path supports ordered input intent, output and height
 options, off-thread diagnostic preflight, complete issue review, per-job stream
 drop acknowledgement, queue submission, and non-safety preference persistence.
 **Preferences → Settings** opens one searchable, resizable dialog with
-**Editor → File** deletion rules and **Tools → External Tools** configuration.
+**Editor → File** deletion rules, **Input and Output → Color Policy** processing
+preferences, and **Tools → External Tools** configuration.
 The menu action is also available through macOS's standard **Command-,** shortcut.
-Both pages share one local draft and atomic save. Tool changes validate
+All pages share one local draft and atomic save. Tool changes validate
 executables, models, and Vulkan inference off-thread; abandoned results cannot
 persist. A successful source Trash move evaluates the first enabled rule and
 best-effort moves eligible immediate sibling files without rolling back the
@@ -193,7 +194,7 @@ Defaults must be explicit in the typed job model and overridable by the CLI and 
 | Normalization container | Matroska |
 | Normalization video | Lossless FFV1 level 3, `yuv444p10le` |
 | Normalization audio | Lossless `pcm_s24le`, 48 kHz, selected primary channel layout |
-| Color | Require, freeze, and preserve the first clip's SDR BT.709 or SMPTE 170M matrix; require range; omit missing transfer/primary tags without defaults; reject explicit conflicts |
+| Color | Freeze one supported SDR consensus. Strict jobs reject mixed missing-versus-declared matrix, transfer, or primaries tags; an explicit opt-in may assign untagged clips the unanimous declared profile. Reject explicit conflicts. |
 | Color range | Limited/TV; explicitly convert accepted full-range input |
 | Common canvas | First clip's resolution; preserve aspect ratio and pad |
 | Rotation | Unsupported; reject nonzero metadata and disable auto-rotation |
@@ -230,12 +231,21 @@ For input at or above the target height, skip Real-ESRGAN by default and resize 
 
 ### Color policy
 
-Version 1 accepts supported SDR BT.709 and SMPTE 170M matrices. Probe color primaries, transfer characteristics, matrix coefficients, range, pixel format, and mastering metadata before processing. Require and freeze the first clip's matrix. Preserve its optional transfer characteristics and primaries when declared, but keep either field unspecified when absent.
+Version 1 accepts supported SDR BT.709 and SMPTE 170M matrices. Probe color primaries, transfer characteristics, matrix coefficients, range, pixel format, and mastering metadata before processing. Strict jobs reject any mixture of absent and declared matrix, transfer, or primaries tags. With the frozen `allow_mixed_color_tags` opt-in, untagged clips may enter only when every declared supported SDR value agrees; the declared consensus (or normal defaults if every value is absent) is frozen for normalization and output. Explicit conflicts, HDR, wide gamut, and unsupported tags remain rejected; the application does not tone-map or gamut-map footage.
 
 - Reject detected PQ, HLG, BT.2020, HDR mastering metadata, and other explicit HDR or unsupported wide-gamut signaling with an actionable message.
 - Accept explicitly tagged supported SDR BT.709 and SMPTE 170M matrices directly.
-- Require every later clip to declare the same matrix. When both compared clips explicitly declare transfer characteristics or primaries, reject conflicting values. A missing optional value is ignored rather than treated as a conflict; version 1 performs no cross-profile or SMPTE 170M-to-BT.709 conversion.
-- Default an absent matrix to BT.709 and an absent range to limited; clips missing either are flagged for normalization. Reject unknown matrix/range values. Treat missing transfer characteristics and primaries as unknown when comparing clips. Tag normalized and final output with the first clip's values, filling absent ones with the defaults matrix `bt709`, transfer `iec61966-2-1`, primaries `bt709`.
+- Normalize clips with any missing matrix, transfer, primaries, or range tag so
+  the frozen profile is assigned explicitly; stream copy cannot perform that
+  assignment.
+- Reject conflicting declared matrix, transfer, or primaries values across any
+  clips. Strict mode also rejects a missing-versus-declared mixture; the opt-in
+  treats a missing value as the unanimous declared value. Version 1 performs no
+  cross-profile or SMPTE 170M-to-BT.709 conversion.
+- When every clip omits a tag, default matrix to `bt709`, transfer to
+  `iec61966-2-1`, and primaries to `bt709`; default an absent range to limited.
+  Reject unknown values and tag normalized and final output with the frozen
+  profile.
 - Convert YUV to the RGB PNG frame representation explicitly with the frozen matrix, then convert processed RGB frames back with that same matrix for encoding.
 - Tag the final stream explicitly with the frozen first-clip primaries, transfer characteristics, and matrix coefficients. Do not tone-map, gamut-map, convert matrices, or retag silently.
 
@@ -406,7 +416,7 @@ Create a UTF-8 concat manifest in the job workspace using ordered, absolute, saf
 - Use a single zero-padded naming convention that preserves lexical and numeric order.
 - Choose and record an explicit constant output frame rate. Variable-frame-rate conversion must be visible to the user.
 - Retain the verified merged media as the primary-audio source for later muxing, preserving its exact relationship to the video timeline without a needless additional audio copy.
-- Record the expected frame count for validation after upscaling.
+- Retain the metadata-derived frame count only for progress and disk estimates. Verify frame names, RGB PNG type, dimensions, and contiguous numbering after decode; use that observed count for upscaling and final encoding, and log metadata-count drift. Preserve exact inventory equality after AI upscaling and before final encoding.
 
 ### 6. Upscale once
 

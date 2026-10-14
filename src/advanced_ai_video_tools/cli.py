@@ -34,6 +34,7 @@ def _add_job_arguments(command: argparse.ArgumentParser) -> None:
     command.add_argument("--height", type=int, default=2160)
     command.add_argument("--model", default="realesrgan-x4plus")
     command.add_argument("--acknowledge-dropped-streams", action="store_true")
+    command.add_argument("--allow-mixed-color-tags", action="store_true", help="allow untagged clips to use the agreed declared SDR color profile")
     command.add_argument("--no-overwrite", action="store_true")
     command.add_argument("--ffmpeg", type=Path)
     command.add_argument("--ffprobe", type=Path)
@@ -65,6 +66,7 @@ def _request(arguments: argparse.Namespace) -> JobRequest:
         target_height=arguments.height,
         model_name=arguments.model,
         acknowledge_dropped_streams=arguments.acknowledge_dropped_streams,
+        allow_mixed_color_tags=arguments.allow_mixed_color_tags,
         overwrite_mode=(OverwriteMode.NO_OVERWRITE if arguments.no_overwrite else OverwriteMode.REPLACE),
         tools=ToolOverrides(
             ffmpeg=arguments.ffmpeg,
@@ -110,6 +112,7 @@ def _json_report(report: PreflightReport) -> str:
                 "primaries": plan.output_color_profile.primaries,
             },
             "acknowledge_dropped_streams": plan.acknowledge_dropped_streams,
+            "allow_mixed_color_tags": plan.allow_mixed_color_tags,
             "normalization_reasons": list(plan.normalization_reasons),
             "estimated_peak_bytes": plan.estimated_peak_bytes,
             "required_free_bytes": plan.required_free_bytes,

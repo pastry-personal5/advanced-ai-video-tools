@@ -19,7 +19,7 @@ from loguru import logger
 from advanced_ai_video_tools.core.models import OverwriteMode, ToolOverrides
 from advanced_ai_video_tools.storage.paths import application_data_directory, legacy_application_data_directory
 
-SETTINGS_SCHEMA_VERSION = 2
+SETTINGS_SCHEMA_VERSION = 3
 DEFAULT_TARGET_HEIGHT = 2160
 DEFAULT_PREVIEW_VOLUME = 100
 
@@ -133,6 +133,7 @@ class ApplicationSettings:
     preview_muted: bool = True
     preview_volume: int = DEFAULT_PREVIEW_VOLUME
     deletion_rules: tuple[DeletionRule, ...] | None = None
+    allow_mixed_color_tags: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.tools, ToolOverrides):
@@ -141,6 +142,8 @@ class ApplicationSettings:
             raise TypeError("overwrite mode must be an OverwriteMode")
         if not isinstance(self.preview_muted, bool):
             raise TypeError("preview muted must be a boolean")
+        if not isinstance(self.allow_mixed_color_tags, bool):
+            raise TypeError("allow mixed color tags must be a boolean")
         if isinstance(self.preview_volume, bool) or not isinstance(self.preview_volume, int) or not 0 <= self.preview_volume <= 100:
             raise ValueError("preview volume must be an integer from 0 to 100")
         for path in (
@@ -308,7 +311,7 @@ class SettingsStore:
 def _encode_document(settings: ApplicationSettings) -> dict[str, object]:
     document: dict[str, object] = {
         "schema_version": SETTINGS_SCHEMA_VERSION,
-        "processing": {"overwrite_mode": settings.overwrite_mode.value, "target_height": settings.target_height},
+        "processing": {"allow_mixed_color_tags": settings.allow_mixed_color_tags, "overwrite_mode": settings.overwrite_mode.value, "target_height": settings.target_height},
         "preview": {"muted": settings.preview_muted, "volume": settings.preview_volume},
         "recent": {"input_directory": _encode_path(settings.recent_input_directory), "output_directory": _encode_path(settings.recent_output_directory)},
         "tools": {
@@ -328,7 +331,7 @@ def _decode_document(value: object) -> tuple[ApplicationSettings, tuple[str, ...
     version = document.get("schema_version")
     if isinstance(version, bool) or not isinstance(version, int):
         raise _InvalidSettings("schema_version must be an integer")
-    if version not in (1, SETTINGS_SCHEMA_VERSION):
+    if version not in (1, 2, SETTINGS_SCHEMA_VERSION):
         raise UnsupportedSettingsVersion(f"settings schema version {version} is unsupported; expected {SETTINGS_SCHEMA_VERSION}")
     tools = _mapping(document.get("tools", {}), "tools")
     recent = _mapping(document.get("recent", {}), "recent")
@@ -341,6 +344,9 @@ def _decode_document(value: object) -> tuple[ApplicationSettings, tuple[str, ...
     raw_overwrite = processing.get("overwrite_mode", OverwriteMode.REPLACE.value)
     if not isinstance(raw_overwrite, str):
         raise _InvalidSettings("processing.overwrite_mode must be a string")
+    allow_mixed_color_tags = processing.get("allow_mixed_color_tags", False)
+    if not isinstance(allow_mixed_color_tags, bool):
+        raise _InvalidSettings("processing.allow_mixed_color_tags must be a boolean")
     muted = preview.get("muted", True)
     volume = preview.get("volume", DEFAULT_PREVIEW_VOLUME)
     if not isinstance(muted, bool):
@@ -364,6 +370,7 @@ def _decode_document(value: object) -> tuple[ApplicationSettings, tuple[str, ...
                 preview_muted=muted,
                 preview_volume=volume,
                 deletion_rules=deletion_rules,
+                allow_mixed_color_tags=allow_mixed_color_tags,
             ),
             warnings,
         )

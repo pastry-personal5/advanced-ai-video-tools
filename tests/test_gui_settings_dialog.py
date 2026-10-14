@@ -139,11 +139,14 @@ def test_dialog_has_exact_navigation_pages_dimensions_and_noncollapsible_sidebar
 
     assert dialog.size() == QSize(1080, 720)
     assert dialog.minimumSize() == QSize(960, 600)
-    assert dialog.tree.topLevelItemCount() == 2
+    assert dialog.tree.topLevelItemCount() == 3
+
     assert dialog.tree.topLevelItem(0).text(0) == "Editor"
     assert dialog.tree.topLevelItem(0).child(0).text(0) == "File · Saved"
-    assert dialog.tree.topLevelItem(1).text(0) == "Tools"
-    assert dialog.tree.topLevelItem(1).child(0).text(0) == "External Tools · Saved"
+    assert dialog.tree.topLevelItem(1).text(0) == "Input and Output"
+    assert dialog.tree.topLevelItem(1).child(0).text(0) == "Color Policy · Saved"
+    assert dialog.tree.topLevelItem(2).text(0) == "Tools"
+    assert dialog.tree.topLevelItem(2).child(0).text(0) == "External Tools · Saved"
     assert dialog.current_page_path == SettingsDialog.FILE_PATH
     assert dialog.tree.minimumWidth() == 240
     assert dialog.tree.maximumWidth() == 360
@@ -176,6 +179,23 @@ def test_dialog_has_exact_navigation_pages_dimensions_and_noncollapsible_sidebar
         assert 240 <= dialog.tree.width() <= 360
         assert dialog.stack.width() >= 620
     dialog.close()
+    validator.shutdown()
+
+
+def test_input_output_color_policy_stays_in_draft_until_saved(qt_app: QApplication, tmp_path: Path) -> None:
+    """The opt-in participates in the same atomic Settings draft as other pages."""
+
+    store = RecordingStore()
+    validator = ExternalToolsValidator(RecordingDiscovery(_toolchain(tmp_path)))  # type: ignore[arg-type]
+    dialog = _dialog(ApplicationSettings(), validator, store)
+
+    assert not dialog.input_output_page.allow_mixed_color_tags.isChecked()
+    dialog.input_output_page.allow_mixed_color_tags.setChecked(True)
+    assert dialog.draft_settings().allow_mixed_color_tags
+    assert not ApplicationSettings().allow_mixed_color_tags
+    dialog.cancel_button.click()
+    assert not store.saved
+    assert QCoreApplication.instance() is qt_app
     validator.shutdown()
 
 
@@ -264,6 +284,7 @@ def test_manual_validation_then_ok_saves_all_pages_once(qt_app: QApplication, tm
     dialog = _dialog(settings, validator, store)
     dialog.external_tools_page.ffmpeg.clear()
     dialog.file_page.rules.item(0).setCheckState(Qt.CheckState.Unchecked)
+    dialog.input_output_page.allow_mixed_color_tags.setChecked(True)
 
     assert dialog._page_states[SettingsDialog.EXTERNAL_TOOLS_PATH] is SettingsValidationState.NEEDS_VALIDATION  # pylint: disable=protected-access
     dialog.external_tools_page.validate_button.click()
@@ -276,6 +297,7 @@ def test_manual_validation_then_ok_saves_all_pages_once(qt_app: QApplication, tm
     assert len(store.saved) == 1
     assert store.saved[0].tools == ToolOverrides()
     assert store.saved[0].deletion_rules == (DeletionRule("*.mov", ("{source_stem}-last-frame.png",), False),)
+    assert store.saved[0].allow_mixed_color_tags
     assert store.saved[0].target_height == 1080
     validator.shutdown()
 
@@ -307,11 +329,13 @@ def test_ok_during_manual_validation_commits_that_same_snapshot(qt_app: QApplica
     assert discovery.started.wait(0.5)
     qt_app.processEvents()
     assert dialog.file_page.isEnabled()
+    assert dialog.input_output_page.isEnabled()
     assert not dialog.external_tools_page.ffmpeg.isEnabled()
     assert dialog.cancel_button.isEnabled()
 
     dialog.ok_button.click()
     assert not dialog.file_page.isEnabled()
+    assert not dialog.input_output_page.isEnabled()
     assert dialog.cancel_button.isEnabled()
     assert not dialog.ok_button.isEnabled()
     discovery.release.set()

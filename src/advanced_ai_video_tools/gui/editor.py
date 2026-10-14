@@ -556,6 +556,7 @@ class JobEditor(QWidget):
             target_height=self.target_height.value(),
             acknowledge_dropped_streams=False,
             overwrite_mode=self._settings.overwrite_mode,
+            allow_mixed_color_tags=self._settings.allow_mixed_color_tags,
             tools=self._settings.tools,
             created_at=created_at,
             generated_output_basename=automatic_output_basename(created_at),

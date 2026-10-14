@@ -37,10 +37,15 @@ class FrameInventoryVerifier:
         if bit_depth != 8 or color_type != 2:
             raise FrameInventoryError(f"frame is not 8-bit RGB PNG: {path.name}")
 
-    def verify(self, directory: Path, expected_width: int, expected_height: int, expected_count: int, *, count_tolerance: int = 0) -> int:
-        """Return the contiguous count when names, PNGs, and count are valid."""
+    def verify(self, directory: Path, expected_width: int, expected_height: int, expected_count: int | None, *, count_tolerance: int = 0) -> int:
+        """Return the contiguous count when names and PNGs are valid.
 
-        if expected_width <= 0 or expected_height <= 0 or expected_count <= 0 or count_tolerance < 0:
+        ``expected_count`` is required for identity-preserving downstream
+        stages. Extraction passes ``None`` because decoded output, not container
+        duration metadata, is authoritative there.
+        """
+
+        if expected_width <= 0 or expected_height <= 0 or (expected_count is not None and expected_count <= 0) or count_tolerance < 0:
             raise ValueError("frame inventory expectations must be positive")
         if not directory.is_dir() or directory.is_symlink():
             raise FrameInventoryError("frame output directory is missing or unsafe")
@@ -64,6 +69,6 @@ class FrameInventoryVerifier:
             raise FrameInventoryError("frame processing produced no images")
         if lowest != 1 or highest != count:
             raise FrameInventoryError("frame numbering is not contiguous from frame 1")
-        if abs(count - expected_count) > count_tolerance:
+        if expected_count is not None and abs(count - expected_count) > count_tolerance:
             raise FrameInventoryError(f"frame count differs from the expected inventory: found {count}, expected {expected_count}")
         return count

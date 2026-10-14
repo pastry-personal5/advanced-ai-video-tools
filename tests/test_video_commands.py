@@ -30,8 +30,8 @@ BT709_PROFILE = ColorProfile(ColorMatrix.BT709, "bt709", "bt709")
 SMPTE170M_PROFILE = ColorProfile(ColorMatrix.SMPTE170M, "bt709", "bt709")
 
 
-def _job(probes: tuple[MediaProbe, ...], strategy: ConcatStrategy, audio_layout: str | None, *, color_profile: ColorProfile = BT709_PROFILE, acknowledge_dropped_streams: bool = False) -> JobPlan:
-    return JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, probes, Rational(30000, 1001), 3840, 2160, 2, strategy, audio_layout, (), 100, 120, color_profile, acknowledge_dropped_streams)
+def _job(probes: tuple[MediaProbe, ...], strategy: ConcatStrategy, audio_layout: str | None, *, color_profile: ColorProfile = BT709_PROFILE, acknowledge_dropped_streams: bool = False, allow_mixed_color_tags: bool = False) -> JobPlan:
+    return JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, probes, Rational(30000, 1001), 3840, 2160, 2, strategy, audio_layout, (), 100, 120, color_profile, acknowledge_dropped_streams, allow_mixed_color_tags=allow_mixed_color_tags)
 
 
 def test_normalization_command_enforces_video_color_timing_and_first_audio() -> None:
@@ -116,8 +116,21 @@ def test_preparation_rejects_explicit_optional_tag_conflicts_hidden_by_missing_f
     )
     job = _job(probes, ConcatStrategy.NORMALIZE, None, color_profile=ColorProfile(ColorMatrix.BT709, None, "bt709"))
 
-    with pytest.raises(ValueError, match="conflicting explicit transfer"):
+    with pytest.raises(ValueError, match="conflicting declared transfer"):
         create_media_preparation_plan(job, Path("ffmpeg"), tmp_path)
+
+
+def test_preparation_accepts_authorized_untagged_clip_with_frozen_bt709_consensus(tmp_path: Path) -> None:
+    """The command builder honors the exact opt-in policy frozen by preflight."""
+
+    untagged = _probe(Path("f0.mp4"), video=_video(color_space=None, color_transfer=None, color_primaries=None, color_range=None))
+    tagged = _probe(Path("f1.mp4"), video=_video(color_range="tv"))
+    job = _job((untagged, tagged), ConcatStrategy.NORMALIZE, None, allow_mixed_color_tags=True)
+
+    plan = create_media_preparation_plan(job, Path("ffmpeg"), tmp_path)
+
+    assert len(plan.normalization_commands) == 2
+    assert all("colorspace=bt709" in command[command.index("-filter_complex") + 1] for command in plan.normalization_commands)
 
 
 def test_normalization_preserves_smpte170m_matrix() -> None:

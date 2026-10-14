@@ -33,7 +33,7 @@ from advanced_ai_video_tools.system.platform import PlatformInfo, platform_error
 from advanced_ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
 from advanced_ai_video_tools.upscaling.realesrgan import select_ai_scale
 from advanced_ai_video_tools.video.compatibility import analyze_clip_compatibility, effective_frame_rate
-from advanced_ai_video_tools.video.policy import color_profile, default_output_profile, color_profiles_compatible, has_unsupported_sdr_tags, is_hdr_or_wide_gamut
+from advanced_ai_video_tools.video.policy import color_profile, color_profiles_compatible, has_unsupported_sdr_tags, is_hdr_or_wide_gamut, resolve_input_color_profile
 from advanced_ai_video_tools.video.probe import FFprobeClient, MediaProber, ProbeError
 
 Clock = Callable[[], datetime]
@@ -231,7 +231,13 @@ class PreflightService:
             first_video = probes[0].primary_video
             if first_video is not None and output_rate is not None and request.target_height > 0:
                 try:
-                    output_color_profile = default_output_profile(color_profile(first_video))
+                    videos = tuple(probe.primary_video for probe in probes)
+                    if any(video is None for video in videos):
+                        raise ValueError("input has no video stream")
+                    output_color_profile = resolve_input_color_profile(
+                        [video for video in videos if video is not None],
+                        allow_mixed_color_tags=request.allow_mixed_color_tags,
+                    )
                 except ValueError:
                     output_color_profile = None
                 output_width = aspect_width(first_video, request.target_height)
@@ -297,6 +303,7 @@ class PreflightService:
                 acknowledge_dropped_streams=request.acknowledge_dropped_streams,
                 model_name=request.model_name,
                 overwrite_mode=request.overwrite_mode,
+                allow_mixed_color_tags=request.allow_mixed_color_tags,
             )
         elif reserved_output is not None:
             self._registry.release(reserved_output)
@@ -494,6 +501,18 @@ class PreflightService:
                         IssueCode.INVALID_MEDIA,
                         "Input duration is missing or non-positive.",
                         probe.path,
+                    )
+                )
+        valid_videos = [probe.primary_video for probe in probes if probe.primary_video is not None]
+        if len(valid_videos) == len(probes):
+            try:
+                resolve_input_color_profile(valid_videos, allow_mixed_color_tags=request.allow_mixed_color_tags)
+            except ValueError as error:
+                issues.append(
+                    _issue(
+                        IssueSeverity.ERROR,
+                        IssueCode.UNSUPPORTED_COLOR,
+                        f"Input color tags cannot form one frozen SDR profile: {error}. Enable mixed color tags only when untagged clips are known to match the declared SDR profile.",
                     )
                 )
         if first_video is None:

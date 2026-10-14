@@ -97,13 +97,13 @@ def test_matrix_different_from_first_clip_is_not_stream_copy_compatible() -> Non
     assert any(finding.reason is CompatibilityReason.COLOR_TAGS and "differs from the first clip" in finding.message for finding in report.findings)
 
 
-def test_missing_transfer_and_primaries_do_not_force_normalization() -> None:
-    """Optional absent tags are ignored when concat properties otherwise match."""
+def test_missing_transfer_and_primaries_force_frozen_profile_normalization() -> None:
+    """Stream copy cannot assign the frozen defaults to absent optional tags."""
 
     report = analyze_clip_compatibility((_probe("first.mov"), _probe("second.mov", video=_video(color_transfer=None, color_primaries=None))), Rational(30000, 1001), None)
 
-    assert report.strategy is ConcatStrategy.STREAM_COPY
-    assert not any(finding.reason is CompatibilityReason.COLOR_TAGS for finding in report.findings)
+    assert report.strategy is ConcatStrategy.NORMALIZE
+    assert any(finding.reason is CompatibilityReason.COLOR_TAGS and "frozen job profile" in finding.message for finding in report.findings)
 
 
 def test_conflicting_explicit_optional_tags_are_found_when_first_is_missing() -> None:
