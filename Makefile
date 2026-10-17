@@ -32,7 +32,7 @@ gui-capture-test:
 	QT_QPA_PLATFORM=cocoa ADVANCED_AI_VIDEO_TOOLS_RUN_NATIVE_ACCEPTANCE=1 uv run pytest -m gui_capture tests/test_native_acceptance.py
 
 phase6-native-test:
-	# Real FFmpeg, the MPS runner, and the supplied DAT models; opt-in, tiny frames only.
+	# Real FFmpeg, the MPS runner, and the supplied 2x and 3x models; opt-in, tiny frames only.
 	ADVANCED_AI_VIDEO_TOOLS_RUN_PHASE6_ACCEPTANCE=1 uv run pytest -m phase6_native tests/test_phase6_native_acceptance.py
 
 package-dev-dmg:

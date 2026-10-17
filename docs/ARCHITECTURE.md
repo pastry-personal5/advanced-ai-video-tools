@@ -4,10 +4,13 @@ This document is the authoritative technical overview for Advanced AI Video Tool
 
 ## Development target
 
-Version 2.0.0 is the released baseline. V3 Phases 1–5 and Phase 7 are complete. Until an
-approved v3 design explicitly supersedes a contract, the behavior in this
-document remains binding; a roadmap change alone does not authorize runtime or
-media-policy changes.
+Version 2.0.0 is the released baseline. V3 Phases 1–5 and Phase 7 are complete.
+Phase 6 (customizable upscaling pipelines) is implemented and documented below;
+[its phase record](v3/6-customizable-upscaling-pipelines.md) states which
+supported-macOS acceptance evidence has been recorded. Until an approved v3
+design explicitly supersedes a contract, the behavior in this document remains
+binding; a roadmap change alone does not authorize runtime or media-policy
+changes.
 
 The v2 roadmap lives in [v2/plans.md](v2/plans.md), the current v3 roadmap lives
 in [v3/plans.md](v3/plans.md), and shared execution rules live in
@@ -17,6 +20,7 @@ this document remains authoritative for implemented behavior.
 ## Implementation status
 
 The CLI exposes diagnostic preflight and one complete synchronous `process` job.
+Both take a typed processing pipeline (see [Processing pipelines](#processing-pipelines)).
 The backend has an application service that executes the media-preparation slice: it creates an owned
 workspace, normalizes clips sequentially when required, writes the concat
 manifest, concatenates exactly once, verifies the merged result (including the
@@ -45,7 +49,8 @@ options, off-thread diagnostic preflight, complete issue review, per-job stream
 drop acknowledgement, queue submission, and non-safety preference persistence.
 **Preferences → Settings** opens one searchable, resizable dialog with
 **Editor → File** deletion rules, **Input and Output → Color Policy** processing
-preferences, and **Tools → External Tools** configuration.
+preferences, **Processing → Upscaling** pipeline and model defaults, and
+**Tools → External Tools** configuration.
 The menu action is also available through macOS's standard **Command-,** shortcut.
 All pages share one local draft and atomic save. Tool changes validate
 executables, models, and Vulkan inference off-thread; abandoned results cannot
@@ -161,7 +166,7 @@ real Real-ESRGAN/Vulkan pipeline-throughput benchmark.
 
 - Provide one reliable processing pipeline through both a CLI and desktop GUI.
 - Optimize photographic and live-action footage; anime, animation, illustration, and synthetic line art are outside the v1 product scope.
-- Concatenate clips before AI upscaling so Real-ESRGAN runs once per job.
+- Concatenate clips before AI upscaling so AI runs on one merged timeline, and at most once per job except for the explicit two-pass pipeline.
 - Preserve source streams without re-encoding when concat inputs are compatible.
 - Keep the GUI responsive and make progress, cancellation, errors, and cleanup predictable.
 - Keep external command construction isolated and independently testable.
@@ -175,7 +180,7 @@ macOS releases older than 26.5.2, Intel Macs, Windows, and Linux are outside the
 
 FFmpeg, FFprobe, `realesrgan-ncnn-vulkan`, its model files, and required Vulkan support are user-managed prerequisites. The application must not bundle, install, update, or automatically download them. Resolve explicit configured paths before `PATH` and validate the resolved tools during preflight.
 
-## Key decision: concat first, upscale once
+## Key decision: concat first, upscale once (twice only on request)
 
 Each job creates one merged media timeline before frame extraction or AI processing. Source clips are never upscaled individually.
 
@@ -183,7 +188,26 @@ For compatible clips, FFmpeg's concat demuxer joins streams with stream copy. Th
 
 When clips are incompatible, the pipeline normalizes them to one explicit intermediate specification and then concatenates the normalized results. Normalization is a compatibility step, not AI upscaling. When the merged result is below the requested height, it is upscaled once.
 
-This approach provides one frame-number sequence, one audio timeline, at most one Real-ESRGAN invocation, and one final encoding policy for the whole job.
+This approach provides one frame-number sequence, one audio timeline, one final encoding policy for the whole job, and at most one AI pass. The single exception is the explicit **2× → 3× → resize** pipeline described in [Processing pipelines](#processing-pipelines), which runs exactly two ordered Spandrel passes over the same merged timeline. No other choice, including Auto, may invoke AI more than once.
+
+## Processing pipelines
+
+`JobRequest.pipeline` and `JobPlan.pipeline` select one of five typed choices. Every choice begins with the same concat-first compatibility inspection. An omitted choice is **Auto**, which preserves the v2 behavior exactly and is the default for existing settings documents.
+
+| Choice | CLI `--pipeline` | Operations after clip compatibility checks | Desired height |
+| --- | --- | --- | --- |
+| Auto | `auto` | Real-ESRGAN scale selected from the target (below), then one final resize | Used |
+| Concat only | `concat` | Stream-copy compatible `.mp4`/`.mov` clips into the first clip's container; no normalization, extraction, AI, or re-encode | Ignored |
+| Native upscale | `native` | One 2× or 3× Spandrel pass, or one 4× Real-ESRGAN pass, at the model's reported native scale | Ignored |
+| 4× then resize | `4x-resize` | Real-ESRGAN 4×, then one final resize | Used |
+| 2× → 3× → resize | `2x-3x-resize` | Spandrel 2×, Spandrel 3×, then one final resize | Used |
+
+- **Frozen pass plan.** Preflight resolves an ordered tuple of `UpscalePassPlan` values: backend, native scale, exact input and output coded dimensions, executable, model path, and (for Spandrel) the runner's inspection record and the model's file identity. The runnable `JobPlan.upscale_passes` is authoritative; an empty tuple means AI is skipped (or, for concat only, not applicable). `ai_scale` is the product of the pass scales (`6` for two passes).
+- **Explicit resize pipelines** skip AI when the source height already meets or exceeds the desired height, and otherwise reject a desired height above the pipeline's native result (4× or 6×) instead of conventionally enlarging beyond it. **Auto** keeps its scale selection, skip rule, and over-4× warning.
+- **Native upscale** runs even when the source is already tall. The final display width uses the same exact aspect-ratio calculation rounded to the nearest even integer, and the resolved dimensions are disclosed before queueing. A native pass whose result height would be odd cannot be encoded as `yuv420p` and is rejected during preflight.
+- **Concat only** accepts `.mp4`/`.mov` inputs only when FFprobe reports a QuickTime/ISO base-media `format_name`. The first clip's lowercase suffix selects the `mp4` or `mov` muxer; explicit and generated outputs must match it. Every normalization reason is a blocking error. Video and audio codecs must be on the selected container's stream-copy allowlist, and the muxed partial is verified (codec IDs, dimensions, sample aspect ratio, timing, SDR color, audio presence and alignment) before atomic publication. It builds one `-c copy` concat-demuxer command with explicit stream maps and no filters or encoders.
+- **Discovery is selective.** FFmpeg and FFprobe are always required. Real-ESRGAN and its model are required for Auto and for any Real-ESRGAN pass; the Spandrel runner and the selected `.safetensors` model are required for each planned Spandrel pass. A resize-only skip needs no AI backend. An unconfigured 2×/3× model never blocks an unrelated pipeline.
+- **Queued jobs are frozen.** Submission copies the tool paths and the reviewed runner-inspection records into the request. Authoritative preflight repeats after dequeue and rejects a missing model or a changed recorded identity (`model_changed`) before any processing. Freezing a path does not freeze its bytes; the runner and the executor each re-check the identity immediately before loading it, which detects replacement but does not claim to eliminate adversarial filesystem races.
 
 ## Default media profile
 
@@ -227,7 +251,7 @@ Version 1 never rotates video. Reject nonzero rotation or display-matrix metadat
 
 For input below the target, choose the smallest supported Real-ESRGAN scale in 2×, 3×, or 4× whose intermediate height reaches or exceeds the target. Resize that intermediate once during final encoding to reach the exact output dimensions. If even 4× is below the target, use 4× and warn that final sizing includes conventional FFmpeg enlargement.
 
-For input at or above the target height, skip Real-ESRGAN by default and resize directly to the requested dimensions. A future explicit enhancement mode may allow AI processing without enlargement, but it is not part of the v1 default.
+For input at or above the target height, skip Real-ESRGAN by default and resize directly to the requested dimensions. The explicit **Native upscale** pipeline is the enhancement mode that runs AI without a target height; the other pipelines follow their rules in [Processing pipelines](#processing-pipelines).
 
 ### Color policy
 
@@ -288,6 +312,8 @@ Generate the default output basename when the job is created, not when processin
 ai-video-YYYYMMDD-HHMMSS-<compact-UUIDv7>.mp4
 ```
 
+The suffix is `.mp4` for every AI pipeline. Concat only instead binds the first clip's lowercase `.mp4` or `.mov` suffix to the generated identity when the job is created, and the authoritative preflight rechecks that the first clip still has that suffix.
+
 For example: `ai-video-20260821-143052-01a022ccf35b7a1e8b0bf554b4c36db2.mp4`.
 
 - `ai-video-` is the fixed prefix.
@@ -319,13 +345,25 @@ Before starting, calculate a conservative peak-disk estimate covering normalized
 - Before each retry, delete and recreate only the owned upscale-output directory so partial frames cannot be mistaken for a complete result.
 - Record every attempt, resolved device, tile size, and failure. Do not retry unrelated errors or loop beyond the defined sequence.
 
+### Spandrel runner runtime
+
+The 2× and 3× models run through the separate, user-installed `tools/spandrel-runner` workspace member; Spandrel and PyTorch are never dependencies of the application package and are never downloaded by it. The application launches the executable `tools/spandrel-runner/spandrel-runner` (or any executable that speaks the same protocol) with argument arrays and `shell=False`.
+
+The factory-default selection, applied when nothing is configured, is `2xPublic_realplksr_dysample_layernorm_real_nn.pth` (2×) and `DAT_x3_bf16.safetensors` (3×) through that launcher, and `realesrgan-x4plus` for 4×. `ToolDiscovery` resolves an unset runner to the checkout's launcher (`DEFAULT_SPANDREL_RUNNER`, never `PATH`) and an unset model to its default file (`DEFAULT_SPANDREL_MODELS`) in the `models` directory beside the resolved runner. A configured path always wins, a missing default is a blocking preflight error naming its path and the override, and settings validation never requires a default. The application ships and downloads no model files.
+
+- **Protocol version 1.** `inspect --model M --protocol-version 1` prints one JSON object containing the protocol and runner versions, the resolved model path and file identity (device, inode, size, modification time, SHA-256), architecture, purpose, input and output channel counts, native scale, size requirements, the runner's maximum input-pixel count, its `mps` device, and its precision. The application requires `SR` purpose, RGB input and output, the slot's native scale, and MPS, and rejects unknown fields, other protocol versions, and an unexpected resolved path.
+- **`.safetensors` and `.pth` only.** A `.pth` is read solely through Spandrel's restricted state-dict unpickler (tensor rebuilds and `OrderedDict`; any other global raises, and a runner test proves a booby-trapped file does not execute). TorchScript `.pt`, `.ckpt`, and every other format are rejected by the application and the runner, because their loaders are not restricted. Restricted loading is defense in depth: choose only checkpoints you trust.
+- **`run --model M --manifest J`.** The manifest freezes the model identity, one job-owned output directory, and ordered absolute RGB PNG input/output pairs with identities and exact dimensions. The runner validates the whole batch before inference, then emits one JSON progress record per atomically published frame. Failures are one JSON error record on stderr with a stable code and exit status (`invalid_request` 2, `incompatible_model` 3, `mps_unavailable` 4, `inference_failed` 5, `output_conflict` 6).
+- **MPS only, direct inference.** The runner checks MPS availability before loading, pins `PYTORCH_ENABLE_MPS_FALLBACK=0`, never switches device, derives precision only from the checkpoint's own dtype (all-bfloat16 → `bfloat16`, anything else → `float32`, never float16, reported by `inspect`), never tiles, pads, or crops, and never retries. Preflight rejects every pass whose exact input fails the model's size requirements or exceeds the runner's maximum input-pixel count. An allocation failure within that published limit is an actionable failure.
+- **Application side.** Each pass has its own output directory; the executor verifies exact frame names, count, RGB readability, and expected coded dimensions after every pass before the next pass or the final encode. Progress is the observed count of completed output frames, aggregated monotonically across passes under the single public `UPSCALE` stage with pass index, pass count, and native scale. Previews are produced only by the final pass and always pair the same source frame number.
+
 ### Configuration, logs, and networking
 
 Resolve persistent configuration with `QStandardPaths.StandardLocation.AppDataLocation`, corresponding to `~/Library/Application Support/Advanced AI Video Tools/` on macOS. Store executable paths, recent locations, and user preferences there; do not store credentials or model binaries. The v2 first launch does not import v1 settings and removes only the guarded legacy settings files.
 
-The settings document is typed, YAML-encoded, and explicitly schema-versioned. Version 2 persists the version-1 preferences plus nullable GUI-only related-file deletion rules. Version-1 documents load without rewrite and migrate on the next successful save. Individual malformed rules are skipped with a GUI diagnostic while valid rules remain active; malformed documents are quarantined and safe defaults are restored. Unsupported newer schema versions remain untouched and produce an explicit error rather than being mistaken for corruption. Unknown fields within the current schema are ignored for minor forward compatibility. A valid legacy `settings.json` is migrated once to `settings.yaml`; all subsequent writes use YAML.
+The settings document is typed, YAML-encoded, and explicitly schema-versioned. Version 2 persists the version-1 preferences plus nullable GUI-only related-file deletion rules. Version 4 adds the default pipeline, native scale, and the Spandrel runner and 2×/3× model paths; the desired height keeps its existing value and fresh settings use Auto and 2160 px. Version-1 through version-3 documents load as Auto without rewrite and migrate on the next successful save. Individual malformed rules are skipped with a GUI diagnostic while valid rules remain active; malformed documents are quarantined and safe defaults are restored. Unsupported newer schema versions remain untouched and produce an explicit error rather than being mistaken for corruption. Unknown fields within the current schema are ignored for minor forward compatibility. A valid legacy `settings.json` is migrated once to `settings.yaml`; all subsequent writes use YAML.
 
-An empty executable override means discovery through `PATH`; an empty model-directory override means the `models` directory beside the resolved Real-ESRGAN executable. The GUI never saves edited overrides optimistically. It runs all discovery checks—including the bounded Real-ESRGAN Vulkan smoke test—on an owned worker thread and atomically replaces settings only after success. The newly persisted overrides apply to later draft requests. Requests already submitted to the FIFO retain their frozen `ToolOverrides` and cannot be retargeted by a settings change.
+An empty executable override means discovery through `PATH`, except an empty Spandrel runner override, which means the checkout's launcher, and an empty 2× or 3× model override, which means the factory-default file beside the resolved runner; an empty model-directory override means the `models` directory beside the resolved Real-ESRGAN executable. The GUI never saves edited overrides optimistically. It runs all discovery checks—including the bounded Real-ESRGAN Vulkan smoke test—on an owned worker thread and atomically replaces settings only after success. The newly persisted overrides apply to later draft requests. Requests already submitted to the FIFO retain their frozen `ToolOverrides` and reviewed runner-inspection records and cannot be retargeted by a settings change. Choosing a runner or model validates it off the GUI thread through the inspection protocol; queueing a job saves its pipeline and scale as the defaults for later GUI jobs without touching model files.
 
 Dropped-stream acknowledgement is bound to one job's probed stream inventory. It is never persisted or reused, because doing so would silently waive the explicit warning for different inputs.
 
@@ -346,6 +384,7 @@ GUI ──> Job model ──> FIFO job queue ───────┘          �
                                                        ├──> FFprobe adapter
                                                        ├──> FFmpeg adapter
                                                        ├──> Real-ESRGAN adapter
+                                                       ├──> Spandrel runner adapter
                                                        └──> Workspace/output manager
 ```
 
@@ -362,7 +401,7 @@ GUI ──> Job model ──> FIFO job queue ───────┘          �
 
 ### 1. Validate
 
-- Resolve FFmpeg, FFprobe, and `realesrgan-ncnn-vulkan` from explicit configuration first, then `PATH`.
+- Resolve FFmpeg and FFprobe, plus only the AI tools the selected pipeline will run (`realesrgan-ncnn-vulkan`, or the Spandrel runner and its models), from explicit configuration first, then `PATH`; the Spandrel runner and its models instead fall back to their factory defaults and never to `PATH`. Auto always proves Real-ESRGAN, as in v2.
 - Verify that resolved executables can launch on Apple Silicon and that the Real-ESRGAN installation can access a working Vulkan device and its selected model files.
 - Require the `realesrgan-x4plus` parameter and binary files and resolve them during preflight. Never inherit the executable's default model implicitly.
 - Do not install, download, update, or modify external tools as part of preflight.
@@ -407,6 +446,7 @@ Create a UTF-8 concat manifest in the job workspace using ordered, absolute, saf
 - Respect the user-defined clip order.
 - Produce one merged working video before continuing.
 - Verify successful exit, expected streams, readable duration, and a plausible timeline.
+- For the **Concat only** pipeline this is the terminal stage: the stream-copied MP4/MOV partial is verified and published atomically, and extraction, AI, and final encoding never run.
 
 ### 5. Extract frames and audio
 
@@ -418,9 +458,9 @@ Create a UTF-8 concat manifest in the job workspace using ordered, absolute, saf
 - Retain the verified merged media as the primary-audio source for later muxing, preserving its exact relationship to the video timeline without a needless additional audio copy.
 - Retain the metadata-derived frame count only for progress and disk estimates. Verify frame names, RGB PNG type, dimensions, and contiguous numbering after decode; use that observed count for upscaling and final encoding, and log metadata-count drift. Preserve exact inventory equality after AI upscaling and before final encoding.
 
-### 6. Upscale once
+### 6. Upscale (one pass, or two on request)
 
-When the merged input is below the target height, invoke `realesrgan-ncnn-vulkan` with the extracted directory as input and one output directory. Pass `-n realesrgan-x4plus`, the resolved AI scale, `-t 0`, and PNG output explicitly. Omit `-g`, `-j`, and `-x` to use automatic GPU selection, executable-default threads, and disabled TTA. Skip this stage when the input is already at or above the target height.
+When the frozen plan contains passes, run them in order; an Auto job has at most one. For a Real-ESRGAN pass, when the merged input is below the target height, invoke `realesrgan-ncnn-vulkan` with the extracted directory as input and one output directory. Pass `-n realesrgan-x4plus`, the resolved AI scale, `-t 0`, and PNG output explicitly. Omit `-g`, `-j`, and `-x` to use automatic GPU selection, executable-default threads, and disabled TTA. Skip this stage when the input is already at or above the target height.
 
 Do not expose anime-specific models in the v1 CLI, GUI, or configuration. Reject an anime model name with a clear validation error rather than silently substituting it.
 
@@ -442,6 +482,8 @@ This stage is implemented as a shell-free command plan and cancellable service b
 - Write to a partial output located on the destination filesystem.
 
 ### 8. Verify, publish, and clean up
+
+Publication and partial naming support MP4 and, for concat only, MOV; AI pipelines remain MP4-only and the MP4 rules are not loosened.
 
 This stage is implemented for explicit overwrite, explicit no-overwrite, and generated destinations. The no-clobber publication operation is atomic rather than only a pre-publication existence check.
 
@@ -483,6 +525,8 @@ Progress events include the job ID, stage, measured completed work, measured tot
 - Contract-test the Real-ESRGAN adapter with a fake executable that copies or transforms small image fixtures predictably.
 - Test orchestration without a GUI, GPU, network, or real model weights.
 - Reserve end-to-end Vulkan tests for an explicitly marked hardware-enabled suite.
+- Drive Phase 6 pipelines end to end over real FFmpeg with scripted fake AI backends, and keep the real-model Apple Silicon acceptance suite opt-in under `make phase6-native-test`.
+- Never let a unit test reach host tools: fakes implement `discover_media` and `complete_for_passes` on the real discovery boundary.
 - Keep Apple Silicon Metal presentation and `screencapture` checks opt-in under
   `make performance-test` and `make gui-capture-test`; record their measured
   native results as acceptance evidence rather than making the default suite

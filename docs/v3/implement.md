@@ -1,9 +1,9 @@
 # Version 3 Implementation Guide
 
-Phases 1–5 and Phase 7 are complete. Phase 6 has a documented design but has not started;
-Phases 8–10 are unassigned, and Phases 11–12 remain unauthorized. Writing the
-Phase 6 plan does not authorize implementation or change the active architecture
-contract.
+Phases 1–7 are complete (Phase 6 closed 2026-10-17 with native acceptance
+evidence); Phases 8–10 are unassigned, and Phases 11–12 remain unauthorized.
+[The architecture contract](../ARCHITECTURE.md) describes only behavior that is
+implemented and verified.
 
 For an authorized phase:
 

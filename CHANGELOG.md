@@ -7,6 +7,15 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Customizable upscaling pipelines (V3 Phase 6): **Auto** (unchanged default),
+  **Concat only** (direct MP4/MOV stream copy), **Native upscale**, **4× then
+  resize**, and **2× → 3× → resize**, selectable in the GUI Job Creation form,
+  the new **Processing → Upscaling** settings page, and the CLI
+  (`--pipeline`, `--scale`, `--spandrel-runner`, `--model-2x`, `--model-3x`), with
+  frozen ordered pass plans, resolved-size and skip disclosure, and aggregate
+  multi-pass progress.
+- The `tools/spandrel-runner` MPS-only protocol-1 runner (`.safetensors` and restricted-loader `.pth` models, bfloat16 execution for all-bfloat16 checkpoints) with a
+  `spandrel-runner` launcher; schema-4 settings; `make phase6-native-test`.
 - Configurable GUI-only related-file deletion rules with safe basename matching,
   schema migration, ordered editing, and best-effort Trash reporting.
 - Background-probed dimensions for the focused source clip.
@@ -16,6 +25,16 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Tool discovery is now selective: only the AI tools a pipeline will run are
+  resolved, and Auto still proves Real-ESRGAN as before.
+- Factory-default tool–model pair for each native scale: with no runner or model
+  configured, 2× uses `2xPublic_realplksr_dysample_layernorm_real_nn.pth` and 3× uses
+  bfloat16 `DAT_x3_bf16.safetensors`, both from `tools/spandrel-runner/models/` and run
+  by the checkout's `tools/spandrel-runner/spandrel-runner` (never found on `PATH`); 4×
+  keeps Real-ESRGAN `realesrgan-x4plus`. Explicit flags and Settings still win, and the
+  CLI help and Settings fields disclose the defaults.
+- The AI upscale log line names the model each pass runs instead of always
+  `realesrgan-x4plus`.
 - Standardized application APIs around descriptive `execute_*`, `create_*`, and
   `begin_*` names and introduced shared typed stage and Qt worker-lifecycle
   boundaries.

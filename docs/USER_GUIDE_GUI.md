@@ -26,16 +26,27 @@ Open **Preferences → Settings** (or press **Command-,**). Search all settings 
 or choose a page from the left tree:
 
 - **Editor → File** configures ordered automatic related-file deletion rules.
-- **Tools → External Tools** configures FFmpeg, FFprobe, Real-ESRGAN, and its
-  model directory.
+- **Processing → Upscaling** sets the default pipeline, native scale, and desired
+  height, and chooses the 2× and 3× `.safetensors` or `.pth` model files. The
+  factory-default models are `2xPublic_realplksr_dysample_layernorm_real_nn.pth` (2×) and
+  `DAT_x3_bf16.safetensors` (3×), run by `tools/spandrel-runner/spandrel-runner`. A blank
+  field uses its default, shown as placeholder text.
+- **Tools → External Tools** configures FFmpeg, FFprobe, Real-ESRGAN, its
+  model directory, and the Spandrel runner executable.
 - **Input and Output → Color Policy** contains the off-by-default **Allow mixed
   color tags** preference. Enable it only if untagged clips are known to match
   the other clips' unanimous declared supported SDR profile.
 
-Leave an executable blank to use `PATH`; leave the model directory blank to use
-the `models` directory beside Real-ESRGAN. **Use PATH** and **Automatic** clear
-explicit overrides. **Validate** checks executable launchability, model files,
-and a small Vulkan inference away from the GUI thread.
+Leave an executable blank to use `PATH` (the Spandrel runner instead uses the
+factory-default `tools/spandrel-runner/spandrel-runner`); leave the model directory
+blank to use the `models` directory beside Real-ESRGAN. **Use PATH**, **Use default**
+(runner), and **Automatic** clear explicit overrides. **Validate** checks executable launchability, model files,
+and a small Vulkan inference away from the GUI thread. A chosen Spandrel runner
+and 2×/3× model are inspected by the runner away from the GUI thread; TorchScript
+`.pt`, `.ckpt`, and other formats are refused (a `.pth` is read only by a restricted
+tensor-only loader; choose only models you trust), and a model whose scale or channels do not fit its slot
+is reported without falling back to another model. A model left blank never
+blocks a pipeline that does not use it.
 
 All pages share one draft. **OK** validates changed tools when necessary and
 atomically saves the whole draft; **Cancel** discards it. Validation and save
@@ -50,16 +61,29 @@ related-file failures are reported without rolling back the source move.
 ## Create a job
 
 1. Add local video clips in the desired top-to-bottom concatenation order.
-2. Choose an output directory and, if needed, change the target height.
+2. Choose an output directory, the **pipeline**, and, if needed, the native scale
+   or target height. The height box is disabled for **Concat only** and
+   **Native upscale**, which ignore it; its value is kept for the other pipelines.
 3. Select **Preflight** and review every warning and blocking issue.
 4. Acknowledge the listed extra streams when you explicitly accept dropping
    them. This acknowledgement applies only to the reviewed job and is never
    saved as a preference.
 5. Submit the accepted job to the queue.
 
-Preflight runs away from the GUI thread. The authoritative preflight runs again
+Preflight runs away from the GUI thread. The review lists the pipeline, the
+resolved output size, the ordered AI passes (or that AI is skipped or not used),
+and the free workspace space the job needs. The authoritative preflight runs again
 when the queued job starts, so changes to inputs or settings cannot silently
-alter a submitted job.
+alter a submitted job: a queued job keeps the tool and model paths it was
+submitted with and is rejected if its model file was replaced in the meantime.
+Queueing a job also saves its pipeline and scale as the defaults for later jobs;
+it never changes your model files.
+
+The pipelines are **Auto** (the default, same as earlier versions), **Concat only**
+(stream-copies compatible MP4/MOV clips into the first clip's container with no
+re-encoding and no AI), **Native upscale** (one AI pass at the model's own 2×, 3×,
+or 4× scale), **4× then resize**, and **2× → 3× → resize** (the only choice that
+runs AI twice).
 
 ## Monitor and control jobs
 
@@ -69,7 +93,9 @@ terminal jobs, select jobs with the keyboard, and inspect progress, output
 paths, errors, and diagnostics.
 
 The queue preview provides **Original**, **Upscaled**, and **Final Video** tabs.
-During upscaling, matched frame samples appear as they become available. After
+During upscaling, matched frame samples appear as they become available; a
+two-pass job shows samples from its final pass only, and its message names the
+current pass. After
 completion, the published final video plays once and then stops on its last
 frame.
 

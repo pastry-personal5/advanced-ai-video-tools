@@ -24,6 +24,10 @@ make run
 
 `make performance-test` and `make gui-capture-test` are opt-in native
 presentation checks and are not part of `make check`.
+`make phase6-native-test` is the opt-in Phase 6 acceptance suite: it runs real
+FFmpeg, the MPS `spandrel-runner`, and the user-supplied 2× and 3× models on tiny
+frames, and is also excluded from `make check`. The runner has its own tests:
+`uv run --package spandrel-runner --with pytest python -m pytest tools/spandrel-runner/tests`.
 
 ## Runtime safety
 

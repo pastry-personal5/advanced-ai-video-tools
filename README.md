@@ -2,12 +2,16 @@
 
 Advanced AI Video Tools is a macOS Apple Silicon application and CLI that
 concatenates real-world video clips with FFmpeg and optionally upscales the
-single merged timeline with `realesrgan-ncnn-vulkan`.
+single merged timeline with `realesrgan-ncnn-vulkan`, or through a selectable
+pipeline: concat only, native upscale, 4× then resize, or 2× → 3× → resize with
+user-supplied Spandrel `.safetensors` or `.pth` models.
 
 ## Status
 
 Version 2.0.0 is the released baseline. V3 Phases 1–5 and Phase 7 are implemented; Phase 6
-Customizable Upscaling Pipelines is planned, Phases 8–10 are unassigned, and
+Customizable Upscaling Pipelines is implemented and in acceptance (see its
+[phase record](docs/v3/6-customizable-upscaling-pipelines.md) for the evidence
+still pending), Phases 8–10 are unassigned, and
 Phase 11 Crop and Phase 12 Video Interpolation remain proposed. The verified
 distribution is an unsigned/ad-hoc-signed development DMG. Production Developer ID signing and
 notarization remain deferred because Apple Developer Program enrollment is
@@ -18,6 +22,11 @@ unavailable.
 Requirements: macOS 26.5.2+ on Apple Silicon, Python 3.10+, `uv`, PySide6,
 FFmpeg, FFprobe, Vulkan, Real-ESRGAN NCNN Vulkan, and the
 `realesrgan-x4plus` model files. External tools and models are user-managed.
+The optional 2×/3× pipelines also need the user-installed Spandrel runner
+(`tools/spandrel-runner`) and `.safetensors` or `.pth` models. By default they use
+`tools/spandrel-runner/spandrel-runner` with
+`2xPublic_realplksr_dysample_layernorm_real_nn.pth` (2×) and `DAT_x3_bf16.safetensors`
+(3×) from `tools/spandrel-runner/models/`.
 
 ```bash
 uv sync --dev
@@ -40,6 +49,7 @@ make check
 make run
 make performance-test
 make gui-capture-test
+make phase6-native-test
 make package-dev-dmg
 ```
 
