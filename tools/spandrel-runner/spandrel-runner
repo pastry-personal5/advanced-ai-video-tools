@@ -5,4 +5,4 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-exec uv run --quiet --project "$here" python "$here/main.py" "$@"
+exec uv run --quiet --no-dev --project "$here" python "$here/main.py" "$@"

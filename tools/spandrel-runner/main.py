@@ -253,13 +253,15 @@ def checkpoint_precision(model_path: Path) -> str:
     return "bfloat16" if dtypes == {torch.bfloat16} else "float32"
 
 
-def inspect_model(model_path: Path) -> tuple[Any, dict[str, object], FileIdentity]:
-    """Load one supported `.safetensors` model on MPS and describe it."""
+def inspect_model(model_path: Path, *, expected_identity: FileIdentity | None = None) -> tuple[Any, dict[str, object], FileIdentity]:
+    """Verify, load, and describe one supported model on MPS."""
 
     model_path = _validate_model_path(model_path)
     if not torch.backends.mps.is_available():
         raise RunnerError("mps_unavailable", "MPS is unavailable; the runner does not fall back to CPU")
     model_identity = file_identity(model_path)
+    if expected_identity is not None and model_identity != expected_identity:
+        raise _request_error("model identity differs from the inspected model_identity in the manifest")
     precision = checkpoint_precision(model_path)
     try:
         descriptor = ModelLoader(device="mps").load_from_file(str(model_path)).to("mps").eval()
@@ -436,7 +438,7 @@ def run(model: ModelPath, manifest: ManifestPath, protocol_version: ProtocolVers
 
     _validate_protocol(protocol_version)
     manifest_request = load_manifest(manifest)
-    descriptor, inspection, model_identity = inspect_model(model)
+    descriptor, inspection, model_identity = inspect_model(model, expected_identity=manifest_request.model_identity)
     scale = inspection["scale"]
     if not isinstance(scale, int):
         raise RunnerError("incompatible_model", "validated model scale is not an integer")

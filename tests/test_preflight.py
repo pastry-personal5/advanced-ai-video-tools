@@ -709,3 +709,23 @@ def test_a_separate_destination_filesystem_needs_room_for_the_final_partial_not_
     rejected = cramped.execute_preflight(request)
     assert not rejected.ready
     assert any(issue.code is IssueCode.INSUFFICIENT_DISK and "destination" in issue.message for issue in rejected.issues)
+
+
+def test_disk_estimate_sizes_the_final_partial_from_resolved_output_dimensions(tmp_path: Path) -> None:
+    """A larger final encode must not be priced as though it retained the source resolution."""
+
+    source = _input(tmp_path)
+    video = _video(width=640, height=360, duration=Decimal("2"))
+    probe = _probe(source, duration=Decimal("2"), video_streams=(video,))
+
+    _workspace_bytes, final_bytes = PreflightService._estimate_bytes(  # pylint: disable=protected-access
+        [probe],
+        video,
+        Rational(10, 1),
+        (),
+        ProcessingPipeline.AUTO,
+        output_width=3840,
+        output_height=2160,
+    )
+
+    assert final_bytes == 20 * 3840 * 2160 * 3 // 10

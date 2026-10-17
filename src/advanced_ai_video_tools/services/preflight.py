@@ -303,7 +303,15 @@ class PreflightService:
                 if toolchain is not None and output_width is not None and output_height is not None:
                     toolchain = self._resolve_pass_tools(request, toolchain, pass_specs, issues)
                     passes = self._freeze_passes(pass_specs, toolchain, issues)
-                workspace_bytes, final_bytes = self._estimate_bytes(probes, first_video, output_rate, pass_specs, request.pipeline)
+                workspace_bytes, final_bytes = self._estimate_bytes(
+                    probes,
+                    first_video,
+                    output_rate,
+                    pass_specs,
+                    request.pipeline,
+                    output_width=output_width or first_video.width,
+                    output_height=output_height or first_video.height,
+                )
                 peak_bytes = workspace_bytes + final_bytes
                 required_bytes = (peak_bytes * 6 + 4) // 5
                 self._validate_free_space(output_path, workspace_bytes, final_bytes, issues)
@@ -452,8 +460,6 @@ class PreflightService:
                 issues.append(_issue(IssueSeverity.ERROR, IssueCode.INCOMPATIBLE_PIPELINE, f"{video.codec_name} video cannot be stream-copied into the selected {suffix} output.", probe.path))
             if audio is not None and audio.codec_name not in audio_codecs:
                 issues.append(_issue(IssueSeverity.ERROR, IssueCode.INCOMPATIBLE_PIPELINE, f"{audio.codec_name} audio cannot be stream-copied into the selected {suffix} output.", probe.path))
-        if request.explicit_output_path is not None and request.explicit_output_path.suffix.lower() != suffix:
-            issues.append(_issue(IssueSeverity.ERROR, IssueCode.INVALID_OUTPUT, f"Concat-only output must use the first clip's {suffix} suffix.", request.explicit_output_path))
 
     @staticmethod
     def _freeze_passes(specs: tuple[_PassSpec, ...], toolchain: Toolchain, issues: list[PreflightIssue]) -> tuple[UpscalePassPlan, ...]:
@@ -781,6 +787,9 @@ class PreflightService:
         output_rate: Rational,
         passes: tuple[_PassSpec, ...],
         pipeline: ProcessingPipeline,
+        *,
+        output_width: int,
+        output_height: int,
     ) -> tuple[int, int]:
         """Return conservative (workspace, final-partial) byte estimates before the 20% margin."""
 
@@ -794,5 +803,5 @@ class PreflightService:
         source_frame = video.width * video.height * 3
         extracted_and_normalized = frame_count * source_frame * 2
         upscaled = frame_count * sum(spec.output_width * spec.output_height * 3 for spec in passes)
-        final_partial = frame_count * source_frame // 10
+        final_partial = frame_count * output_width * output_height * 3 // 10
         return source_files + extracted_and_normalized + upscaled, final_partial

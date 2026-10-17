@@ -118,6 +118,29 @@ def test_file_identity_contains_hash_and_stat_identity(tmp_path: Path) -> None:
     assert stat_identity(path).size_bytes == identity.size_bytes
 
 
+def test_inspect_rejects_a_changed_manifest_model_before_loading(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The run boundary must compare the frozen identity before any checkpoint loader sees the file."""
+
+    path = tmp_path / "model.safetensors"
+    path.write_bytes(b"reviewed model")
+    expected = file_identity(path)
+    path.write_bytes(b"replacement model")
+    monkeypatch.setattr(runner.torch.backends.mps, "is_available", lambda: True)
+    loader_reached = False
+
+    def unexpected_load(_path: Path) -> str:
+        nonlocal loader_reached
+        loader_reached = True
+        return "float32"
+
+    monkeypatch.setattr(runner, "checkpoint_precision", unexpected_load)
+    with pytest.raises(RunnerError, match="model identity differs") as captured:
+        runner.inspect_model(path, expected_identity=expected)
+
+    assert captured.value.code == "invalid_request"
+    assert not loader_reached
+
+
 def test_publish_png_uses_fast_lossless_encoding_without_clobbering(tmp_path: Path) -> None:
     import numpy
 

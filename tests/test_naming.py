@@ -66,7 +66,7 @@ def test_generated_reservations_avoid_disk_and_queue_collisions(
     registry = OutputPathRegistry()
     created = datetime(2026, 8, 21, tzinfo=timezone.utc)
     basename = "ai-video-20260821-000000-0198ca56c40070008000000000000000.mp4"
-    monkeypatch.setattr("advanced_ai_video_tools.storage.naming.automatic_output_basename", lambda _created_at: basename)
+    monkeypatch.setattr("advanced_ai_video_tools.storage.naming.automatic_output_basename", lambda _created_at, _suffix=".mp4": basename)
     base = tmp_path / basename
     base.touch()
 

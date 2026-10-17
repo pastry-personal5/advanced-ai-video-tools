@@ -326,7 +326,7 @@ Python 3.13.5, PyTorch 2.14.1, Spandrel 0.4.2. Only verified results are listed.
 4. A native pass whose result height is odd is rejected in preflight (`yuv420p`).
 5. A separate destination filesystem is charged only the final partial; the workspace
    is charged the rest.
-6. The runner's published maximum input size is 640×360 (230,400 px), runner 0.4.1.
+6. The runner's published maximum input size is 640×360 (230,400 px), runner 0.5.0.
    The earlier 16,777,216 was never run. See below.
 
 ### Native acceptance on the supplied models

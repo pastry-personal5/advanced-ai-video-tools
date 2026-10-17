@@ -346,6 +346,36 @@ def test_editor_freezes_pipeline_scale_and_concat_output_suffix(qt_app: QApplica
     assert concat.generated_output_basename is not None and concat.generated_output_basename.endswith(".mov")
 
 
+def test_editor_keeps_pipeline_dependent_controls_disabled_after_busy_cycle(qt_app: QApplication) -> None:
+    """Clearing the busy state must not re-enable controls the pipeline makes irrelevant."""
+
+    del qt_app
+    editor = JobEditor(ApplicationSettings(pipeline=ProcessingPipeline.NATIVE, native_scale=NativeScale.TWO))
+    editor.set_busy(True)
+    editor.set_busy(False)
+    assert not editor.target_height.isEnabled()
+    assert editor.native_scale.isEnabled()
+
+    editor.pipeline.setCurrentIndex(editor.pipeline.findData(ProcessingPipeline.AUTO.value))
+    editor.set_busy(True)
+    editor.set_busy(False)
+    assert editor.target_height.isEnabled()
+    assert not editor.native_scale.isEnabled()
+
+
+def test_editor_settings_refresh_does_not_enable_controls_while_busy(qt_app: QApplication) -> None:
+    """A saved-settings signal during preflight must preserve the editor's busy lock."""
+
+    del qt_app
+    editor = JobEditor(ApplicationSettings(pipeline=ProcessingPipeline.NATIVE))
+    editor.set_busy(True)
+    editor.apply_settings(ApplicationSettings(pipeline=ProcessingPipeline.AUTO))
+
+    assert not editor.pipeline.isEnabled()
+    assert not editor.target_height.isEnabled()
+    assert not editor.native_scale.isEnabled()
+
+
 def test_source_clip_reorder_controls_are_grouped_and_right_aligned(qt_app: QApplication) -> None:
     """Move controls share one right-aligned group in the source-list row."""
 

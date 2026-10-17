@@ -75,7 +75,7 @@ class OutputPathRegistry:
     def reserve_generated(self, directory: Path, created_at: datetime, suffix: str = ".mp4") -> Path:
         """Reserve a generated name, adding monotonically increasing suffixes."""
 
-        base_path = directory / (automatic_output_basename(created_at) if suffix == ".mp4" else automatic_output_basename(created_at, suffix))
+        base_path = directory / automatic_output_basename(created_at, suffix)
         with self._lock:
             candidate = base_path
             counter = 0

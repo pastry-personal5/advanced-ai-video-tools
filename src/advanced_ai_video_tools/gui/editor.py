@@ -182,6 +182,7 @@ class JobEditor(QWidget):
         super().__init__(parent)
         self.setAcceptDrops(True)
         self._settings = settings
+        self._busy = False
         self._clock = clock
         self._trash_service = trash_service or SourceClipTrashService(deletion_rules=settings.deletion_rules)
         self._trash_service.set_message_callback(self.message.emit)
@@ -588,10 +589,12 @@ class JobEditor(QWidget):
     def set_busy(self, busy: bool) -> None:
         """Prevent overlapping previews while keeping current intent visible."""
 
+        self._busy = busy
         for widget in (self.inputs, self.add_button, self.input_up_button, self.input_down_button, self.output_directory, self.output_button, self.target_height, self.pipeline, self.native_scale, self.submit_button):
             widget.setEnabled(not busy)
         if not busy:
             self._update_input_controls()
+            self._pipeline_changed()
 
     @Slot(str)
     @Slot(object)
@@ -609,8 +612,8 @@ class JobEditor(QWidget):
     @Slot(int)
     def _pipeline_changed(self, _index: int = 0) -> None:
         pipeline = ProcessingPipeline(str(self.pipeline.currentData()))
-        self.target_height.setEnabled(pipeline not in {ProcessingPipeline.CONCAT, ProcessingPipeline.NATIVE})
-        self.native_scale.setEnabled(pipeline is ProcessingPipeline.NATIVE)
+        self.target_height.setEnabled(not self._busy and pipeline not in {ProcessingPipeline.CONCAT, ProcessingPipeline.NATIVE})
+        self.native_scale.setEnabled(not self._busy and pipeline is ProcessingPipeline.NATIVE)
 
     @Slot(str)
     def job_queued(self, _job_id: str) -> None:
