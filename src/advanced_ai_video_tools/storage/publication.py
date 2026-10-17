@@ -1,4 +1,4 @@
-"""Same-filesystem partial output creation and atomic MP4 publication."""
+"""Same-filesystem partial output creation and atomic MP4/MOV publication."""
 
 from __future__ import annotations
 
@@ -33,11 +33,12 @@ class AtomicOutputPublisher:
 
         resolved_destination = destination.expanduser().resolve(strict=False)
         parent = resolved_destination.parent
-        if resolved_destination.suffix.lower() != ".mp4" or not parent.is_dir():
-            raise PublicationError(f"final destination must be an MP4 in an existing directory: {resolved_destination}")
+        suffix = resolved_destination.suffix.lower()
+        if suffix not in {".mp4", ".mov"} or not parent.is_dir():
+            raise PublicationError(f"final destination must be an MP4 or MOV in an existing directory: {resolved_destination}")
         identifier = uuid.uuid4().hex
         try:
-            descriptor, raw_path = tempfile.mkstemp(prefix=f".{resolved_destination.name}.{identifier}-", suffix=".partial.mp4", dir=parent)
+            descriptor, raw_path = tempfile.mkstemp(prefix=f".{resolved_destination.name}.{identifier}-", suffix=f".partial{suffix}", dir=parent)
             os.close(descriptor)
         except OSError as error:
             raise PublicationError(f"could not create partial output beside {resolved_destination}") from error
@@ -48,7 +49,7 @@ class AtomicOutputPublisher:
         destination = partial.destination.resolve(strict=False)
         path = partial.path.resolve(strict=False)
         expected_prefix = f".{destination.name}.{partial.identifier}-"
-        if path.parent != destination.parent or not path.name.startswith(expected_prefix) or not path.name.endswith(".partial.mp4"):
+        if path.parent != destination.parent or not path.name.startswith(expected_prefix) or not path.name.endswith(f".partial{destination.suffix.lower()}"):
             raise PublicationError(f"partial output identity does not match its destination: {path}")
         return path, destination
 

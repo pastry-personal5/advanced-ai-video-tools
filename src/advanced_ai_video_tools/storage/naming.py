@@ -17,25 +17,27 @@ class OutputCollisionError(FileExistsError):
     """Raised when no-overwrite publication targets an occupied path."""
 
 
-_AUTOMATIC_BASENAME = re.compile(rf"{re.escape(IDENTITY.output_prefix)}video-(\d{{8}})-(\d{{6}})-([0-9a-f]{{32}})(?:-\d{{2,}})?\.mp4")
+_AUTOMATIC_BASENAME = re.compile(rf"{re.escape(IDENTITY.output_prefix)}video-(\d{{8}})-(\d{{6}})-([0-9a-f]{{32}})(?:-\d{{2,}})?(\.mp4|\.mov)")
 
 
-def automatic_output_basename(created_at: datetime) -> str:
+def automatic_output_basename(created_at: datetime, suffix: str = ".mp4") -> str:
     """Build the canonical local-time basename with a compact UUIDv7."""
 
     if created_at.tzinfo is None or created_at.utcoffset() is None:
         raise ValueError("created_at must be timezone-aware")
+    if suffix not in {".mp4", ".mov"}:
+        raise ValueError("generated output suffix must be .mp4 or .mov")
     identifier = _uuid7(created_at)
-    return f"{created_at.strftime(f'{IDENTITY.output_prefix}video-%Y%m%d-%H%M%S')}-{identifier.hex}.mp4"
+    return f"{created_at.strftime(f'{IDENTITY.output_prefix}video-%Y%m%d-%H%M%S')}-{identifier.hex}{suffix}"
 
 
-def automatic_output_basename_matches(basename: str, created_at: datetime) -> bool:
+def automatic_output_basename_matches(basename: str, created_at: datetime, suffix: str = ".mp4") -> bool:
     """Return whether a frozen basename is safe and belongs to its creation instant."""
 
     if created_at.tzinfo is None or created_at.utcoffset() is None:
         return False
     match = _AUTOMATIC_BASENAME.fullmatch(basename)
-    if match is None or f"{match.group(1)}-{match.group(2)}" != created_at.strftime("%Y%m%d-%H%M%S"):
+    if match is None or match.group(4) != suffix or f"{match.group(1)}-{match.group(2)}" != created_at.strftime("%Y%m%d-%H%M%S"):
         return False
     identifier = UUID(hex=match.group(3))
     return identifier.version == 7 and identifier.int >> 62 & 0b11 == 0b10 and identifier.int >> 80 == _unix_milliseconds(created_at)
@@ -70,10 +72,10 @@ class OutputPathRegistry:
     def _key(path: Path) -> Path:
         return path.expanduser().resolve(strict=False)
 
-    def reserve_generated(self, directory: Path, created_at: datetime) -> Path:
+    def reserve_generated(self, directory: Path, created_at: datetime, suffix: str = ".mp4") -> Path:
         """Reserve a generated name, adding monotonically increasing suffixes."""
 
-        base_path = directory / automatic_output_basename(created_at)
+        base_path = directory / (automatic_output_basename(created_at) if suffix == ".mp4" else automatic_output_basename(created_at, suffix))
         with self._lock:
             candidate = base_path
             counter = 0

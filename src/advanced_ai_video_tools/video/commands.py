@@ -150,6 +150,19 @@ def create_concat_command(ffmpeg: Path, manifest: Path, output: Path, *, has_aud
     return tuple(arguments)
 
 
+def create_direct_concat_command(ffmpeg: Path, manifest: Path, output: Path, *, has_audio: bool, suffix: str) -> tuple[str, ...]:
+    """Create the concat-only stream-copy command for an MP4 or MOV partial."""
+
+    muxer = {".mp4": "mp4", ".mov": "mov"}.get(suffix)
+    if muxer is None or output.suffix.lower() != suffix:
+        raise ValueError("direct concat output and muxer suffix must be .mp4 or .mov")
+    arguments = [str(ffmpeg), "-hide_banner", "-nostdin", "-y", "-noautorotate", "-f", "concat", "-safe", "0", "-i", str(manifest), "-map", "0:v:0"]
+    if has_audio:
+        arguments.extend(["-map", "0:a:0"])
+    arguments.extend(["-map_metadata", "-1", "-map_chapters", "-1", "-c", "copy", "-avoid_negative_ts", "make_zero", "-f", muxer, str(output)])
+    return tuple(arguments)
+
+
 def create_media_preparation_plan(job: JobPlan, ffmpeg: Path, workspace: Path) -> MediaPreparationPlan:
     """Create a normalize-all-or-none plan followed by one concat operation."""
 

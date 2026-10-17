@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, IntEnum
 from fractions import Fraction
 from math import gcd
 from pathlib import Path
@@ -52,6 +52,31 @@ class ConcatStrategy(str, Enum):
     NORMALIZE = "normalize"
 
 
+class ProcessingPipeline(str, Enum):
+    """User-selectable operation sequence after compatibility inspection."""
+
+    AUTO = "auto"
+    CONCAT = "concat"
+    NATIVE = "native"
+    FOUR_X_RESIZE = "4x-resize"
+    TWO_X_THREE_X_RESIZE = "2x-3x-resize"
+
+
+class NativeScale(IntEnum):
+    """Native single-pass model scales exposed by the frontends."""
+
+    TWO = 2
+    THREE = 3
+    FOUR = 4
+
+
+class UpscaleBackend(str, Enum):
+    """External implementation selected for one frozen AI pass."""
+
+    REALESRGAN = "realesrgan"
+    SPANDREL = "spandrel"
+
+
 class ColorMatrix(str, Enum):
     """Explicit SDR matrices supported without cross-matrix conversion."""
 
@@ -83,6 +108,9 @@ class IssueCode(str, Enum):
     NORMALIZATION_REQUIRED = "normalization_required"
     INSUFFICIENT_DISK = "insufficient_disk"
     UPSCALE_LIMIT = "upscale_limit"
+    INCOMPATIBLE_PIPELINE = "incompatible_pipeline"
+    INCOMPATIBLE_MODEL = "incompatible_model"
+    MODEL_CHANGED = "model_changed"
 
 
 @dataclass(frozen=True, order=True)
@@ -195,6 +223,7 @@ class MediaProbe:
     other_streams: tuple[OtherStream, ...]
     chapter_count: int = 0
     start_time: Decimal | None = None
+    format_names: tuple[str, ...] = ()
 
     @property
     def primary_video(self) -> VideoStream | None:
@@ -218,13 +247,64 @@ class ToolInfo:
 
 
 @dataclass(frozen=True)
+class FileIdentity:
+    """Resolved file identity used to detect replacement after review."""
+
+    path: Path
+    device: int
+    inode: int
+    size_bytes: int
+    modified_ns: int
+    sha256: str
+
+
+@dataclass(frozen=True)
+class SpandrelInspection:
+    """Versioned runner description of one supported super-resolution model."""
+
+    protocol_version: int
+    runner_version: str
+    model_identity: FileIdentity
+    architecture: str
+    purpose: str
+    input_channels: int
+    output_channels: int
+    scale: int
+    minimum_size: int
+    multiple_of: int
+    square: bool
+    maximum_input_pixels: int
+    device: str
+    precision: str
+
+
+@dataclass(frozen=True)
+class UpscalePassPlan:
+    """One ordered AI pass with exact dimensions and resolved dependencies."""
+
+    index: int
+    backend: UpscaleBackend
+    scale: int
+    input_width: int
+    input_height: int
+    output_width: int
+    output_height: int
+    executable_path: Path
+    model_path: Path
+    model_identity: FileIdentity | None = None
+    inspection: SpandrelInspection | None = None
+
+
+@dataclass(frozen=True)
 class Toolchain:
     """All external prerequisites frozen for one job."""
 
     ffmpeg: ToolInfo
     ffprobe: ToolInfo
-    realesrgan: ToolInfo
-    model_directory: Path
+    realesrgan: ToolInfo | None
+    model_directory: Path | None
+    spandrel_runner: ToolInfo | None = None
+    spandrel_inspections: tuple[SpandrelInspection, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -235,6 +315,9 @@ class ToolOverrides:
     ffprobe: Path | None = None
     realesrgan: Path | None = None
     model_directory: Path | None = None
+    spandrel_runner: Path | None = None
+    model_2x: Path | None = None
+    model_3x: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -253,6 +336,9 @@ class JobRequest:
     generated_output_basename: str | None = None
     acknowledged_stream_keys: tuple[str, ...] = ()
     allow_mixed_color_tags: bool = False
+    pipeline: ProcessingPipeline = ProcessingPipeline.AUTO
+    native_scale: NativeScale | None = None
+    spandrel_inspections: tuple[SpandrelInspection, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -288,6 +374,9 @@ class JobPlan:
     model_name: str = "realesrgan-x4plus"
     overwrite_mode: OverwriteMode = OverwriteMode.REPLACE
     allow_mixed_color_tags: bool = False
+    pipeline: ProcessingPipeline = ProcessingPipeline.AUTO
+    native_scale: NativeScale | None = None
+    upscale_passes: tuple[UpscalePassPlan, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -315,6 +404,9 @@ class ProgressEvent:
     message: str
     original_preview_image_path: Path | None = None
     upscaled_preview_image_path: Path | None = None
+    pass_index: int | None = None
+    pass_count: int | None = None
+    pass_scale: int | None = None
 
     def __post_init__(self) -> None:
         if self.completed < 0:
@@ -323,3 +415,9 @@ class ProgressEvent:
             raise ValueError("completed progress must be within the measured total")
         if (self.original_preview_image_path is not None or self.upscaled_preview_image_path is not None) and self.stage is not PipelineStage.UPSCALE:
             raise ValueError("preview images are only valid for upscale progress")
+        pass_values = (self.pass_index, self.pass_count, self.pass_scale)
+        if any(value is not None for value in pass_values):
+            if self.stage is not PipelineStage.UPSCALE or any(value is None or value <= 0 for value in pass_values):
+                raise ValueError("pass metadata must be complete, positive, and limited to upscale progress")
+            if self.pass_index is not None and self.pass_count is not None and self.pass_index > self.pass_count:
+                raise ValueError("upscale pass index cannot exceed pass count")

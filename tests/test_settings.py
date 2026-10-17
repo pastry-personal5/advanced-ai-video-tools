@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from advanced_ai_video_tools.core.models import OverwriteMode, ToolOverrides
+from advanced_ai_video_tools.core.models import NativeScale, OverwriteMode, ProcessingPipeline, ToolOverrides
 from advanced_ai_video_tools.system.settings import (
     ApplicationSettings,
     SettingsError,
@@ -91,6 +91,9 @@ def test_settings_round_trip_with_private_atomic_file(tmp_path: Path) -> None:
             ffprobe=Path("/opt/tools/ffprobe"),
             realesrgan=Path("/opt/tools/realesrgan-ncnn-vulkan"),
             model_directory=Path("/opt/tools/models"),
+            spandrel_runner=Path("/opt/tools/spandrel-runner"),
+            model_2x=Path("/opt/models/DAT_x2.safetensors"),
+            model_3x=Path("/opt/models/DAT_x3.safetensors"),
         ),
         recent_input_directory=Path("/media/source clips"),
         recent_output_directory=Path("/media/exports"),
@@ -98,6 +101,8 @@ def test_settings_round_trip_with_private_atomic_file(tmp_path: Path) -> None:
         overwrite_mode=OverwriteMode.NO_OVERWRITE,
         preview_muted=False,
         preview_volume=42,
+        pipeline=ProcessingPipeline.TWO_X_THREE_X_RESIZE,
+        native_scale=NativeScale.THREE,
     )
     store = SettingsStore(path)
 
@@ -107,8 +112,8 @@ def test_settings_round_trip_with_private_atomic_file(tmp_path: Path) -> None:
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert path.read_text(encoding="utf-8").startswith("preview:\n")
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert document["schema_version"] == 3
-    assert document["processing"] == {"allow_mixed_color_tags": False, "overwrite_mode": "no_overwrite", "target_height": 1080}
+    assert document["schema_version"] == 4
+    assert document["processing"] == {"allow_mixed_color_tags": False, "native_scale": 3, "overwrite_mode": "no_overwrite", "pipeline": "2x-3x-resize", "target_height": 1080}
     assert document["preview"] == {"muted": False, "volume": 42}
     assert "acknowledge_dropped_streams" not in path.read_text(encoding="utf-8")
     assert not list(path.parent.glob(".settings.yaml-*.tmp"))
@@ -154,14 +159,29 @@ def test_newer_schema_is_preserved_and_rejected(tmp_path: Path) -> None:
     """An older binary must never quarantine or overwrite valid future data."""
 
     path = tmp_path / "settings.yaml"
-    contents = "schema_version: 4\nfuture: true\n"
+    contents = "schema_version: 5\nfuture: true\n"
     path.write_text(contents, encoding="utf-8")
 
-    with pytest.raises(UnsupportedSettingsVersion, match="version 4"):
+    with pytest.raises(UnsupportedSettingsVersion, match="version 5"):
         SettingsStore(path).load()
 
     assert path.read_text(encoding="utf-8") == contents
     assert not list(tmp_path.glob("settings.corrupt-*.yaml"))
+
+
+def test_schema_three_loads_as_auto_without_rewriting_until_save(tmp_path: Path) -> None:
+    """Legacy settings adopt Phase 6 defaults only on the next explicit save."""
+
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump({"schema_version": 3, "processing": {"target_height": 1440}}), encoding="utf-8")
+    store = SettingsStore(path)
+    settings = store.load()
+    assert settings.pipeline is ProcessingPipeline.AUTO
+    assert settings.native_scale is NativeScale.FOUR
+    assert settings.target_height == 1440
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["schema_version"] == 3
+    store.save(settings)
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["schema_version"] == 4
 
 
 def test_atomic_replace_failure_preserves_previous_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

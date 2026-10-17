@@ -92,3 +92,33 @@ def test_explicit_destination_defaults_to_replace_but_can_refuse(
     registry.release(destination)
     with pytest.raises(OutputCollisionError, match="already exists"):
         registry.reserve_explicit(destination, OverwriteMode.NO_OVERWRITE)
+
+
+def test_mov_names_bind_the_frozen_suffix_to_the_generated_identity() -> None:
+    """Concat-only names carry the first clip's suffix; AI names stay MP4-only."""
+
+    created = datetime(2026, 8, 21, 14, 30, 52, 123456, tzinfo=timezone(timedelta(hours=9)))
+    mov = automatic_output_basename(created, ".mov")
+
+    assert mov.endswith(".mov") and re.fullmatch(r"ai-video-20260821-143052-[0-9a-f]{32}\.mov", mov)
+    assert automatic_output_basename_matches(mov, created, ".mov")
+    assert automatic_output_basename_matches(mov.replace(".mov", "-01.mov"), created, ".mov")
+    assert not automatic_output_basename_matches(mov, created)
+    assert not automatic_output_basename_matches(mov, created, ".mp4")
+    assert not automatic_output_basename_matches(automatic_output_basename(created), created, ".mov")
+    with pytest.raises(ValueError, match=".mp4 or .mov"):
+        automatic_output_basename(created, ".mkv")
+
+
+def test_registry_reserves_generated_and_frozen_mov_names_without_collision(tmp_path: Path) -> None:
+    """MOV reservations are unique per job exactly like MP4 reservations."""
+
+    created = datetime(2026, 8, 21, tzinfo=timezone.utc)
+    registry = OutputPathRegistry()
+    generated = registry.reserve_generated(tmp_path, created, ".mov")
+    frozen_name = automatic_output_basename(created, ".mov")
+
+    assert generated.suffix == ".mov" and automatic_output_basename_matches(generated.name, created, ".mov")
+    assert registry.reserve_frozen_generated(tmp_path, frozen_name) == tmp_path / frozen_name
+    with pytest.raises(OutputCollisionError):
+        registry.reserve_frozen_generated(tmp_path, frozen_name)

@@ -190,6 +190,8 @@ def parse_probe_document(path: Path, document: Mapping[str, object]) -> MediaPro
     format_value = document.get("format")
     duration = _decimal(format_value.get("duration")) if isinstance(format_value, Mapping) else None
     start_time = _decimal(format_value.get("start_time")) if isinstance(format_value, Mapping) else None
+    raw_format_names = format_value.get("format_name") if isinstance(format_value, Mapping) else None
+    format_names = tuple(name.strip().lower() for name in raw_format_names.split(",") if name.strip()) if isinstance(raw_format_names, str) else ()
     chapters = document.get("chapters", [])
     chapter_count = len(chapters) if isinstance(chapters, list) else 0
     return MediaProbe(
@@ -200,6 +202,7 @@ def parse_probe_document(path: Path, document: Mapping[str, object]) -> MediaPro
         other_streams=tuple(others),
         chapter_count=chapter_count,
         start_time=start_time,
+        format_names=format_names,
     )
 
 

@@ -177,7 +177,7 @@ def test_invalid_persisted_rule_is_skipped_and_schema_migrates_on_save(tmp_path:
     assert len(report.warnings) == 1
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["schema_version"] == 1
     store.save(report.settings)
-    assert yaml.safe_load(path.read_text(encoding="utf-8"))["schema_version"] == 3
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["schema_version"] == 4
 
 
 def test_legacy_broad_default_is_migrated_to_the_source_specific_default(tmp_path: Path) -> None:

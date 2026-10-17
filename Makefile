@@ -1,4 +1,4 @@
-.PHONY: install format format-check lint test check run performance-test gui-capture-test package-dev-dmg
+.PHONY: install format format-check lint test check run performance-test gui-capture-test phase6-native-test package-dev-dmg
 
 PERFORMANCE_REPORT ?= /private/tmp/advanced-ai-video-tools-performance.xml
 PERFORMANCE_UV_CACHE_DIR ?= /private/tmp/advanced-ai-video-tools-uv-cache
@@ -30,6 +30,10 @@ performance-test:
 
 gui-capture-test:
 	QT_QPA_PLATFORM=cocoa ADVANCED_AI_VIDEO_TOOLS_RUN_NATIVE_ACCEPTANCE=1 uv run pytest -m gui_capture tests/test_native_acceptance.py
+
+phase6-native-test:
+	# Real FFmpeg, the MPS runner, and the supplied DAT models; opt-in, tiny frames only.
+	ADVANCED_AI_VIDEO_TOOLS_RUN_PHASE6_ACCEPTANCE=1 uv run pytest -m phase6_native tests/test_phase6_native_acceptance.py
 
 package-dev-dmg:
 	packaging/macos/build_unsigned_dmg.sh

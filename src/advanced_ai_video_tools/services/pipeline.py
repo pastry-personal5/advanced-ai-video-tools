@@ -9,7 +9,8 @@ from uuid import uuid4
 
 from loguru import logger
 
-from advanced_ai_video_tools.core.models import IssueSeverity, JobPlan, JobRequest, JobState, PipelineStage, PreflightReport, Toolchain
+from advanced_ai_video_tools.core.models import IssueSeverity, JobPlan, JobRequest, JobState, PipelineStage, PreflightReport, ProcessingPipeline, Toolchain, UpscaleBackend
+from advanced_ai_video_tools.services.concat_only import DirectConcatExecutor
 from advanced_ai_video_tools.services.finalization import FinalOutputVerifier, FinalizationCancelled, FinalizationExecutor, FinalizationFailed, FinalizationResult
 from advanced_ai_video_tools.services.frame_extraction import FrameExtractionCancelled, FrameExtractionExecutor, FrameExtractionFailed
 from advanced_ai_video_tools.services.media_preparation import MediaPreparationExecutor, MergedOutputVerifier, PreparationCancelled, PreparationFailed
@@ -24,6 +25,13 @@ from advanced_ai_video_tools.system.processes import CancellationToken, ProcessR
 from advanced_ai_video_tools.video.probe import FFprobeClient
 
 StateCallback = Callable[[JobState], None]
+
+
+def _pass_models(plan: JobPlan) -> str:
+    """Name what each frozen pass runs: a Spandrel checkpoint file, or the Real-ESRGAN model."""
+
+    models = (upscale_pass.model_path.name if upscale_pass.backend is UpscaleBackend.SPANDREL else plan.model_name for upscale_pass in plan.upscale_passes)
+    return ", ".join(models) or "skip"
 
 
 @dataclass(frozen=True)
@@ -138,6 +146,10 @@ class PipelineService:
 
         preparation, extraction, upscaling, finalization = self._stage_runners(toolchain)
         context = StageContext(workspace=workspace, cancellation=token, progress=progress, toolchain=toolchain)
+        if plan.pipeline is ProcessingPipeline.CONCAT:
+            logger.info("Starting direct stream-copy concat")
+            verifier = MergedOutputVerifier(FFprobeClient(toolchain.ffprobe.path))
+            return DirectConcatExecutor(self._workspace_manager, self._process_runner, verifier).execute(plan, toolchain, workspace=workspace, cancellation=token, progress=progress, context=context)
         with logger.contextualize(stage=PipelineStage.NORMALIZE.value):
             logger.info("Starting media preparation")
             prepared = preparation.execute_preparation_in_workspace(plan, toolchain.ffmpeg.path, workspace, token, progress, context=context)
@@ -145,7 +157,7 @@ class PipelineService:
             logger.info("Starting frame extraction")
             extracted = extraction.execute_extraction(prepared, plan, toolchain.ffmpeg.path, workspace=workspace, cancellation=token, progress=progress, context=context)
         with logger.contextualize(stage=PipelineStage.UPSCALE.value):
-            logger.info("Starting AI upscale scale={} model={}", plan.ai_scale or "skip", plan.model_name)
+            logger.info("Starting AI upscale scale={} models={}", plan.ai_scale or "skip", _pass_models(plan))
             upscaled = upscaling.execute_upscaling(extracted, plan, toolchain, workspace=workspace, cancellation=token, progress=progress, context=context)
         with logger.contextualize(stage=PipelineStage.ENCODE.value):
             logger.info("Starting final encoding and publication")
@@ -199,7 +211,7 @@ class PipelineService:
         lifecycle = JobLifecycle(state_changed)
         with logger.contextualize(stage=PipelineStage.VALIDATE.value):
             report, plan, toolchain = self._validate(request, token, lifecycle, progress)
-            logger.info("Preflight accepted output={}x{} rate={} concat={} ffmpeg={} ffprobe={} realesrgan={}", plan.output_width, plan.output_height, plan.output_frame_rate, plan.concat_strategy.value, toolchain.ffmpeg.path.name, toolchain.ffprobe.path.name, toolchain.realesrgan.path.name)
+            logger.info("Preflight accepted pipeline={} output={}x{} rate={} concat={} ffmpeg={} ffprobe={} realesrgan={}", plan.pipeline.value, plan.output_width, plan.output_height, plan.output_frame_rate, plan.concat_strategy.value, toolchain.ffmpeg.path.name, toolchain.ffprobe.path.name, toolchain.realesrgan.path.name if toolchain.realesrgan is not None else "unused")
         reservation = plan.output_path
         workspace: OwnedWorkspace | None = None
         try:
@@ -240,7 +252,7 @@ class PipelineService:
 
         resolved_job_id = job_id or uuid4().hex
         with logger.contextualize(job_id=resolved_job_id, stage=JobState.QUEUED.value):
-            logger.info("Job submitted input_count={} target_height={} model={}", len(request.inputs), request.target_height, request.model_name)
+            logger.info("Job submitted input_count={} pipeline={} target_height={} model={}", len(request.inputs), request.pipeline.value, request.target_height, request.model_name)
             try:
                 result = self._run_job(request, cancellation, progress, state_changed)
             except PipelineCancelled as error:

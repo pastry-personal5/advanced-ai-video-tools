@@ -18,7 +18,7 @@ def test_probe_parser_preserves_exact_rates_and_stream_inventory() -> None:
     parsed = parse_probe_document(
         Path("clip.mov"),
         {
-            "format": {"duration": "2.500"},
+            "format": {"duration": "2.500", "format_name": "mov,mp4,m4a,3gp,3g2,mj2"},
             "chapters": [{"id": 0}],
             "streams": [
                 {
@@ -63,6 +63,7 @@ def test_probe_parser_preserves_exact_rates_and_stream_inventory() -> None:
     assert parsed.primary_audio.start_time == Decimal("0.125")
     assert parsed.other_streams[0].kind == "subtitle"
     assert parsed.chapter_count == 1
+    assert parsed.format_names == ("mov", "mp4", "m4a", "3gp", "3g2", "mj2")
 
 
 def test_probe_parser_treats_attached_picture_as_unsupported_attachment() -> None:

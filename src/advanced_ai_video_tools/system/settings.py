@@ -16,10 +16,10 @@ from typing import Mapping
 import yaml
 from loguru import logger
 
-from advanced_ai_video_tools.core.models import OverwriteMode, ToolOverrides
+from advanced_ai_video_tools.core.models import NativeScale, OverwriteMode, ProcessingPipeline, ToolOverrides
 from advanced_ai_video_tools.storage.paths import application_data_directory, legacy_application_data_directory
 
-SETTINGS_SCHEMA_VERSION = 3
+SETTINGS_SCHEMA_VERSION = 4
 DEFAULT_TARGET_HEIGHT = 2160
 DEFAULT_PREVIEW_VOLUME = 100
 
@@ -134,6 +134,8 @@ class ApplicationSettings:
     preview_volume: int = DEFAULT_PREVIEW_VOLUME
     deletion_rules: tuple[DeletionRule, ...] | None = None
     allow_mixed_color_tags: bool = False
+    pipeline: ProcessingPipeline = ProcessingPipeline.AUTO
+    native_scale: NativeScale = NativeScale.FOUR
 
     def __post_init__(self) -> None:
         if not isinstance(self.tools, ToolOverrides):
@@ -144,6 +146,10 @@ class ApplicationSettings:
             raise TypeError("preview muted must be a boolean")
         if not isinstance(self.allow_mixed_color_tags, bool):
             raise TypeError("allow mixed color tags must be a boolean")
+        if not isinstance(self.pipeline, ProcessingPipeline):
+            raise TypeError("pipeline must be a ProcessingPipeline")
+        if not isinstance(self.native_scale, NativeScale):
+            raise TypeError("native scale must be a NativeScale")
         if isinstance(self.preview_volume, bool) or not isinstance(self.preview_volume, int) or not 0 <= self.preview_volume <= 100:
             raise ValueError("preview volume must be an integer from 0 to 100")
         for path in (
@@ -151,6 +157,9 @@ class ApplicationSettings:
             self.tools.ffprobe,
             self.tools.realesrgan,
             self.tools.model_directory,
+            self.tools.spandrel_runner,
+            self.tools.model_2x,
+            self.tools.model_3x,
             self.recent_input_directory,
             self.recent_output_directory,
         ):
@@ -311,7 +320,7 @@ class SettingsStore:
 def _encode_document(settings: ApplicationSettings) -> dict[str, object]:
     document: dict[str, object] = {
         "schema_version": SETTINGS_SCHEMA_VERSION,
-        "processing": {"allow_mixed_color_tags": settings.allow_mixed_color_tags, "overwrite_mode": settings.overwrite_mode.value, "target_height": settings.target_height},
+        "processing": {"allow_mixed_color_tags": settings.allow_mixed_color_tags, "overwrite_mode": settings.overwrite_mode.value, "target_height": settings.target_height, "pipeline": settings.pipeline.value, "native_scale": int(settings.native_scale)},
         "preview": {"muted": settings.preview_muted, "volume": settings.preview_volume},
         "recent": {"input_directory": _encode_path(settings.recent_input_directory), "output_directory": _encode_path(settings.recent_output_directory)},
         "tools": {
@@ -319,6 +328,9 @@ def _encode_document(settings: ApplicationSettings) -> dict[str, object]:
             "ffprobe": _encode_path(settings.tools.ffprobe),
             "model_directory": _encode_path(settings.tools.model_directory),
             "realesrgan": _encode_path(settings.tools.realesrgan),
+            "spandrel_runner": _encode_path(settings.tools.spandrel_runner),
+            "model_2x": _encode_path(settings.tools.model_2x),
+            "model_3x": _encode_path(settings.tools.model_3x),
         },
     }
     if settings.deletion_rules is not None:
@@ -331,7 +343,7 @@ def _decode_document(value: object) -> tuple[ApplicationSettings, tuple[str, ...
     version = document.get("schema_version")
     if isinstance(version, bool) or not isinstance(version, int):
         raise _InvalidSettings("schema_version must be an integer")
-    if version not in (1, 2, SETTINGS_SCHEMA_VERSION):
+    if version not in (1, 2, 3, SETTINGS_SCHEMA_VERSION):
         raise UnsupportedSettingsVersion(f"settings schema version {version} is unsupported; expected {SETTINGS_SCHEMA_VERSION}")
     tools = _mapping(document.get("tools", {}), "tools")
     recent = _mapping(document.get("recent", {}), "recent")
@@ -347,6 +359,12 @@ def _decode_document(value: object) -> tuple[ApplicationSettings, tuple[str, ...
     allow_mixed_color_tags = processing.get("allow_mixed_color_tags", False)
     if not isinstance(allow_mixed_color_tags, bool):
         raise _InvalidSettings("processing.allow_mixed_color_tags must be a boolean")
+    raw_pipeline = processing.get("pipeline", ProcessingPipeline.AUTO.value)
+    raw_native_scale = processing.get("native_scale", int(NativeScale.FOUR))
+    if not isinstance(raw_pipeline, str):
+        raise _InvalidSettings("processing.pipeline must be a string")
+    if isinstance(raw_native_scale, bool) or not isinstance(raw_native_scale, int):
+        raise _InvalidSettings("processing.native_scale must be an integer")
     muted = preview.get("muted", True)
     volume = preview.get("volume", DEFAULT_PREVIEW_VOLUME)
     if not isinstance(muted, bool):
@@ -355,6 +373,8 @@ def _decode_document(value: object) -> tuple[ApplicationSettings, tuple[str, ...
         raise _InvalidSettings("preview.volume must be an integer from 0 to 100")
     try:
         overwrite = OverwriteMode(raw_overwrite)
+        pipeline = ProcessingPipeline(raw_pipeline)
+        native_scale = NativeScale(raw_native_scale)
         return (
             ApplicationSettings(
                 tools=ToolOverrides(
@@ -362,6 +382,9 @@ def _decode_document(value: object) -> tuple[ApplicationSettings, tuple[str, ...
                     ffprobe=_optional_path(tools.get("ffprobe"), "tools.ffprobe"),
                     realesrgan=_optional_path(tools.get("realesrgan"), "tools.realesrgan"),
                     model_directory=_optional_path(tools.get("model_directory"), "tools.model_directory"),
+                    spandrel_runner=_optional_path(tools.get("spandrel_runner"), "tools.spandrel_runner"),
+                    model_2x=_optional_path(tools.get("model_2x"), "tools.model_2x"),
+                    model_3x=_optional_path(tools.get("model_3x"), "tools.model_3x"),
                 ),
                 recent_input_directory=_optional_path(recent.get("input_directory"), "recent.input_directory"),
                 recent_output_directory=_optional_path(recent.get("output_directory"), "recent.output_directory"),
@@ -371,6 +394,8 @@ def _decode_document(value: object) -> tuple[ApplicationSettings, tuple[str, ...
                 preview_volume=volume,
                 deletion_rules=deletion_rules,
                 allow_mixed_color_tags=allow_mixed_color_tags,
+                pipeline=pipeline,
+                native_scale=native_scale,
             ),
             warnings,
         )

@@ -23,6 +23,9 @@ class ProgressEmitter:
         *,
         original_preview_image_path: Path | None = None,
         upscaled_preview_image_path: Path | None = None,
+        pass_index: int | None = None,
+        pass_count: int | None = None,
+        pass_scale: int | None = None,
     ) -> None:
         """Emit progress event with optional preview paths.
 
@@ -44,5 +47,8 @@ class ProgressEmitter:
                     message=message,
                     original_preview_image_path=original_preview_image_path,
                     upscaled_preview_image_path=upscaled_preview_image_path,
+                    pass_index=pass_index,
+                    pass_count=pass_count,
+                    pass_scale=pass_scale,
                 )
             )

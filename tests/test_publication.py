@@ -86,3 +86,33 @@ def test_forged_partial_identity_and_empty_partial_are_rejected(tmp_path: Path) 
         publisher.publish(partial, replace=True)
 
     publisher.discard(partial)
+
+
+def test_mov_destination_gets_a_mov_partial_that_publishes_atomically_and_replaces(tmp_path: Path) -> None:
+    """Concat-only MOV output uses the same ownership and atomic-replacement rules as MP4."""
+
+    destination = tmp_path / "final.MOV"
+    destination.write_bytes(b"old complete output")
+    publisher = AtomicOutputPublisher()
+    partial = publisher.create_partial(destination)
+
+    assert partial.path.name.endswith(".partial.mov") and partial.path.parent == tmp_path
+    partial.path.write_bytes(b"new stream copy")
+    assert destination.read_bytes() == b"old complete output"
+    assert publisher.publish(partial, replace=True) == destination.resolve()
+    assert destination.read_bytes() == b"new stream copy"
+
+
+def test_publication_still_rejects_other_containers_and_cross_suffix_forgery(tmp_path: Path) -> None:
+    """MOV support does not loosen the destination or partial-identity rules."""
+
+    publisher = AtomicOutputPublisher()
+    for refused in ("final.mkv", "final.webm", "final"):
+        with pytest.raises(PublicationError, match="MP4 or MOV"):
+            publisher.create_partial(tmp_path / refused)
+
+    mp4_partial = publisher.create_partial(tmp_path / "final.mp4")
+    forged = PartialOutput(tmp_path / "final.mov", mp4_partial.path, mp4_partial.identifier)
+    with pytest.raises(PublicationError, match="identity"):
+        publisher.discard(forged)
+    publisher.discard(mp4_partial)

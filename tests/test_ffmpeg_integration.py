@@ -26,6 +26,7 @@ from advanced_ai_video_tools.video.compatibility import effective_frame_rate, fr
 from advanced_ai_video_tools.video.manifest import write_concat_manifest
 from advanced_ai_video_tools.video.probe import FFprobeClient
 from advanced_ai_video_tools.video.policy import resolve_input_color_profile
+from tests.static_discovery import StaticToolDiscovery
 
 BT709_PROFILE = ColorProfile(ColorMatrix.BT709, "bt709", "bt709")
 SMPTE170M_PROFILE = ColorProfile(ColorMatrix.SMPTE170M, None, None)
@@ -136,18 +137,6 @@ def _audio_packet_end(ffprobe: Path, media: Path) -> Decimal:
     return max(ends)
 
 
-class FixedToolDiscovery:
-    """Return real FFmpeg tools and the integration-only fake upscaler."""
-
-    def __init__(self, toolchain: Toolchain) -> None:
-        self.toolchain = toolchain
-
-    def discover(self, _overrides: object) -> Toolchain:
-        """Return the frozen integration toolchain without a GPU smoke test."""
-
-        return self.toolchain
-
-
 @pytest.mark.integration
 def test_quantized_sixteen_fps_prores_normalizes_concats_and_verifies(tmp_path: Path) -> None:
     """Real MOV and Matroska clocks preserve nominal 16/1 through preparation."""
@@ -197,6 +186,9 @@ import subprocess
 import sys
 
 arguments = sys.argv[1:]
+if arguments == ['-h']:
+    sys.stderr.write('Usage: realesrgan-ncnn-vulkan -i infile -o outfile [options]...\\n')
+    raise SystemExit(255)
 required = ('-i', '-o', '-m', '-n', '-s', '-t', '-f')
 if any(flag not in arguments for flag in required):
     raise SystemExit(8)
@@ -252,7 +244,7 @@ def _full_pipeline_fixture(tmp_path: Path) -> tuple[PipelineService, JobRequest,
     toolchain = Toolchain(ToolInfo(ffmpeg, "integration"), ToolInfo(ffprobe, "integration"), ToolInfo(fake_upscaler, "integration fake"), models)
     manager = WorkspaceManager(tmp_path / "jobs")
     preflight = PreflightService(
-        tool_discovery=FixedToolDiscovery(toolchain),
+        tool_discovery=StaticToolDiscovery(toolchain),
         platform_provider=lambda: PlatformInfo("Darwin", "arm64", "26.5.2"),
         prober_factory=lambda tools: FFprobeClient(tools.ffprobe.path),
         clock=lambda: datetime(2026, 8, 21, tzinfo=timezone.utc),
