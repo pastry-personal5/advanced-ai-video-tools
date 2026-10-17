@@ -4,7 +4,7 @@
 
 - Released baseline: v2.0.0
 - Active phase: None; Phase 6 remains planned
-- Last updated: 2026-10-14
+- Last updated: 2026-10-17
 
 V3 extends the completed v2 product without weakening its media or safety
 contract.
@@ -60,3 +60,4 @@ models, caches, and local artifacts remain outside the repository.
 | 2026-10-11 | Record the Phase 6 customizable-upscaling design; implementation and acceptance evidence remain pending. |
 | 2026-10-14 | Authorize Phase 7 before Phase 6 to resolve the mixed color-tag contract and decoded frame-inventory robustness. |
 | 2026-10-14 | Complete Phase 7 with supported-macOS FFmpeg `f0`/`f1`/`f2` fixture evidence and `make check`. |
+| 2026-10-17 | Tighten the Phase 6 design: retain nearest-even native dimensions, use a validated direct-inference pixel limit instead of undeclared tiling, and accept Spandrel `.safetensors` checkpoints only. Implementation remains unapproved. |

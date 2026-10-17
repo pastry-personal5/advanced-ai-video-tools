@@ -1,0 +1,13 @@
+[project]
+name = "spandrel-runner"
+version = "0.4.0"
+description = "MPS-only manifest-driven Spandrel image super-resolution runner"
+readme = "README.md"
+requires-python = ">=3.13.5"
+dependencies = [
+    "numpy>=2.2,<3",
+    "pillow>=11,<13",
+    "spandrel>=0.4.2",
+    "typer>=0.15,<1",
+]
+

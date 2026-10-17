@@ -1,7 +1,7 @@
 # Version 3
 
-Phases 1–5 are complete. [Phase 6 Customizable Upscaling
-Pipelines](6-customizable-upscaling-pipelines.md) is planned; Phases 7–10 are
+Phases 1–5 and Phase 7 are complete. [Phase 6 Customizable Upscaling
+Pipelines](6-customizable-upscaling-pipelines.md) is planned; Phases 8–10 are
 unassigned. Phase 11 Crop and Phase 12 Video Interpolation remain proposed and
 design-gated.
 
