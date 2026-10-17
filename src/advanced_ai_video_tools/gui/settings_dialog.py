@@ -17,6 +17,7 @@ from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShowEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QSplitter,
     QStackedWidget,
     QTextEdit,
@@ -40,9 +42,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from advanced_ai_video_tools.core.models import ToolInfo, ToolOverrides, Toolchain
+from advanced_ai_video_tools.core.models import NativeScale, ProcessingPipeline, ToolInfo, ToolOverrides, Toolchain
 from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, SPACE_2, SPACE_3, SPACE_4
 from advanced_ai_video_tools.gui.worker_lifecycle import connect_completion_cleanup, shutdown_worker_thread
+from advanced_ai_video_tools.services.plan_summary import PIPELINE_LABELS
+from advanced_ai_video_tools.system.spandrel import DEFAULT_SPANDREL_MODELS, DEFAULT_SPANDREL_RUNNER, SUPPORTED_MODEL_SUFFIXES
 from advanced_ai_video_tools.system.settings import DEFAULT_DELETION_RULES, ApplicationSettings, DeletionRule, SettingsError, SettingsStore
 from advanced_ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
 
@@ -141,7 +145,9 @@ def _toolchain_summary(value: object) -> str | None:
     tools = (value.ffmpeg, value.ffprobe, value.realesrgan)
     if any(not isinstance(tool, ToolInfo) or not isinstance(tool.path, Path) or not isinstance(tool.version, str) for tool in tools) or not isinstance(value.model_directory, Path):
         return None
-    return "Resolved tools: " f"FFmpeg {value.ffmpeg.path}; FFprobe {value.ffprobe.path}; " f"Real-ESRGAN {value.realesrgan.path}; models {value.model_directory}."
+    spandrel = f"; Spandrel {value.spandrel_runner.path}; inspected models {len(value.spandrel_inspections)}" if isinstance(value.spandrel_runner, ToolInfo) else ""
+    assert value.realesrgan is not None
+    return "Resolved tools: " f"FFmpeg {value.ffmpeg.path}; FFprobe {value.ffprobe.path}; " f"Real-ESRGAN {value.realesrgan.path}; models {value.model_directory}{spandrel}."
 
 
 def validate_deletion_pattern(pattern: str, *, target: bool = False) -> str | None:
@@ -428,6 +434,136 @@ class InputOutputSettingsPage(QWidget):
         self.allow_mixed_color_tags.toggled.connect(self.draft_changed)
 
 
+class UpscalingSettingsPage(QWidget):
+    """Edit default pipeline intent and user-selected Spandrel checkpoints."""
+
+    draft_changed = Signal()
+
+    def __init__(self, settings: ApplicationSettings, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("upscalingSettingsPage")
+        heading = QLabel("Upscaling Pipeline")
+        heading.setObjectName("settingsPageHeading")
+        explanation = QLabel("Choose the default operation sequence for new jobs. Model files remain user-managed and are inspected before they can be used.")
+        explanation.setWordWrap(True)
+        self.pipeline = QComboBox()
+        self.pipeline.setObjectName("defaultPipeline")
+        for value, label in PIPELINE_LABELS:
+            self.pipeline.addItem(label, value.value)
+        self.pipeline.setCurrentIndex(max(0, self.pipeline.findData(settings.pipeline.value)))
+        self.native_scale = QComboBox()
+        self.native_scale.setObjectName("defaultNativeScale")
+        for scale in NativeScale:
+            self.native_scale.addItem(f"{int(scale)}×", int(scale))
+        self.native_scale.setCurrentIndex(max(0, self.native_scale.findData(int(settings.native_scale))))
+        self.target_height = QSpinBox()
+        self.target_height.setObjectName("defaultTargetHeight")
+        self.target_height.setRange(2, 16384)
+        self.target_height.setSingleStep(2)
+        self.target_height.setSuffix(" px")
+        self.target_height.setValue(settings.target_height)
+        self.model_2x = self._model_field(settings.tools.model_2x, "spandrelModel2xPath", 2)
+        self.model_3x = self._model_field(settings.tools.model_3x, "spandrelModel3xPath", 3)
+        form = QFormLayout()
+        form.setHorizontalSpacing(SPACE_3)
+        form.setVerticalSpacing(SPACE_3)
+        form.addRow("Pipeline", self.pipeline)
+        form.addRow("Native scale", self.native_scale)
+        form.addRow("Desired height", self.target_height)
+        form.addRow("2× model", self._model_row(self.model_2x, "Choose 2× model (.safetensors or .pth)"))
+        form.addRow("3× model", self._model_row(self.model_3x, "Choose 3× model (.safetensors or .pth)"))
+        note = QLabel("2× and 3× models must be .safetensors or .pth RGB super-resolution checkpoints accepted by the configured Spandrel runner; .pth files are loaded only through a restricted tensor-only reader. A blank model uses its factory-default checkpoint from the models directory beside the Spandrel runner, and a missing default blocks only a pipeline that needs it.")
+        note.setWordWrap(True)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(SPACE_4, SPACE_4, SPACE_4, SPACE_4)
+        layout.setSpacing(SPACE_3)
+        layout.addWidget(heading)
+        layout.addWidget(explanation)
+        layout.addLayout(form)
+        layout.addWidget(note)
+        layout.addStretch(1)
+        self.pipeline.currentIndexChanged.connect(self._changed)
+        self.native_scale.currentIndexChanged.connect(self.draft_changed)
+        self.target_height.valueChanged.connect(self.draft_changed)
+        self.model_2x.textChanged.connect(self.draft_changed)
+        self.model_3x.textChanged.connect(self.draft_changed)
+        self._refresh_enabled()
+
+    @staticmethod
+    def _model_field(path: Path | None, object_name: str, scale: int) -> QLineEdit:
+        """Create one model path field whose blank value discloses the factory default."""
+
+        field = QLineEdit(str(path or ""))
+        field.setObjectName(object_name)
+        field.setPlaceholderText(f"Factory default: {DEFAULT_SPANDREL_MODELS[scale]}")
+        return field
+
+    def _model_row(self, field: QLineEdit, caption: str) -> QHBoxLayout:
+        choose = QPushButton("Choose…")
+        choose.clicked.connect(lambda: self._choose_model(field, caption))
+        clear = QPushButton("Clear")
+        clear.clicked.connect(field.clear)
+        row = QHBoxLayout()
+        row.setSpacing(SPACE_2)
+        row.addWidget(field, 1)
+        row.addWidget(choose)
+        row.addWidget(clear)
+        return row
+
+    def _choose_model(self, field: QLineEdit, caption: str) -> None:
+        """Choose one SafeTensors model without mutating another field."""
+
+        selected, _filter = QFileDialog.getOpenFileName(self, caption, field.text(), "Spandrel models (*.safetensors *.pth)")
+        if selected:
+            field.setText(selected)
+
+    def _changed(self) -> None:
+        """Refresh dependent controls and publish the coherent draft."""
+
+        self._refresh_enabled()
+        self.draft_changed.emit()
+
+    def _refresh_enabled(self) -> None:
+        """Enable only controls that affect the selected pipeline."""
+
+        pipeline = self.pipeline_value()
+        self.native_scale.setEnabled(pipeline is ProcessingPipeline.NATIVE)
+        self.target_height.setEnabled(pipeline not in {ProcessingPipeline.CONCAT, ProcessingPipeline.NATIVE})
+
+    def pipeline_value(self) -> ProcessingPipeline:
+        """Return the typed pipeline represented by the combo box."""
+
+        return ProcessingPipeline(str(self.pipeline.currentData()))
+
+    def native_scale_value(self) -> NativeScale:
+        """Return the typed scale represented by the combo box."""
+
+        return NativeScale(int(self.native_scale.currentData()))
+
+    @staticmethod
+    def _optional_path(field: QLineEdit) -> Path | None:
+        value = field.text().strip()
+        return Path(value) if value else None
+
+    def model_paths(self) -> tuple[Path | None, Path | None]:
+        """Return both optional Spandrel model selections."""
+
+        return self._optional_path(self.model_2x), self._optional_path(self.model_3x)
+
+    def structural_error(self) -> tuple[QLineEdit, str] | None:
+        """Reject unsafe or unsupported model path forms locally."""
+
+        for label, field in (("2× model", self.model_2x), ("3× model", self.model_3x)):
+            value = field.text().strip()
+            if not value:
+                continue
+            if "\0" in value:
+                return field, f"{label} contains an invalid null character."
+            if Path(value).suffix.lower() not in SUPPORTED_MODEL_SUFFIXES:
+                return field, f"{label} must use .safetensors or .pth; TorchScript .pt, .ckpt, and other formats are not supported."
+        return None
+
+
 class ExternalToolsPage(QWidget):
     """Edit one coherent external-tool override draft."""
 
@@ -445,7 +581,7 @@ class ExternalToolsPage(QWidget):
 
         heading = QLabel("External Tools")
         heading.setObjectName("settingsPageHeading")
-        explanation = QLabel("Leave an executable blank to resolve it from PATH. Leave the model directory blank to use the models directory beside Real-ESRGAN. Validation includes a small Vulkan inference test.")
+        explanation = QLabel("Leave an executable blank to resolve it from PATH, except the Spandrel runner, whose blank value is the factory-default launcher. Leave the model directory blank to use the models directory beside Real-ESRGAN. Validation includes a small Vulkan inference test.")
         explanation.setWordWrap(True)
 
         self.ffmpeg = QLineEdit(self._path_text(settings.tools.ffmpeg))
@@ -463,7 +599,14 @@ class ExternalToolsPage(QWidget):
         self.model_directory = QLineEdit(self._path_text(settings.tools.model_directory))
         self.model_directory.setObjectName("modelDirectoryPath")
         self.model_directory.setAccessibleName("Real-ESRGAN model directory")
-        self._fields = (self.ffmpeg, self.ffprobe, self.realesrgan, self.model_directory)
+        self.spandrel_runner = QLineEdit(self._path_text(settings.tools.spandrel_runner))
+        self.spandrel_runner.setObjectName("spandrelRunnerPath")
+        self.spandrel_runner.setAccessibleName("Spandrel runner executable path")
+        self.spandrel_runner.setPlaceholderText(f"Factory default: {DEFAULT_SPANDREL_RUNNER}")
+        spandrel_row = self._executable_row(self.spandrel_runner, "Choose Spandrel runner", "useDefaultSpandrelRunnerButton", "Use default")
+        self._model_2x = settings.tools.model_2x
+        self._model_3x = settings.tools.model_3x
+        self._fields = (self.ffmpeg, self.ffprobe, self.realesrgan, self.model_directory, self.spandrel_runner)
         self._validation_error_field: QLineEdit | None = None
         choose_models = QPushButton("Choose…")
         choose_models.setObjectName("chooseModelDirectoryButton")
@@ -485,6 +628,7 @@ class ExternalToolsPage(QWidget):
         form.addRow("FFprobe", ffprobe_row)
         form.addRow("Real-ESRGAN", realesrgan_row)
         form.addRow("Model directory", model_row)
+        form.addRow("Spandrel runner", spandrel_row)
 
         self.status = QLabel("Saved settings have not been changed.")
         self.status.setObjectName("externalToolsValidationStatus")
@@ -524,12 +668,12 @@ class ExternalToolsPage(QWidget):
             value = field.text()
             return Path(value) if value.strip() else None
 
-        return ToolOverrides(optional_path(self.ffmpeg), optional_path(self.ffprobe), optional_path(self.realesrgan), optional_path(self.model_directory))
+        return ToolOverrides(optional_path(self.ffmpeg), optional_path(self.ffprobe), optional_path(self.realesrgan), optional_path(self.model_directory), optional_path(self.spandrel_runner), self._model_2x, self._model_3x)
 
     def structural_error(self) -> tuple[QLineEdit, str] | None:
         """Return the first cheap path-syntax error without touching the filesystem."""
 
-        names = ("FFmpeg", "FFprobe", "Real-ESRGAN", "Model directory")
+        names = ("FFmpeg", "FFprobe", "Real-ESRGAN", "Model directory", "Spandrel runner")
         for name, field in zip(names, self._fields):
             value = field.text()
             if not value.strip():
@@ -616,12 +760,14 @@ class ExternalToolsPage(QWidget):
             return self.ffprobe
         if normalized.startswith(("real-esrgan ", "realesrgan-")) or normalized.startswith("could not launch realesrgan") or "vulkan smoke test" in normalized:
             return self.realesrgan
+        if "spandrel" in normalized:
+            return self.spandrel_runner
         return self.ffmpeg
 
-    def _executable_row(self, field: QLineEdit, caption: str, reset_name: str) -> QHBoxLayout:
+    def _executable_row(self, field: QLineEdit, caption: str, reset_name: str, reset_text: str = "Use PATH") -> QHBoxLayout:
         choose = QPushButton("Choose…")
         choose.clicked.connect(lambda: self._choose_executable(field, caption))
-        use_path = QPushButton("Use PATH")
+        use_path = QPushButton(reset_text)
         use_path.setObjectName(reset_name)
         use_path.clicked.connect(field.clear)
         self._path_controls.extend((choose, use_path))
@@ -681,6 +827,7 @@ class SettingsDialog(QDialog):
     SIDEBAR_MINIMUM_WIDTH = 240
     SIDEBAR_MAXIMUM_WIDTH = 360
     FILE_PATH = ("Editor", "File")
+    UPSCALING_PATH = ("Processing", "Upscaling")
     INPUT_OUTPUT_PATH = ("Input and Output", "Color Policy")
     EXTERNAL_TOOLS_PATH = ("Tools", "External Tools")
 
@@ -725,6 +872,7 @@ class SettingsDialog(QDialog):
         self.tree.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         self.file_page = FileSettingsPage(settings)
+        self.upscaling_page = UpscalingSettingsPage(settings)
         self.input_output_page = InputOutputSettingsPage(settings)
         self.external_tools_page = ExternalToolsPage(settings)
         self.no_results_page = QLabel("No settings found")
@@ -733,8 +881,9 @@ class SettingsDialog(QDialog):
 
         descriptors = (
             _SettingsPageDescriptor(self.FILE_PATH, "editor file automatic deletion rules related files trash source target pattern add edit delete enable disable move up down reorder restore built-in defaults changes applied settings saved", self.file_page),
+            _SettingsPageDescriptor(self.UPSCALING_PATH, "processing upscaling pipeline auto concat native scale desired height 2x 3x 4x resize spandrel model safetensors pth", self.upscaling_page),
             _SettingsPageDescriptor(self.INPUT_OUTPUT_PATH, "input output color tags mixed untagged sdr bt709 transfer primaries policy allow", self.input_output_page),
-            _SettingsPageDescriptor(self.EXTERNAL_TOOLS_PATH, "tools external ffmpeg ffprobe real esrgan realesrgan executable model directory path choose use automatic blank resolve validation validate small vulkan inference", self.external_tools_page),
+            _SettingsPageDescriptor(self.EXTERNAL_TOOLS_PATH, "tools external ffmpeg ffprobe real esrgan realesrgan spandrel runner executable model directory path choose use automatic blank resolve validation validate small vulkan inference", self.external_tools_page),
         )
         self._descriptors = {descriptor.path: descriptor for descriptor in descriptors}
         self._leaf_items: dict[tuple[str, str], QTreeWidgetItem] = {}
@@ -742,6 +891,7 @@ class SettingsDialog(QDialog):
         self._scroll_pages: dict[tuple[str, str], QScrollArea] = {}
         self._page_states = {
             self.FILE_PATH: SettingsValidationState.SAVED,
+            self.UPSCALING_PATH: SettingsValidationState.SAVED,
             self.INPUT_OUTPUT_PATH: SettingsValidationState.SAVED,
             self.EXTERNAL_TOOLS_PATH: SettingsValidationState.SAVED,
         }
@@ -810,6 +960,7 @@ class SettingsDialog(QDialog):
         self.search.textChanged.connect(self._filter_pages)
         self.tree.itemSelectionChanged.connect(self._selection_changed)
         self.file_page.draft_changed.connect(self._draft_changed)
+        self.upscaling_page.draft_changed.connect(self._upscaling_changed)
         self.input_output_page.draft_changed.connect(self._input_output_changed)
         self.external_tools_page.draft_changed.connect(self._external_tools_changed)
         self.external_tools_page.validation_requested.connect(lambda: self._begin_external_tools_validation(commit_after=False))
@@ -828,7 +979,20 @@ class SettingsDialog(QDialog):
     def draft_settings(self) -> ApplicationSettings:
         """Return the complete immutable settings draft represented by all pages."""
 
-        return replace(self._settings, tools=self.external_tools_page.overrides(), deletion_rules=self.file_page.settings_value(), allow_mixed_color_tags=self.input_output_page.allow_mixed_color_tags.isChecked())
+        return replace(
+            self._settings,
+            tools=self._tool_draft(),
+            deletion_rules=self.file_page.settings_value(),
+            allow_mixed_color_tags=self.input_output_page.allow_mixed_color_tags.isChecked(),
+            pipeline=self.upscaling_page.pipeline_value(),
+            native_scale=self.upscaling_page.native_scale_value(),
+            target_height=self.upscaling_page.target_height.value(),
+        )
+
+    def _tool_draft(self) -> ToolOverrides:
+        base = self.external_tools_page.overrides()
+        model_2x, model_3x = self.upscaling_page.model_paths()
+        return replace(base, model_2x=model_2x, model_3x=model_3x)
 
     @property
     def dirty(self) -> bool:
@@ -901,8 +1065,14 @@ class SettingsDialog(QDialog):
         self._refresh_page_labels()
         self._refresh_dialog_status()
 
+    def _upscaling_changed(self) -> None:
+        model_2x, model_3x = self.upscaling_page.model_paths()
+        processing_changed = self.upscaling_page.pipeline_value() != self._settings.pipeline or self.upscaling_page.native_scale_value() != self._settings.native_scale or self.upscaling_page.target_height.value() != self._settings.target_height or model_2x != self._settings.tools.model_2x or model_3x != self._settings.tools.model_3x
+        self._page_states[self.UPSCALING_PATH] = SettingsValidationState.INVALID if self.upscaling_page.structural_error() is not None else (SettingsValidationState.VALID if processing_changed else SettingsValidationState.SAVED)
+        self._external_tools_changed()
+
     def _external_tools_changed(self) -> None:
-        overrides = self.external_tools_page.overrides()
+        overrides = self._tool_draft()
         structural_error = self.external_tools_page.structural_error()
         if structural_error is not None:
             field, message = structural_error
@@ -926,6 +1096,8 @@ class SettingsDialog(QDialog):
     def _refresh_dialog_status(self) -> None:
         if not self.dirty:
             self.status.setText("Settings are unchanged.")
+        elif any(state is SettingsValidationState.INVALID for state in self._page_states.values()):
+            self.status.setText("Settings contain a validation error. Correct it and try again; saved settings are unchanged.")
         elif self._page_states[self.EXTERNAL_TOOLS_PATH] is SettingsValidationState.INVALID:
             self.status.setText("External Tools contains a validation error. Correct it and try again; saved settings are unchanged.")
         elif self._page_states[self.EXTERNAL_TOOLS_PATH] is SettingsValidationState.NEEDS_VALIDATION:
@@ -958,6 +1130,14 @@ class SettingsDialog(QDialog):
         if self._validator.busy:
             self.status.setText("External-tool validation is already running. Other settings remain available.")
             return
+        model_error = self.upscaling_page.structural_error()
+        if model_error is not None:
+            field, message = model_error
+            self._page_states[self.UPSCALING_PATH] = SettingsValidationState.INVALID
+            self.status.setText(message)
+            self._refresh_page_labels()
+            self._reveal_page(self.UPSCALING_PATH, field)
+            return
         structural_error = self.external_tools_page.structural_error()
         if structural_error is not None:
             field, message = structural_error
@@ -970,11 +1150,12 @@ class SettingsDialog(QDialog):
             self._refresh_page_labels()
             self._reveal_page(self.EXTERNAL_TOOLS_PATH, focus)
             return
-        overrides = self.external_tools_page.overrides()
+        overrides = self._tool_draft()
         self._pending_tools = overrides
         self._commit_after_validation = commit_after
         if commit_after:
             self.file_page.setEnabled(False)
+            self.upscaling_page.setEnabled(False)
             self.input_output_page.setEnabled(False)
             self.external_tools_page.set_commit_locked(True)
             self.search.setEnabled(False)
@@ -999,6 +1180,7 @@ class SettingsDialog(QDialog):
             if self._validator.busy and self._pending_tools == draft.tools:
                 self._commit_after_validation = True
                 self.file_page.setEnabled(False)
+                self.upscaling_page.setEnabled(False)
                 self.input_output_page.setEnabled(False)
                 self.external_tools_page.set_commit_locked(True)
                 self.search.setEnabled(False)
@@ -1027,6 +1209,7 @@ class SettingsDialog(QDialog):
 
     def _unlock_after_commit(self) -> None:
         self.file_page.setEnabled(True)
+        self.upscaling_page.setEnabled(True)
         self.input_output_page.setEnabled(True)
         self.external_tools_page.set_commit_locked(False)
         self.search.setEnabled(True)
@@ -1040,7 +1223,7 @@ class SettingsDialog(QDialog):
         summary = _toolchain_summary(resolved)
         if summary is None and self._validated_tools == value:
             self._validated_tools = None
-        if value != self.external_tools_page.overrides():
+        if value != self._tool_draft():
             self._commit_after_validation = False
             self._unlock_after_commit()
             self._external_tools_changed()
@@ -1076,7 +1259,7 @@ class SettingsDialog(QDialog):
         self._pending_tools = None
         if self._validated_tools == value:
             self._validated_tools = None
-        if value != self.external_tools_page.overrides():
+        if value != self._tool_draft():
             self._commit_after_validation = False
             self._unlock_after_commit()
             self._external_tools_changed()

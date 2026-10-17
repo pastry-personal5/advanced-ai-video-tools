@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QLabel, QLis
 
 from advanced_ai_video_tools.core.models import IssueCode, IssueSeverity, JobRequest, PreflightReport, ProgressEvent
 from advanced_ai_video_tools.gui.preflight import GuiPreflightController
+from advanced_ai_video_tools.services.plan_summary import PIPELINE_LABELS, ai_plan_summary
 from advanced_ai_video_tools.services.queue import JobQueue, QueueError
 from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
 
@@ -43,6 +44,18 @@ class PreflightDialog(QDialog):
         heading.setWordWrap(True)
         issues = QListWidget()
         issues.setObjectName("preflightIssues")
+        if report.plan is not None:
+            plan = report.plan
+            pipeline_label = dict(PIPELINE_LABELS)[plan.pipeline]
+            for text in (
+                f"Pipeline — {pipeline_label}",
+                f"Output — {plan.output_width}×{plan.output_height}",
+                f"AI passes — {ai_plan_summary(plan)}",
+                f"Workspace — {plan.required_free_bytes:,} bytes free required",
+            ):
+                summary = QListWidgetItem(text)
+                summary.setFlags(Qt.ItemFlag.NoItemFlags)
+                issues.addItem(summary)
         if not report.issues:
             issues.addItem("READY — no warnings")
         else:
@@ -157,7 +170,8 @@ class JobSubmissionController(QObject):
             self.status_changed.emit("Explicit dropped-stream acknowledgement is required.")
             return
         acknowledgement_keys = tuple(issue.acknowledgement_key for issue in preflight_report.issues if issue.code is IssueCode.STREAM_ACKNOWLEDGEMENT and issue.acknowledgement_key is not None)
-        request = replace(job_request, acknowledge_dropped_streams=stream_ack_required, acknowledged_stream_keys=acknowledgement_keys)
+        inspections = preflight_report.toolchain.spandrel_inspections if preflight_report.toolchain is not None else ()
+        request = replace(job_request, acknowledge_dropped_streams=stream_ack_required, acknowledged_stream_keys=acknowledgement_keys, spandrel_inspections=inspections)
         try:
             job_id = self._queue.submit(request)
         except (QueueError, ValueError) as error:
@@ -185,6 +199,8 @@ class JobSubmissionController(QObject):
             recent_input_directory=request.inputs[0].parent if request.inputs else self._settings.recent_input_directory,
             recent_output_directory=request.output_directory,
             target_height=request.target_height,
+            pipeline=request.pipeline,
+            native_scale=request.native_scale or self._settings.native_scale,
         )
         try:
             self._settings_store.save(updated)

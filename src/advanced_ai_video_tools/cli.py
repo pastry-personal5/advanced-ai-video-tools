@@ -10,19 +10,24 @@ from pathlib import Path
 
 from advanced_ai_video_tools import __version__
 from advanced_ai_video_tools.core.models import (
+    JobPlan,
     JobRequest,
+    NativeScale,
     OverwriteMode,
     PipelineStage,
     PreflightReport,
     ProgressEvent,
+    ProcessingPipeline,
     ToolOverrides,
 )
 from advanced_ai_video_tools.services.pipeline import PipelineCancelled, PipelineFailed, PipelineResult, PipelineService
+from advanced_ai_video_tools.services.plan_summary import ai_plan_summary, ai_skipped
 from advanced_ai_video_tools.services.preflight import PreflightService
 from advanced_ai_video_tools.gui.identity import GUI_DISPLAY_NAME, GUI_ORGANIZATION_NAME, LEGACY_CLI_COMMAND
 from advanced_ai_video_tools.identity import IDENTITY
 from advanced_ai_video_tools.system.diagnostics import configure_logging, current_log_path
 from advanced_ai_video_tools.system.processes import CancellationToken
+from advanced_ai_video_tools.system.spandrel import DEFAULT_SPANDREL_MODELS
 
 
 def _add_job_arguments(command: argparse.ArgumentParser) -> None:
@@ -30,8 +35,10 @@ def _add_job_arguments(command: argparse.ArgumentParser) -> None:
 
     command.add_argument("--input", action="append", required=True, type=Path)
     command.add_argument("--output-dir", required=True, type=Path)
-    command.add_argument("--output", type=Path, help="explicit .mp4 destination")
+    command.add_argument("--output", type=Path, help="explicit .mp4 destination, or matching .mov for concat only")
     command.add_argument("--height", type=int, default=2160)
+    command.add_argument("--pipeline", choices=tuple(value.value for value in ProcessingPipeline), default=ProcessingPipeline.AUTO.value)
+    command.add_argument("--scale", type=int, choices=(2, 3, 4), help="required only for --pipeline native")
     command.add_argument("--model", default="realesrgan-x4plus")
     command.add_argument("--acknowledge-dropped-streams", action="store_true")
     command.add_argument("--allow-mixed-color-tags", action="store_true", help="allow untagged clips to use the agreed declared SDR color profile")
@@ -40,6 +47,9 @@ def _add_job_arguments(command: argparse.ArgumentParser) -> None:
     command.add_argument("--ffprobe", type=Path)
     command.add_argument("--realesrgan", type=Path)
     command.add_argument("--model-dir", type=Path)
+    command.add_argument("--spandrel-runner", type=Path, help="Spandrel runner executable (default: the checkout's tools/spandrel-runner/spandrel-runner; PATH is never searched)")
+    command.add_argument("--model-2x", type=Path, help=f"2x checkpoint (default: {DEFAULT_SPANDREL_MODELS[2]} in the models directory beside the runner)")
+    command.add_argument("--model-3x", type=Path, help=f"3x checkpoint (default: {DEFAULT_SPANDREL_MODELS[3]} in the models directory beside the runner)")
     command.add_argument("--json", action="store_true", dest="as_json")
 
 
@@ -59,12 +69,23 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _request(arguments: argparse.Namespace) -> JobRequest:
+    pipeline = ProcessingPipeline(arguments.pipeline)
+    if pipeline is ProcessingPipeline.NATIVE and arguments.scale is None:
+        raise ValueError("--scale is required for --pipeline native")
+    if pipeline is not ProcessingPipeline.NATIVE and arguments.scale is not None:
+        raise ValueError("--scale is valid only with --pipeline native")
+    native_scale = NativeScale(arguments.scale) if arguments.scale is not None else None
+    uses_spandrel = pipeline is ProcessingPipeline.TWO_X_THREE_X_RESIZE or (pipeline is ProcessingPipeline.NATIVE and native_scale in {NativeScale.TWO, NativeScale.THREE})
+    if not uses_spandrel and any(value is not None for value in (arguments.spandrel_runner, arguments.model_2x, arguments.model_3x)):
+        raise ValueError("Spandrel runner and model flags are valid only for a pipeline that can execute a 2x or 3x Spandrel pass")
     return JobRequest(
         inputs=tuple(arguments.input),
         output_directory=arguments.output_dir,
         explicit_output_path=arguments.output,
         target_height=arguments.height,
         model_name=arguments.model,
+        pipeline=pipeline,
+        native_scale=native_scale,
         acknowledge_dropped_streams=arguments.acknowledge_dropped_streams,
         allow_mixed_color_tags=arguments.allow_mixed_color_tags,
         overwrite_mode=(OverwriteMode.NO_OVERWRITE if arguments.no_overwrite else OverwriteMode.REPLACE),
@@ -73,8 +94,19 @@ def _request(arguments: argparse.Namespace) -> JobRequest:
             ffprobe=arguments.ffprobe,
             realesrgan=arguments.realesrgan,
             model_directory=arguments.model_dir,
+            spandrel_runner=arguments.spandrel_runner,
+            model_2x=arguments.model_2x,
+            model_3x=arguments.model_3x,
         ),
     )
+
+
+def _ai_scale_text(plan: JobPlan) -> str:
+    """Keep Auto's historical wording while naming concat only distinctly."""
+
+    if plan.pipeline is ProcessingPipeline.CONCAT:
+        return "not used"
+    return str(plan.ai_scale) if plan.ai_scale else "skipped"
 
 
 def _json_report(report: PreflightReport) -> str:
@@ -102,6 +134,22 @@ def _json_report(report: PreflightReport) -> str:
             "output_dimensions": [plan.output_width, plan.output_height],
             "output_frame_rate": str(plan.output_frame_rate),
             "ai_scale": plan.ai_scale,
+            "ai_skipped": ai_skipped(plan),
+            "ai_summary": ai_plan_summary(plan),
+            "pipeline": plan.pipeline.value,
+            "native_scale": int(plan.native_scale) if plan.native_scale is not None else None,
+            "passes": [
+                {
+                    "index": item.index,
+                    "backend": item.backend.value,
+                    "scale": item.scale,
+                    "input_dimensions": [item.input_width, item.input_height],
+                    "output_dimensions": [item.output_width, item.output_height],
+                    "executable": str(item.executable_path),
+                    "model": str(item.model_path),
+                }
+                for item in plan.upscale_passes
+            ],
             "model": plan.model_name,
             "concat_strategy": plan.concat_strategy.value,
             "output_audio_layout": plan.output_audio_layout,
@@ -131,7 +179,10 @@ def _text_report(report: PreflightReport) -> str:
             (
                 f"Output: {plan.output_path}",
                 f"Video: {plan.output_width}x{plan.output_height} " f"at {plan.output_frame_rate}",
-                f"AI scale: {plan.ai_scale or 'skipped'}",
+                f"AI scale: {_ai_scale_text(plan)}",
+                f"AI: {ai_plan_summary(plan)}",
+                f"Pipeline: {plan.pipeline.value}",
+                "Passes: " + (", ".join(f"{item.index}:{item.backend.value}-{item.scale}x" for item in plan.upscale_passes) or "none"),
                 f"Concat strategy: {plan.concat_strategy.value}",
                 f"Required workspace free space: {plan.required_free_bytes:,} bytes",
             )
@@ -159,6 +210,10 @@ def _json_processing_result(result: PipelineResult) -> str:
             "primaries": plan.output_color_profile.primaries,
         },
         "ai_scale": plan.ai_scale,
+        "ai_skipped": ai_skipped(plan),
+        "pipeline": plan.pipeline.value,
+        "native_scale": int(plan.native_scale) if plan.native_scale is not None else None,
+        "passes": [{"index": item.index, "backend": item.backend.value, "scale": item.scale} for item in plan.upscale_passes],
         "concat_strategy": plan.concat_strategy.value,
         "audio_mode": result.finalization.audio_mode.value,
         "duration": str(video.duration) if video is not None and video.duration is not None else None,
@@ -182,6 +237,7 @@ def _text_processing_result(result: PipelineResult) -> str:
         "Processing completed.",
         f"Output: {result.output_path}",
         f"Video: {plan.output_width}x{plan.output_height} at {plan.output_frame_rate}",
+        f"Pipeline: {plan.pipeline.value}",
         f"Audio: {result.finalization.audio_mode.value}",
     ]
     if current_log_path() is not None:
@@ -194,7 +250,8 @@ def _text_processing_result(result: PipelineResult) -> str:
 
 def _progress(event: ProgressEvent) -> None:
     measured = f"{event.completed}/{event.total}" if event.total is not None else str(event.completed)
-    sys.stderr.write(f"[{event.stage.value} {measured}] {event.message}\n")
+    pass_label = f" pass={event.pass_index}/{event.pass_count} scale={event.pass_scale}x" if event.pass_index is not None else ""
+    sys.stderr.write(f"[{event.stage.value} {measured}{pass_label}] {event.message}\n")
 
 
 def _processing_error_payload(status: str, error: PipelineFailed | PipelineCancelled) -> str:
@@ -220,7 +277,12 @@ def _with_log_path(message: str) -> str:
 
 def _run_preflight(parsed: argparse.Namespace) -> int:
     service = PreflightService()
-    report = service.execute_preflight(_request(parsed))
+    try:
+        request = _request(parsed)
+    except ValueError as error:
+        sys.stderr.write(f"Invalid job arguments: {error}\n")
+        return 2
+    report = service.execute_preflight(request)
     rendered = _json_report(report) if parsed.as_json else _text_report(report)
     sys.stdout.write(f"{rendered}\n")
     if report.plan is not None:
@@ -233,7 +295,12 @@ def _run_processing(parsed: argparse.Namespace) -> int:
     previous_handler = signal.getsignal(signal.SIGINT)
     signal.signal(signal.SIGINT, lambda _signum, _frame: token.cancel())
     try:
-        result = PipelineService().execute_pipeline(_request(parsed), cancellation=token, progress=None if parsed.as_json else _progress)
+        try:
+            request = _request(parsed)
+        except ValueError as error:
+            sys.stderr.write(f"Invalid job arguments: {error}\n")
+            return 2
+        result = PipelineService().execute_pipeline(request, cancellation=token, progress=None if parsed.as_json else _progress)
     except PipelineCancelled as error:
         rendered = _processing_error_payload("cancelled", error) if parsed.as_json else _with_log_path(f"Processing cancelled during {error.stage.value}: {error}")
         (sys.stdout if parsed.as_json else sys.stderr).write(rendered + "\n")

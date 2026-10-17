@@ -9,6 +9,7 @@ import os
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from PySide6.QtCore import QCoreApplication, QMimeData, QObject, QSize, QThread,
 from PySide6.QtGui import QColor  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 from PySide6.QtWidgets import QApplication, QComboBox, QGroupBox, QLabel, QListWidget, QPushButton, QScrollArea, QToolButton, QWidget  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
-from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProgressEvent, Rational, ToolOverrides  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, IssueCode, IssueSeverity, JobPlan, JobRequest, NativeScale, OverwriteMode, PipelineStage, PreflightIssue, PreflightReport, ProcessingPipeline, ProgressEvent, Rational, SpandrelInspection, ToolInfo, ToolOverrides, Toolchain, UpscaleBackend, UpscalePassPlan, FileIdentity  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.editor import EDITOR_SETTINGS_WIDTH, OUTPUT_DIRECTORY_ICON_COLOR, OUTPUT_DIRECTORY_ICON_SIZE, SOURCE_CLIP_ACTION_ICON_SIZE, SOURCE_CLIP_FILENAME_MAX_DISPLAY_WIDTH, SOURCE_CLIP_ROW_HEIGHT, JobEditor  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.preflight import GuiPreflightController  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.source_clip_actions import SourceClipTrashService  # noqa: E402  # pylint: disable=wrong-import-position
@@ -319,7 +320,30 @@ def test_target_height_remains_custom_without_presets(qt_app: QApplication) -> N
     assert editor.target_height.value() == 1440
     assert editor.target_height.suffix() == " px"
     assert editor.target_height.singleStep() == 2
-    assert editor.findChildren(QComboBox) == []
+    assert {combo.objectName() for combo in editor.findChildren(QComboBox)} == {"jobPipeline", "jobNativeScale"}
+
+
+def test_editor_freezes_pipeline_scale_and_concat_output_suffix(qt_app: QApplication, tmp_path: Path) -> None:
+    """The editor freezes pipeline fields and derives concat's MOV suffix."""
+
+    del qt_app
+    output = tmp_path / "output"
+    output.mkdir()
+    source = tmp_path / "clip.mov"
+    source.write_bytes(b"clip")
+    editor = JobEditor(ApplicationSettings(pipeline=ProcessingPipeline.NATIVE, native_scale=NativeScale.THREE), clock=lambda: _CREATED)
+    editor.add_inputs((source,))
+    editor.output_directory.setText(str(output))
+    request = editor.create_job_request()
+    assert request.pipeline is ProcessingPipeline.NATIVE
+    assert request.native_scale is NativeScale.THREE
+    assert not editor.target_height.isEnabled()
+
+    editor.pipeline.setCurrentIndex(editor.pipeline.findData(ProcessingPipeline.CONCAT.value))
+    concat = editor.create_job_request()
+    assert concat.pipeline is ProcessingPipeline.CONCAT
+    assert concat.native_scale is None
+    assert concat.generated_output_basename is not None and concat.generated_output_basename.endswith(".mov")
 
 
 def test_source_clip_reorder_controls_are_grouped_and_right_aligned(qt_app: QApplication) -> None:
@@ -664,3 +688,78 @@ def test_submission_controller_refuses_unrelated_error_even_if_provider_accepts(
     qt_app.processEvents()
 
     assert not queue.requests
+
+
+def test_preflight_dialog_discloses_pipeline_dimensions_ordered_passes_skip_and_workspace(qt_app: QApplication, tmp_path: Path) -> None:
+    """The review lists every frozen Phase 6 decision before the job can be queued."""
+
+    del qt_app
+    runner = tmp_path / "spandrel-runner"
+    passes = (
+        UpscalePassPlan(1, UpscaleBackend.SPANDREL, 2, 1920, 1080, 3840, 2160, runner, tmp_path / "x2.safetensors"),
+        UpscalePassPlan(2, UpscaleBackend.SPANDREL, 3, 3840, 2160, 11520, 6480, runner, tmp_path / "x3.safetensors"),
+    )
+    plan = replace(_plan(tmp_path), pipeline=ProcessingPipeline.TWO_X_THREE_X_RESIZE, upscale_passes=passes, output_width=7680, output_height=4320, required_free_bytes=123_456_789)
+    rows = _dialog_rows(PreflightDialog(PreflightReport((), plan, None)))
+    assert rows[:4] == ["Pipeline — 2× → 3× → resize", "Output — 7680×4320", "AI passes — 2× Spandrel → 3× Spandrel", "Workspace — 123,456,789 bytes free required"]
+
+    skipped = _dialog_rows(PreflightDialog(PreflightReport((), replace(_plan(tmp_path), pipeline=ProcessingPipeline.FOUR_X_RESIZE), None)))
+    assert "AI passes — skipped (source height already meets the desired height)" in skipped
+    concat = _dialog_rows(PreflightDialog(PreflightReport((), replace(_plan(tmp_path), pipeline=ProcessingPipeline.CONCAT), None)))
+    assert "AI passes — not used (concat only; streams are copied, never re-encoded)" in concat
+
+
+def _dialog_rows(dialog: PreflightDialog) -> list[str]:
+    issues = dialog.findChild(QListWidget, "preflightIssues")
+    return [issues.item(index).text() for index in range(issues.count())]
+
+
+def test_queued_request_freezes_reviewed_inspections_and_saves_only_pipeline_intent(qt_app: QApplication, tmp_path: Path) -> None:
+    """Submission copies the reviewed model records and persists intent, never model files."""
+
+    (tmp_path / "input").mkdir()
+    (tmp_path / "output").mkdir()
+    model = tmp_path / "DAT_x2.safetensors"
+    runner = ToolInfo(tmp_path / "spandrel-runner", "runner")
+    stat_values = (1, 2, 3, 4)
+    identity = FileIdentity(model, *stat_values, "a" * 64)
+    inspection = SpandrelInspection(1, "0.4.0", identity, "DAT", "SR", 3, 3, 2, 1, 1, False, 20_000_000, "mps", "float32")
+    media = ToolInfo(tmp_path / "tool", "version")
+    report = PreflightReport((), _plan(tmp_path), Toolchain(media, media, None, None, runner, (inspection,)))
+    request = replace(_request(tmp_path), pipeline=ProcessingPipeline.NATIVE, native_scale=NativeScale.TWO, tools=ToolOverrides(model_2x=model))
+    preview, queue = FakePreview(), RecordingQueue()
+    store = SettingsStore(tmp_path / "settings.yaml")
+    settings = ApplicationSettings(tools=ToolOverrides(model_2x=model), target_height=720)
+    controller = JobSubmissionController(queue, preview, settings, store, decision_provider=lambda _parent, _report: PreflightDecision(True, False))  # type: ignore[arg-type]
+    controller.begin_submission(request)
+    preview.finished.emit(request, report)
+    qt_app.processEvents()
+
+    assert len(queue.requests) == 1
+    queued = queue.requests[0]
+    assert queued.spandrel_inspections == (inspection,)
+    assert (queued.pipeline, queued.native_scale, queued.tools.model_2x) == (ProcessingPipeline.NATIVE, NativeScale.TWO, model)
+    persisted = store.load()
+    assert (persisted.pipeline, persisted.native_scale, persisted.tools.model_2x) == (ProcessingPipeline.NATIVE, NativeScale.TWO, model)
+
+
+def test_editor_requests_keep_the_tools_they_were_created_with_after_settings_change(qt_app: QApplication, tmp_path: Path) -> None:
+    """A later Settings change affects new requests only; a queued request is already frozen."""
+
+    del qt_app
+    output = tmp_path / "output"
+    output.mkdir()
+    source = tmp_path / "clip.mov"
+    source.write_bytes(b"clip")
+    old_model, new_model = tmp_path / "old.safetensors", tmp_path / "new.safetensors"
+    editor = JobEditor(ApplicationSettings(tools=ToolOverrides(model_2x=old_model), pipeline=ProcessingPipeline.NATIVE, native_scale=NativeScale.TWO), clock=lambda: _CREATED)
+    editor.add_inputs((source,))
+    editor.output_directory.setText(str(output))
+    queued = editor.create_job_request()
+
+    editor.apply_settings(ApplicationSettings(tools=ToolOverrides(model_2x=new_model), pipeline=ProcessingPipeline.AUTO))
+    editor.output_directory.setText(str(output))
+    fresh = editor.create_job_request()
+
+    assert (queued.pipeline, queued.native_scale, queued.tools.model_2x) == (ProcessingPipeline.NATIVE, NativeScale.TWO, old_model)
+    assert (fresh.pipeline, fresh.native_scale, fresh.tools.model_2x) == (ProcessingPipeline.AUTO, None, new_model)

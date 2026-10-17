@@ -16,11 +16,12 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QSize, Qt, QThread  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QScrollArea, QSplitter  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QPushButton, QScrollArea, QSplitter  # noqa: E402  # pylint: disable=wrong-import-position,no-name-in-module
 
-from advanced_ai_video_tools.core.models import ToolInfo, ToolOverrides, Toolchain  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.core.models import NativeScale, ProcessingPipeline, ToolInfo, ToolOverrides, Toolchain  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.gui.settings_dialog import DeletionRuleDialog, ExternalToolsPage, ExternalToolsValidator, FileSettingsPage, SettingsDialog, SettingsDialogSessionState, SettingsValidationState  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.system.settings import ApplicationSettings, DeletionRule, SettingsError, SettingsStore  # noqa: E402  # pylint: disable=wrong-import-position
+from advanced_ai_video_tools.system import spandrel  # noqa: E402  # pylint: disable=wrong-import-position
 from advanced_ai_video_tools.system.tools import ToolDiscoveryError  # noqa: E402  # pylint: disable=wrong-import-position
 
 
@@ -139,14 +140,16 @@ def test_dialog_has_exact_navigation_pages_dimensions_and_noncollapsible_sidebar
 
     assert dialog.size() == QSize(1080, 720)
     assert dialog.minimumSize() == QSize(960, 600)
-    assert dialog.tree.topLevelItemCount() == 3
+    assert dialog.tree.topLevelItemCount() == 4
 
     assert dialog.tree.topLevelItem(0).text(0) == "Editor"
     assert dialog.tree.topLevelItem(0).child(0).text(0) == "File · Saved"
-    assert dialog.tree.topLevelItem(1).text(0) == "Input and Output"
-    assert dialog.tree.topLevelItem(1).child(0).text(0) == "Color Policy · Saved"
-    assert dialog.tree.topLevelItem(2).text(0) == "Tools"
-    assert dialog.tree.topLevelItem(2).child(0).text(0) == "External Tools · Saved"
+    assert dialog.tree.topLevelItem(1).text(0) == "Processing"
+    assert dialog.tree.topLevelItem(1).child(0).text(0) == "Upscaling · Saved"
+    assert dialog.tree.topLevelItem(2).text(0) == "Input and Output"
+    assert dialog.tree.topLevelItem(2).child(0).text(0) == "Color Policy · Saved"
+    assert dialog.tree.topLevelItem(3).text(0) == "Tools"
+    assert dialog.tree.topLevelItem(3).child(0).text(0) == "External Tools · Saved"
     assert dialog.current_page_path == SettingsDialog.FILE_PATH
     assert dialog.tree.minimumWidth() == 240
     assert dialog.tree.maximumWidth() == 360
@@ -178,7 +181,32 @@ def test_dialog_has_exact_navigation_pages_dimensions_and_noncollapsible_sidebar
         qt_app.processEvents()
         assert 240 <= dialog.tree.width() <= 360
         assert dialog.stack.width() >= 620
-    dialog.close()
+    dialog.cancel_button.click()
+    validator.shutdown()
+
+
+def test_upscaling_page_edits_one_atomic_pipeline_and_model_draft(qt_app: QApplication, tmp_path: Path) -> None:
+    """The upscaling page contributes one coherent settings transaction."""
+
+    del qt_app
+    validator = ExternalToolsValidator(RecordingDiscovery(_toolchain(tmp_path)))  # type: ignore[arg-type]
+    settings = ApplicationSettings(pipeline=ProcessingPipeline.NATIVE, native_scale=NativeScale.THREE, target_height=1440)
+    dialog = _dialog(settings, validator, RecordingStore())
+    page = dialog.upscaling_page
+    assert page.pipeline_value() is ProcessingPipeline.NATIVE
+    assert page.native_scale_value() is NativeScale.THREE
+    assert not page.target_height.isEnabled()
+
+    page.pipeline.setCurrentIndex(page.pipeline.findData(ProcessingPipeline.TWO_X_THREE_X_RESIZE.value))
+    page.target_height.setValue(2160)
+    page.model_2x.setText(str(tmp_path / "DAT_x2.safetensors"))
+    page.model_3x.setText(str(tmp_path / "DAT_x3.safetensors"))
+    draft = dialog.draft_settings()
+    assert draft.pipeline is ProcessingPipeline.TWO_X_THREE_X_RESIZE
+    assert draft.target_height == 2160
+    assert draft.tools.model_2x == tmp_path / "DAT_x2.safetensors"
+    assert draft.tools.model_3x == tmp_path / "DAT_x3.safetensors"
+    dialog.cancel_button.click()
     validator.shutdown()
 
 
@@ -617,3 +645,108 @@ def test_deletion_rule_editor_marks_invalid_fields_and_enables_save_only_when_va
     assert not dialog.save_button.isEnabled()
     assert dialog.targets.property("validationError") is True
     assert "safe non-empty basename" in dialog.targets.accessibleDescription()
+
+
+def test_changed_model_is_validated_off_the_gui_thread_then_saved_in_one_atomic_draft(qt_app: QApplication, tmp_path: Path) -> None:
+    """A model choice and the pipeline default commit together, only after inspection passes."""
+
+    store = RecordingStore()
+    discovery = RecordingDiscovery(_toolchain(tmp_path))
+    validator = ExternalToolsValidator(discovery)  # type: ignore[arg-type]
+    dialog = _dialog(ApplicationSettings(), validator, store)
+    model = tmp_path / "DAT_x2.safetensors"
+    page = dialog.upscaling_page
+    page.pipeline.setCurrentIndex(page.pipeline.findData(ProcessingPipeline.NATIVE.value))
+    page.native_scale.setCurrentIndex(page.native_scale.findData(2))
+    page.model_2x.setText(str(model))
+    dialog.ok_button.click()
+
+    assert store.saved == []
+    assert _process_until(qt_app, lambda: dialog.result() == int(QDialog.DialogCode.Accepted) and not validator.busy)
+    assert discovery.calls == [ToolOverrides(model_2x=model)]
+    assert discovery.thread_identifier != threading.get_ident()
+    assert len(store.saved) == 1
+    assert (store.saved[0].pipeline, store.saved[0].native_scale, store.saved[0].tools) == (ProcessingPipeline.NATIVE, NativeScale.TWO, ToolOverrides(model_2x=model))
+    validator.shutdown()
+
+
+def test_unsupported_model_formats_are_rejected_locally_and_nothing_is_validated_or_saved(qt_app: QApplication, tmp_path: Path) -> None:
+    """TorchScript .pt and other formats never reach the runner or the settings document; .pth does."""
+
+    del qt_app
+    store = RecordingStore()
+    discovery = RecordingDiscovery(_toolchain(tmp_path))
+    validator = ExternalToolsValidator(discovery)  # type: ignore[arg-type]
+    dialog = _dialog(ApplicationSettings(), validator, store)
+    for name in ("old-model.pt", "old-model.PT", "old-model.ckpt"):
+        dialog.upscaling_page.model_3x.setText(str(tmp_path / name))
+        assert dialog._page_states[SettingsDialog.UPSCALING_PATH] is SettingsValidationState.INVALID  # pylint: disable=protected-access
+        dialog.ok_button.click()
+        assert ".safetensors or .pth" in dialog.status.text()
+    assert not discovery.calls and not store.saved
+    dialog.upscaling_page.model_3x.setText(str(tmp_path / "2xPublic_realplksr.pth"))
+    assert dialog._page_states[SettingsDialog.UPSCALING_PATH] is SettingsValidationState.VALID  # pylint: disable=protected-access
+    dialog.upscaling_page.model_3x.clear()
+    assert dialog._page_states[SettingsDialog.UPSCALING_PATH] is SettingsValidationState.SAVED  # pylint: disable=protected-access
+    dialog.cancel_button.click()
+    validator.shutdown()
+
+
+def test_pipeline_only_change_saves_without_launching_any_tool_validation(qt_app: QApplication, tmp_path: Path) -> None:
+    """Intent defaults are not tool changes, so saving them never spawns discovery."""
+
+    store = RecordingStore()
+    discovery = RecordingDiscovery(_toolchain(tmp_path))
+    validator = ExternalToolsValidator(discovery)  # type: ignore[arg-type]
+    dialog = _dialog(ApplicationSettings(target_height=1440), validator, store)
+    page = dialog.upscaling_page
+    page.pipeline.setCurrentIndex(page.pipeline.findData(ProcessingPipeline.FOUR_X_RESIZE.value))
+    page.target_height.setValue(1080)
+    dialog.ok_button.click()
+
+    assert _process_until(qt_app, lambda: dialog.result() == int(QDialog.DialogCode.Accepted))
+    assert not discovery.calls
+    assert (store.saved[0].pipeline, store.saved[0].target_height) == (ProcessingPipeline.FOUR_X_RESIZE, 1080)
+    validator.shutdown()
+
+
+def test_search_finds_the_upscaling_page_by_spandrel_and_safetensors_terms(qt_app: QApplication, tmp_path: Path) -> None:
+    """The Processing page and the runner path are discoverable from the searchable tree."""
+
+    del qt_app
+    validator = ExternalToolsValidator(RecordingDiscovery(_toolchain(tmp_path)))  # type: ignore[arg-type]
+    dialog = _dialog(ApplicationSettings(), validator, RecordingStore())
+    dialog.search.setText("safetensors")
+    visible = [dialog.tree.topLevelItem(index).text(0) for index in range(dialog.tree.topLevelItemCount()) if not dialog.tree.topLevelItem(index).isHidden()]
+    assert visible == ["Processing"]
+    dialog.search.setText("spandrel")
+    visible = [dialog.tree.topLevelItem(index).text(0) for index in range(dialog.tree.topLevelItemCount()) if not dialog.tree.topLevelItem(index).isHidden()]
+    assert visible == ["Processing", "Tools"]
+    dialog.cancel_button.click()
+    validator.shutdown()
+
+
+def test_spandrel_factory_defaults_are_disclosed_and_the_runner_can_return_to_its_default(qt_app: QApplication, tmp_path: Path) -> None:
+    """Blank Spandrel fields show their defaults, and the runner has no PATH fallback to offer."""
+
+    del qt_app
+    validator = ExternalToolsValidator(RecordingDiscovery(_toolchain(tmp_path)))  # type: ignore[arg-type]
+    settings = ApplicationSettings(tools=ToolOverrides(spandrel_runner=tmp_path / "custom-runner"))
+    dialog = _dialog(settings, validator, RecordingStore())
+    tools_page = dialog.external_tools_page
+    upscaling_page = dialog.upscaling_page
+
+    assert tools_page.spandrel_runner.placeholderText() == f"Factory default: {spandrel.DEFAULT_SPANDREL_RUNNER}"
+    assert upscaling_page.model_2x.placeholderText() == f"Factory default: {spandrel.DEFAULT_SPANDREL_MODELS[2]}"
+    assert upscaling_page.model_3x.placeholderText() == f"Factory default: {spandrel.DEFAULT_SPANDREL_MODELS[3]}"
+    assert tools_page.findChild(QPushButton, "usePathSpandrelRunnerButton") is None
+    assert tools_page.findChild(QPushButton, "usePathFfmpegButton").text() == "Use PATH"
+    reset = tools_page.findChild(QPushButton, "useDefaultSpandrelRunnerButton")
+    assert reset is not None and reset.text() == "Use default"
+
+    reset.click()
+
+    assert tools_page.spandrel_runner.text() == ""
+    assert dialog.draft_settings().tools.spandrel_runner is None
+    dialog.cancel_button.click()
+    validator.shutdown()

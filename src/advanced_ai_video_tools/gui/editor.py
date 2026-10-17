@@ -11,11 +11,12 @@ from pathlib import Path
 
 from PySide6.QtCore import QProcess, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QIcon, QPainter, QPixmap, QShowEvent
-from PySide6.QtWidgets import QFileDialog, QGroupBox, QHBoxLayout, QLabel, QListWidget, QLineEdit, QListWidgetItem, QMenu, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QStyle, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QListWidget, QLineEdit, QListWidgetItem, QMenu, QPushButton, QScrollArea, QSizePolicy, QSpinBox, QStyle, QToolButton, QVBoxLayout, QWidget
 
-from advanced_ai_video_tools.core.models import JobRequest
+from advanced_ai_video_tools.core.models import JobRequest, NativeScale, ProcessingPipeline
 from advanced_ai_video_tools.gui.source_clip_actions import SourceClipTrashService
 from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, MAJOR_REGION_GAP, SPACE_1, SPACE_2, SPACE_3, SPACE_4
+from advanced_ai_video_tools.services.plan_summary import PIPELINE_LABELS
 from advanced_ai_video_tools.storage.naming import automatic_output_basename
 from advanced_ai_video_tools.system.settings import ApplicationSettings
 
@@ -247,6 +248,19 @@ class JobEditor(QWidget):
         self.target_height.setValue(settings.target_height)
         self.target_height.setFixedHeight(CONTROL_HEIGHT)
 
+        self.pipeline = QComboBox()
+        self.pipeline.setObjectName("jobPipeline")
+        for value, label in PIPELINE_LABELS:
+            self.pipeline.addItem(label, value.value)
+        self.pipeline.setCurrentIndex(max(0, self.pipeline.findData(settings.pipeline.value)))
+        self.pipeline.setFixedHeight(CONTROL_HEIGHT)
+        self.native_scale = QComboBox()
+        self.native_scale.setObjectName("jobNativeScale")
+        for scale in NativeScale:
+            self.native_scale.addItem(f"{int(scale)}×", int(scale))
+        self.native_scale.setCurrentIndex(max(0, self.native_scale.findData(int(settings.native_scale))))
+        self.native_scale.setFixedHeight(CONTROL_HEIGHT)
+
         model_label = QLabel("realesrgan-x4plus — photographic and live-action images")
         model_label.setObjectName("modelLabel")
         model_label.setWordWrap(True)
@@ -274,6 +288,8 @@ class JobEditor(QWidget):
         model_group_layout.setSpacing(SPACE_2)
         upscaler_explanation = _secondary_label("Enhances video detail after clips are prepared and combined.", "aiUpscalerExplanation")
         model_group_layout.addWidget(upscaler_explanation)
+        model_group_layout.addWidget(self.pipeline)
+        model_group_layout.addWidget(self.native_scale)
         model_group_layout.addWidget(model_label)
 
         basic_settings = QGroupBox("Basic Settings")
@@ -332,8 +348,10 @@ class JobEditor(QWidget):
         self.input_down_button.clicked.connect(lambda: self.move_selected(1))
         self.output_button.clicked.connect(self._choose_output_directory)
         self.submit_button.clicked.connect(self._request_submission)
+        self.pipeline.currentIndexChanged.connect(self._pipeline_changed)
         self.inputs.currentRowChanged.connect(self._update_input_controls)
         self._update_input_controls()
+        self._pipeline_changed()
 
     def input_paths(self) -> tuple[Path, ...]:
         """Return clip paths in their visible concat order."""
@@ -545,28 +563,32 @@ class JobEditor(QWidget):
         raw_output = self.output_directory.text().strip()
         if not raw_output:
             raise ValueError("Choose an output directory.")
-        if self.target_height.value() % 2:
+        pipeline = ProcessingPipeline(str(self.pipeline.currentData()))
+        if pipeline not in {ProcessingPipeline.CONCAT, ProcessingPipeline.NATIVE} and self.target_height.value() % 2:
             raise ValueError("Target height must be an even number of pixels.")
         created_at = self._clock()
         if created_at.tzinfo is None or created_at.utcoffset() is None:
             raise ValueError("The system clock must provide a timezone-aware creation time.")
+        suffix = inputs[0].suffix.lower() if pipeline is ProcessingPipeline.CONCAT and inputs[0].suffix.lower() in {".mp4", ".mov"} else ".mp4"
         return JobRequest(
             inputs=inputs,
             output_directory=Path(raw_output),
             target_height=self.target_height.value(),
+            pipeline=pipeline,
+            native_scale=NativeScale(int(self.native_scale.currentData())) if pipeline is ProcessingPipeline.NATIVE else None,
             acknowledge_dropped_streams=False,
             overwrite_mode=self._settings.overwrite_mode,
             allow_mixed_color_tags=self._settings.allow_mixed_color_tags,
             tools=self._settings.tools,
             created_at=created_at,
-            generated_output_basename=automatic_output_basename(created_at),
+            generated_output_basename=automatic_output_basename(created_at, suffix),
         )
 
     @Slot(bool)
     def set_busy(self, busy: bool) -> None:
         """Prevent overlapping previews while keeping current intent visible."""
 
-        for widget in (self.inputs, self.add_button, self.input_up_button, self.input_down_button, self.output_directory, self.output_button, self.target_height, self.submit_button):
+        for widget in (self.inputs, self.add_button, self.input_up_button, self.input_down_button, self.output_directory, self.output_button, self.target_height, self.pipeline, self.native_scale, self.submit_button):
             widget.setEnabled(not busy)
         if not busy:
             self._update_input_controls()
@@ -579,8 +601,16 @@ class JobEditor(QWidget):
         if isinstance(value, ApplicationSettings):
             self._settings = value
             self.target_height.setValue(value.target_height)
+            self.pipeline.setCurrentIndex(max(0, self.pipeline.findData(value.pipeline.value)))
+            self.native_scale.setCurrentIndex(max(0, self.native_scale.findData(int(value.native_scale))))
             self.output_directory.setText(str(value.recent_output_directory or ""))
             self._trash_service.configure(value.deletion_rules)
+
+    @Slot(int)
+    def _pipeline_changed(self, _index: int = 0) -> None:
+        pipeline = ProcessingPipeline(str(self.pipeline.currentData()))
+        self.target_height.setEnabled(pipeline not in {ProcessingPipeline.CONCAT, ProcessingPipeline.NATIVE})
+        self.native_scale.setEnabled(pipeline is ProcessingPipeline.NATIVE)
 
     @Slot(str)
     def job_queued(self, _job_id: str) -> None:

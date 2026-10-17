@@ -1,6 +1,7 @@
 """Tests for the thin command-line presentation adapter."""
 
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,10 +17,14 @@ from advanced_ai_video_tools.core.models import (
     JobPlan,
     JobRequest,
     MediaProbe,
+    NativeScale,
     PipelineStage,
     PreflightIssue,
     PreflightReport,
+    ProcessingPipeline,
     Rational,
+    UpscaleBackend,
+    UpscalePassPlan,
 )
 from advanced_ai_video_tools.services.finalization import FinalizationResult
 from advanced_ai_video_tools.services.pipeline import PipelineCancelled, PipelineFailed, PipelineResult
@@ -78,7 +83,9 @@ class FakePipelineService:
         return self.outcome
 
 
-def _plan(output: Path) -> JobPlan:
+def _plan(output: Path, *, pipeline: ProcessingPipeline = ProcessingPipeline.AUTO, passes: tuple[UpscalePassPlan, ...] | None = None) -> JobPlan:
+    if passes is None:
+        passes = (UpscalePassPlan(1, UpscaleBackend.REALESRGAN, 2, 1920, 1080, 3840, 2160, output.parent / "realesrgan", output.parent / "models"),)
     return JobPlan(
         created_at=datetime(2026, 8, 21, tzinfo=timezone.utc),
         output_path=output,
@@ -87,13 +94,15 @@ def _plan(output: Path) -> JobPlan:
         output_frame_rate=Rational(24, 1),
         output_width=3840,
         output_height=2160,
-        ai_scale=2,
+        ai_scale=math.prod(item.scale for item in passes) if passes else None,
         concat_strategy=ConcatStrategy.STREAM_COPY,
         output_audio_layout=None,
         normalization_reasons=(),
         estimated_peak_bytes=100,
         required_free_bytes=120,
         output_color_profile=ColorProfile(ColorMatrix.BT709, "bt709", "bt709"),
+        pipeline=pipeline,
+        upscale_passes=passes,
     )
 
 
@@ -146,6 +155,47 @@ def test_cli_freezes_allow_mixed_color_tags_flag(tmp_path: Path, monkeypatch: py
     assert cli.main(["preflight", "--input", str(tmp_path / "clip.mp4"), "--output-dir", str(tmp_path), "--allow-mixed-color-tags"]) == 0
     capsys.readouterr()
     assert service.request is not None and service.request.allow_mixed_color_tags
+
+
+def test_cli_freezes_phase6_pipeline_scale_and_spandrel_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """Phase 6 CLI values reach the typed request without reinterpretation."""
+
+    output = tmp_path / "ai-video.mp4"
+    service = FakeService(PreflightReport((), _plan(output), None))
+    monkeypatch.setattr(cli, "PreflightService", lambda: service)
+    runner = tmp_path / "spandrel-runner"
+    model = tmp_path / "DAT_x2.safetensors"
+
+    assert cli.main(["preflight", "--input", str(tmp_path / "clip.mp4"), "--output-dir", str(tmp_path), "--pipeline", "native", "--scale", "2", "--spandrel-runner", str(runner), "--model-2x", str(model)]) == 0
+    capsys.readouterr()
+    assert service.request is not None
+    assert service.request.pipeline is ProcessingPipeline.NATIVE
+    assert service.request.native_scale is NativeScale.TWO
+    assert service.request.tools.spandrel_runner == runner
+    assert service.request.tools.model_2x == model
+
+
+def test_cli_rejects_scale_and_spandrel_flags_outside_applicable_pipeline(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Pipeline-specific flags fail fast when their pipeline cannot use them."""
+
+    base = ["preflight", "--input", str(tmp_path / "clip.mp4"), "--output-dir", str(tmp_path)]
+    assert cli.main([*base, "--scale", "2"]) == 2
+    assert "only with --pipeline native" in capsys.readouterr().err
+    assert cli.main([*base, "--spandrel-runner", str(tmp_path / "runner")]) == 2
+    assert "valid only for a pipeline" in capsys.readouterr().err
+
+
+def test_cli_help_names_the_spandrel_factory_defaults(capsys: pytest.CaptureFixture[str]) -> None:
+    """The flags that can be omitted say what an omitted value means."""
+
+    with pytest.raises(SystemExit) as caught:
+        cli.main(["preflight", "--help"])
+
+    assert caught.value.code == 0
+    flat = "".join(capsys.readouterr().out.split())
+    assert "tools/spandrel-runner/spandrel-runner" in flat and "PATHisneversearched" in flat
+    assert "2xPublic_realplksr_dysample_layernorm_real_nn.pth" in flat
+    assert "DAT_x3_bf16.safetensors" in flat
 
 
 def test_text_cli_returns_two_for_blocking_issue(
@@ -267,3 +317,37 @@ def test_legacy_cli_alias_emits_deprecation_warning_on_stderr(monkeypatch: pytes
 
     assert cli.main(["gui"]) == 17
     assert "ai-video-tools is deprecated" in capsys.readouterr().err
+
+
+def test_cli_discloses_pipeline_ordered_passes_paths_and_skip_in_json_and_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """Both CLI renderings carry the same Phase 6 sizing and skip decisions."""
+
+    output = tmp_path / "ai-video.mp4"
+    runner = tmp_path / "spandrel-runner"
+    passes = (
+        UpscalePassPlan(1, UpscaleBackend.SPANDREL, 2, 1920, 1080, 3840, 2160, runner, tmp_path / "x2.safetensors"),
+        UpscalePassPlan(2, UpscaleBackend.SPANDREL, 3, 3840, 2160, 11520, 6480, runner, tmp_path / "x3.safetensors"),
+    )
+    plans = {
+        "ordered": _plan(output, pipeline=ProcessingPipeline.TWO_X_THREE_X_RESIZE, passes=passes),
+        "skipped": _plan(output, pipeline=ProcessingPipeline.FOUR_X_RESIZE, passes=()),
+        "concat": _plan(output, pipeline=ProcessingPipeline.CONCAT, passes=()),
+    }
+    arguments = ["preflight", "--input", str(tmp_path / "clip.mp4"), "--output-dir", str(tmp_path)]
+    for name, plan in plans.items():
+        monkeypatch.setattr(cli, "PreflightService", lambda plan=plan: FakeService(PreflightReport((), plan, None)))
+        assert cli.main([*arguments, "--json"]) == 0
+        payload = json.loads(capsys.readouterr().out)["plan"]
+        assert payload["pipeline"] == plan.pipeline.value
+        assert payload["ai_skipped"] is (name == "skipped")
+        assert [item["model"] for item in payload["passes"]] == [str(item.model_path) for item in plan.upscale_passes]
+        assert cli.main(arguments) == 0
+        text = capsys.readouterr().out
+        assert f"AI: {payload['ai_summary']}" in text
+        if name == "ordered":
+            assert payload["ai_summary"] == "2× Spandrel → 3× Spandrel"
+            assert "AI scale: 6" in text
+        if name == "skipped":
+            assert "AI scale: skipped" in text
+        if name == "concat":
+            assert "AI scale: not used" in text
