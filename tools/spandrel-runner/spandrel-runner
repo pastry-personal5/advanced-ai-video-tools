@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Executable entry point the application launches; select this file in Settings.
+# It resolves the runner's own uv environment so callers never need `python main.py`.
+
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+exec uv run --quiet --project "$here" python "$here/main.py" "$@"

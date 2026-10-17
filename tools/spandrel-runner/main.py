@@ -20,14 +20,22 @@ from PIL import Image
 from spandrel import ModelLoader
 
 PROTOCOL_VERSION = 1
-RUNNER_VERSION = "0.4.0"
-MAXIMUM_INPUT_PIXELS = 16_777_216
+# Verified on the supported host (Apple M5 Max, macOS 26.7.1): DAT_x2 and DAT_x3 each ran one
+# 640x360 frame on MPS. Larger sizes are unverified and therefore not published.
+RUNNER_VERSION = "0.5.0"
+MAXIMUM_INPUT_PIXELS = 640 * 360
 PNG_COMPRESSION_LEVEL = 1
-SUPPORTED_MODEL_SUFFIX = ".safetensors"
+# Spandrel loads `.pth` only through its restricted state-dict unpickler (tensor rebuilds and
+# OrderedDict only; any other global raises), so a booby-trapped checkpoint cannot run code.
+# TorchScript `.pt` and `.ckpt` are rejected because their loaders are not restricted.
+SUPPORTED_MODEL_SUFFIXES = (".safetensors", ".pth")
+# Precision policy: a checkpoint whose floating-point tensors are all bfloat16 runs in bfloat16 on
+# MPS; every other checkpoint runs in float32. The choice comes only from the file, is published
+# by `inspect`, and is never float16, never silently changed, and never moved off MPS.
 EXIT_CODES = {"invalid_request": 2, "incompatible_model": 3, "mps_unavailable": 4, "inference_failed": 5, "output_conflict": 6}
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="Run one inspected Spandrel super-resolution model over an exact PNG manifest.")
 
-ModelPath = Annotated[Path, typer.Option("--model", exists=True, file_okay=True, dir_okay=False, readable=True, resolve_path=True, help="Trusted .safetensors RGB super-resolution checkpoint.")]
+ModelPath = Annotated[Path, typer.Option("--model", exists=True, file_okay=True, dir_okay=False, readable=True, resolve_path=True, help="Trusted .safetensors or .pth RGB super-resolution checkpoint.")]
 ManifestPath = Annotated[Path, typer.Option("--manifest", exists=True, file_okay=True, dir_okay=False, readable=True, resolve_path=True, help="Phase 6 versioned batch manifest.")]
 ProtocolVersion = Annotated[int, typer.Option("--protocol-version", help="Phase 6 runner protocol expected by the caller.")]
 
@@ -115,8 +123,8 @@ def _positive_int(value: object, field_name: str) -> int:
 
 
 def _validate_model_path(model_path: Path) -> Path:
-    if model_path.suffix.lower() != SUPPORTED_MODEL_SUFFIX:
-        raise _request_error(f"model must use the {SUPPORTED_MODEL_SUFFIX} format; pickle-based .pth and .pt checkpoints are not supported")
+    if model_path.suffix.lower() not in SUPPORTED_MODEL_SUFFIXES:
+        raise _request_error("model must use .safetensors or .pth; TorchScript .pt, .ckpt, and other formats are not supported")
     return model_path.resolve()
 
 
@@ -234,6 +242,17 @@ def _size_requirements(descriptor: Any) -> dict[str, object]:
     return {"minimum": int(getattr(requirements, "minimum", 0)), "multiple_of": int(getattr(requirements, "multiple_of", 1)), "square": bool(getattr(requirements, "square", False))}
 
 
+def checkpoint_precision(model_path: Path) -> str:
+    """Return the execution precision implied by the checkpoint's own floating-point dtype."""
+
+    try:
+        state = ModelLoader(device="cpu").load_state_dict_from_file(str(model_path))
+    except Exception as error:
+        raise RunnerError("incompatible_model", f"could not read checkpoint tensors: {error}") from error
+    dtypes = {tensor.dtype for tensor in state.values() if isinstance(tensor, torch.Tensor) and tensor.is_floating_point()}
+    return "bfloat16" if dtypes == {torch.bfloat16} else "float32"
+
+
 def inspect_model(model_path: Path) -> tuple[Any, dict[str, object], FileIdentity]:
     """Load one supported `.safetensors` model on MPS and describe it."""
 
@@ -241,10 +260,13 @@ def inspect_model(model_path: Path) -> tuple[Any, dict[str, object], FileIdentit
     if not torch.backends.mps.is_available():
         raise RunnerError("mps_unavailable", "MPS is unavailable; the runner does not fall back to CPU")
     model_identity = file_identity(model_path)
+    precision = checkpoint_precision(model_path)
     try:
         descriptor = ModelLoader(device="mps").load_from_file(str(model_path)).to("mps").eval()
+        if precision == "bfloat16":
+            descriptor.to(torch.bfloat16)
     except Exception as error:
-        raise RunnerError("incompatible_model", f"could not load model on MPS: {error}") from error
+        raise RunnerError("incompatible_model", f"could not load model on MPS in {precision}: {error}") from error
     if stat_identity(model_path) != _expected_stat(model_identity):
         raise _request_error("model changed while it was being loaded")
     purpose = str(_descriptor_value(descriptor, "purpose")).upper()
@@ -265,7 +287,7 @@ def inspect_model(model_path: Path) -> tuple[Any, dict[str, object], FileIdentit
         "size_requirements": _size_requirements(descriptor),
         "maximum_input_pixels": MAXIMUM_INPUT_PIXELS,
         "device": "mps",
-        "precision": "float32",
+        "precision": precision,
     }
     return descriptor, inspection, model_identity
 
@@ -351,7 +373,7 @@ def _publish_png(output: numpy.ndarray[Any, numpy.dtype[numpy.uint8]], destinati
 def _infer_frame(descriptor: Any, job: ManifestJob, input_array: numpy.ndarray[Any, numpy.dtype[numpy.uint8]]) -> numpy.ndarray[Any, numpy.dtype[numpy.uint8]]:
     """Infer one frame while minimizing CPU allocations and device transfer size."""
 
-    input_tensor = torch.from_numpy(input_array).permute(2, 0, 1).unsqueeze(0).to(device="mps", dtype=torch.float32).div_(255.0)
+    input_tensor = torch.from_numpy(input_array).permute(2, 0, 1).unsqueeze(0).to(device=descriptor.device, dtype=torch.float32).div_(255.0).to(descriptor.dtype)
     try:
         with torch.inference_mode():
             output_tensor = descriptor(input_tensor)
@@ -360,7 +382,7 @@ def _infer_frame(descriptor: Any, job: ManifestJob, input_array: numpy.ndarray[A
     output = output_tensor.squeeze(0).permute(1, 2, 0)
     if tuple(output.shape) != (job.output.height, job.output.width, 3):
         raise RunnerError("inference_failed", f"model produced tensor shape {tuple(output.shape)}, expected ({job.output.height}, {job.output.width}, 3)")
-    output_u8 = output.mul(255.0).round_().clamp_(0, 255).to(dtype=torch.uint8).to("cpu")
+    output_u8 = output.to(torch.float32).mul(255.0).round_().clamp_(0, 255).to(dtype=torch.uint8).to("cpu")
     return output_u8.numpy()
 
 

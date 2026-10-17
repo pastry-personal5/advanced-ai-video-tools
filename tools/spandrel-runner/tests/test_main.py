@@ -115,7 +115,6 @@ def test_file_identity_contains_hash_and_stat_identity(tmp_path: Path) -> None:
     assert identity.size_bytes == 5
     assert len(identity.sha256) == 64
     assert identity.inode > 0
-    assert MAXIMUM_INPUT_PIXELS == 16_777_216
     assert stat_identity(path).size_bytes == identity.size_bytes
 
 
@@ -155,3 +154,125 @@ def test_process_batch_preserves_ordered_progress_with_bounded_workers(tmp_path:
     runner.process_batch(object(), request, progress.append)
     assert published == [job.output.path for job in request.jobs]
     assert [json.loads(record)["completed"] for record in progress] == [1, 2]
+
+
+@pytest.mark.parametrize("name", ["model.safetensors", "model.PTH"])
+def test_supported_model_suffixes_are_accepted(tmp_path: Path, name: str) -> None:
+    assert runner._validate_model_path(tmp_path / name) == (tmp_path / name).resolve()  # pylint: disable=protected-access
+
+
+@pytest.mark.parametrize("name", ["model.pt", "model.ckpt", "model.bin", "model"])
+def test_torchscript_and_other_model_suffixes_are_rejected(tmp_path: Path, name: str) -> None:
+    with pytest.raises(RunnerError, match=r"\.safetensors or \.pth") as captured:
+        runner._validate_model_path(tmp_path / name)  # pylint: disable=protected-access
+    assert captured.value.code == "invalid_request"
+
+
+def test_published_input_limit_is_only_the_size_verified_on_the_supported_host() -> None:
+    """Raising the limit requires new native evidence; DAT_x2 and DAT_x3 were run at 640x360 on 2026-10-17."""
+
+    assert MAXIMUM_INPUT_PIXELS == 640 * 360
+    assert runner.RUNNER_VERSION == "0.5.0"
+
+
+def test_pth_loading_runs_no_pickle_payload_through_the_pinned_spandrel(tmp_path: Path) -> None:
+    """A booby-trapped .pth is refused by Spandrel's restricted unpickler and its payload never runs."""
+
+    import torch
+    from spandrel import ModelLoader
+
+    marker = tmp_path / "payload-ran"
+
+    class Payload:
+        def __reduce__(self):  # type: ignore[no-untyped-def]
+            import os
+
+            return (os.system, (f"touch {marker}",))
+
+    checkpoint = tmp_path / "trap.pth"
+    torch.save({"payload": Payload()}, checkpoint)
+
+    with pytest.raises(Exception, match="forbidden|Unpickl"):
+        ModelLoader(device="cpu").load_from_file(str(checkpoint))
+
+    assert not marker.exists()
+
+
+def _save_safetensors(path: Path, **tensors: "torch.Tensor") -> Path:
+    from safetensors.torch import save_file
+
+    save_file(tensors, str(path))
+    return path
+
+
+@pytest.mark.parametrize(
+    ("dtypes", "expected"),
+    [
+        (("bfloat16",), "bfloat16"),
+        (("bfloat16", "bfloat16"), "bfloat16"),
+        (("float32",), "float32"),
+        (("bfloat16", "float32"), "float32"),
+        (("float16",), "float32"),
+    ],
+)
+def test_precision_follows_the_checkpoint_dtype_and_is_never_float16(tmp_path: Path, dtypes: tuple[str, ...], expected: str) -> None:
+    """Only an all-bfloat16 checkpoint runs in bfloat16; everything else stays float32."""
+
+    import torch
+
+    tensors = {f"w{index}": torch.zeros(4, dtype=getattr(torch, dtype)) for index, dtype in enumerate(dtypes)}
+    tensors["counter"] = torch.zeros(1, dtype=torch.int64)
+    path = _save_safetensors(tmp_path / "model.safetensors", **tensors)
+    assert runner.checkpoint_precision(path) == expected
+
+
+def test_precision_of_a_pth_checkpoint_uses_the_restricted_loader(tmp_path: Path) -> None:
+    import torch
+
+    path = tmp_path / "model.pth"
+    torch.save({"w": torch.zeros(4, dtype=torch.bfloat16)}, path)
+    assert runner.checkpoint_precision(path) == "bfloat16"
+    torch.save({"w": torch.zeros(4)}, path)
+    assert runner.checkpoint_precision(path) == "float32"
+
+
+def test_unreadable_checkpoint_is_an_incompatible_model_not_a_crash(tmp_path: Path) -> None:
+    path = tmp_path / "corrupt.safetensors"
+    path.write_bytes(b"\x00" * 16)
+    with pytest.raises(RunnerError) as captured:
+        runner.checkpoint_precision(path)
+    assert captured.value.code == "incompatible_model"
+
+
+@pytest.mark.parametrize("dtype_name", ["bfloat16", "float32"])
+def test_inference_runs_in_the_model_dtype_and_publishes_exact_uint8(tmp_path: Path, dtype_name: str) -> None:
+    """The input is cast to the model's dtype and the result is rounded in float32."""
+
+    import numpy
+    import torch
+
+    dtype = getattr(torch, dtype_name)
+
+    class Descriptor:
+        device = torch.device("cpu")
+
+        def __init__(self) -> None:
+            self.dtype = dtype
+            self.seen: list[torch.dtype] = []
+
+        def __call__(self, image: "torch.Tensor") -> "torch.Tensor":
+            self.seen.append(image.dtype)
+            return torch.nn.functional.interpolate(image, scale_factor=2)
+
+    descriptor = Descriptor()
+    job = runner.ManifestJob(runner.ManifestInput(tmp_path / "in.png", file_identity(_png(tmp_path / "in.png")), 4, 2), runner.ManifestOutput(tmp_path / "out.png", 8, 4))
+    source = numpy.full((2, 4, 3), 128, dtype=numpy.uint8)
+    source[0, 0] = 255
+    source[1, 3] = 0
+
+    output = runner._infer_frame(descriptor, job, source)  # pylint: disable=protected-access
+
+    assert descriptor.seen == [dtype]
+    assert output.dtype == numpy.uint8 and output.shape == (4, 8, 3)
+    assert tuple(output[0, 0]) == (255, 255, 255) and tuple(output[3, 7]) == (0, 0, 0)
+    assert int(output[3, 0, 0]) in range(127, 130)
