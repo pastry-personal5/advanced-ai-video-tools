@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from loguru import logger
 
-from advanced_ai_video_tools.core.models import JobRequest, JobState, PipelineStage, ProgressEvent
+from advanced_ai_video_tools.core.models import JobPlan, JobRequest, JobState, PipelineStage, ProgressEvent
 from advanced_ai_video_tools.services.pipeline import PipelineCancelled, PipelineFailed, PipelineResult
 from advanced_ai_video_tools.storage.naming import automatic_output_basename, automatic_output_basename_matches
 from advanced_ai_video_tools.system.processes import CancellationToken
@@ -28,7 +28,7 @@ def _local_now() -> datetime:
 class PipelineRunner(Protocol):
     """The synchronous processing boundary serialized by the queue."""
 
-    def execute_pipeline(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: Callable[[ProgressEvent], None] | None = None, state_changed: Callable[[JobState], None] | None = None, job_id: str | None = None) -> PipelineResult:
+    def execute_pipeline(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: Callable[[ProgressEvent], None] | None = None, state_changed: Callable[[JobState], None] | None = None, plan_ready: Callable[[JobPlan], None] | None = None, job_id: str | None = None) -> PipelineResult:
         """Execute one job to a terminal state."""
 
 
@@ -61,6 +61,7 @@ class QueueJobSnapshot:
     queue_position: int | None
     last_progress: ProgressEvent | None
     revision: int
+    plan: JobPlan | None = None
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,7 @@ class _JobRecord:
     outcome: QueueJobOutcome | None = None
     completed: threading.Event = field(default_factory=threading.Event)
     revision: int = 0
+    plan: JobPlan | None = None
 
 
 class JobQueue:
@@ -272,7 +274,7 @@ class JobQueue:
 
     def _snapshot_locked(self, record: _JobRecord) -> QueueJobSnapshot:
         position = self._pending.index(record.job_id) if record.job_id in self._pending else None
-        return QueueJobSnapshot(record.job_id, record.request, record.state, position, record.last_progress, record.revision)
+        return QueueJobSnapshot(record.job_id, record.request, record.state, position, record.last_progress, record.revision, record.plan)
 
     def _finish_locked(self, record: _JobRecord, state: JobState, *, result: PipelineResult | None = None, error: QueueTerminalError | None = None) -> None:
         record.state = state
@@ -301,6 +303,17 @@ class JobQueue:
             snapshot = self._snapshot_locked(record)
         self._emit((snapshot,))
 
+    def _pipeline_plan(self, record: _JobRecord, plan: JobPlan) -> None:
+        """Publish the authoritative dequeue-time plan before processing starts."""
+
+        with self._condition:
+            if record.outcome is not None:
+                return
+            record.plan = plan
+            record.revision += 1
+            snapshot = self._snapshot_locked(record)
+        self._emit((snapshot,))
+
     def _activate_next_locked(self) -> tuple[_JobRecord, tuple[QueueJobSnapshot, ...]]:
         """Move the next pending record to active and update pending positions."""
 
@@ -325,6 +338,7 @@ class JobQueue:
                 cancellation=record.token,
                 progress=lambda event: self._pipeline_progress(record, event),
                 state_changed=lambda changed: self._pipeline_state(record, changed),
+                plan_ready=lambda plan: self._pipeline_plan(record, plan),
                 job_id=record.job_id,
             )
         except PipelineCancelled as caught:

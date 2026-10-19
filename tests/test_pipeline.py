@@ -164,13 +164,15 @@ def test_success_runs_each_stage_once_in_order_and_releases_reservation(tmp_path
     calls: list[str] = []
     states: list[JobState] = []
     events: list[ProgressEvent] = []
+    plans: list[JobPlan] = []
     service, preflight, manager = _service(tmp_path, report, calls)
 
-    result = service.execute_pipeline(JobRequest((tmp_path / "source.mp4",), tmp_path), progress=events.append, state_changed=states.append)
+    result = service.execute_pipeline(JobRequest((tmp_path / "source.mp4",), tmp_path), progress=events.append, state_changed=states.append, plan_ready=plans.append)
 
     assert calls == ["prepare", "extract", "upscale", "finalize"]
     assert states == [JobState.QUEUED, JobState.VALIDATING, JobState.RUNNING, JobState.COMPLETED]
     assert result.preflight is report
+    assert plans == [report.plan]
     assert result.output_path == report.plan.output_path
     assert preflight.registry.released == [report.plan.output_path]
     assert not any(manager.root.iterdir())

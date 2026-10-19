@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, ProcessingPipeline, Rational, UpscaleBackend, UpscalePassPlan
-from advanced_ai_video_tools.services.plan_summary import PIPELINE_LABELS, ai_plan_summary, ai_skipped
+from advanced_ai_video_tools.services.plan_summary import PIPELINE_LABELS, ai_plan_summary, ai_skipped, pipeline_stage_summaries, source_dimensions
 
 
 def _plan(pipeline: ProcessingPipeline, passes: tuple[UpscalePassPlan, ...] = ()) -> JobPlan:
@@ -40,6 +40,15 @@ def test_summary_names_every_ordered_pass_and_backend() -> None:
     assert ai_plan_summary(two_pass) == "2× Spandrel → 3× Spandrel"
     assert ai_plan_summary(_plan(ProcessingPipeline.AUTO, (_pass(1, UpscaleBackend.REALESRGAN, 4),))) == "4× Real-ESRGAN"
     assert not ai_skipped(two_pass)
+    assert source_dimensions(two_pass) == (100, 100)
+    assert pipeline_stage_summaries(two_pass) == (
+        "Normalize and concatenate — FFmpeg",
+        "Extract RGB frames — FFmpeg",
+        "AI upscale 2× — model (Spandrel)",
+        "AI upscale 3× — model (Spandrel)",
+        "Resize to 3840×2160 and encode — FFmpeg",
+        "Verify and publish — FFprobe and atomic publication",
+    )
 
 
 def test_summary_discloses_a_skip_for_ai_pipelines_only() -> None:

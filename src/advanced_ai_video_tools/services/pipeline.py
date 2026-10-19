@@ -25,6 +25,7 @@ from advanced_ai_video_tools.system.processes import CancellationToken, ProcessR
 from advanced_ai_video_tools.video.probe import FFprobeClient
 
 StateCallback = Callable[[JobState], None]
+PlanCallback = Callable[[JobPlan], None]
 
 
 def _pass_models(plan: JobPlan) -> str:
@@ -204,13 +205,15 @@ class PipelineService:
             raise PipelineFailed(self._blocking_message(report), PipelineStage.VALIDATE, preflight=report)
         return report, plan, toolchain
 
-    def _run_job(self, request: JobRequest, cancellation: CancellationToken | None, progress: ProgressCallback | None, state_changed: StateCallback | None) -> PipelineResult:
+    def _run_job(self, request: JobRequest, cancellation: CancellationToken | None, progress: ProgressCallback | None, state_changed: StateCallback | None, plan_ready: PlanCallback | None) -> PipelineResult:
         """Execute one contextualized job, retaining failures and cleaning cancellation."""
 
         token = cancellation or CancellationToken()
         lifecycle = JobLifecycle(state_changed)
         with logger.contextualize(stage=PipelineStage.VALIDATE.value):
             report, plan, toolchain = self._validate(request, token, lifecycle, progress)
+            if plan_ready is not None:
+                plan_ready(plan)
             logger.info("Preflight accepted pipeline={} output={}x{} rate={} concat={} ffmpeg={} ffprobe={} realesrgan={}", plan.pipeline.value, plan.output_width, plan.output_height, plan.output_frame_rate, plan.concat_strategy.value, toolchain.ffmpeg.path.name, toolchain.ffprobe.path.name, toolchain.realesrgan.path.name if toolchain.realesrgan is not None else "unused")
         reservation = plan.output_path
         workspace: OwnedWorkspace | None = None
@@ -247,14 +250,14 @@ class PipelineService:
         finally:
             self._preflight.registry.release(reservation)
 
-    def execute_pipeline(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, state_changed: StateCallback | None = None, job_id: str | None = None) -> PipelineResult:
+    def execute_pipeline(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: ProgressCallback | None = None, state_changed: StateCallback | None = None, plan_ready: PlanCallback | None = None, job_id: str | None = None) -> PipelineResult:
         """Execute one complete job with stable privacy-conscious log context."""
 
         resolved_job_id = job_id or uuid4().hex
         with logger.contextualize(job_id=resolved_job_id, stage=JobState.QUEUED.value):
             logger.info("Job submitted input_count={} pipeline={} target_height={} model={}", len(request.inputs), request.pipeline.value, request.target_height, request.model_name)
             try:
-                result = self._run_job(request, cancellation, progress, state_changed)
+                result = self._run_job(request, cancellation, progress, state_changed, plan_ready)
             except PipelineCancelled as error:
                 logger.info("Job cancelled stage={} workspace_retained={}", error.stage.value, bool(error.workspace_path and error.workspace_path.exists()))
                 raise

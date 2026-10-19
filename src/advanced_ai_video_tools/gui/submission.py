@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QLabel, QLis
 
 from advanced_ai_video_tools.core.models import IssueCode, IssueSeverity, JobRequest, PreflightReport, ProgressEvent
 from advanced_ai_video_tools.gui.preflight import GuiPreflightController
-from advanced_ai_video_tools.services.plan_summary import PIPELINE_LABELS, ai_plan_summary
+from advanced_ai_video_tools.services.plan_summary import PIPELINE_LABELS, pipeline_stage_summaries, source_dimensions
 from advanced_ai_video_tools.services.queue import JobQueue, QueueError
 from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
 
@@ -33,7 +33,7 @@ DecisionProvider = Callable[[QWidget | None, PreflightReport], PreflightDecision
 class PreflightDialog(QDialog):
     """Show every preflight issue and gate unsupported stream dropping."""
 
-    def __init__(self, report: PreflightReport, parent: QWidget | None = None) -> None:
+    def __init__(self, report: PreflightReport, parent: QWidget | None = None) -> None:  # pylint: disable=too-many-statements
         super().__init__(parent)
         self._stream_ack_required = any(issue.severity is IssueSeverity.ERROR and issue.code is IssueCode.STREAM_ACKNOWLEDGEMENT for issue in report.issues)
         unrelated_errors = any(issue.severity is IssueSeverity.ERROR and issue.code is not IssueCode.STREAM_ACKNOWLEDGEMENT for issue in report.issues) or (report.plan is None and not self._stream_ack_required)
@@ -47,12 +47,15 @@ class PreflightDialog(QDialog):
         if report.plan is not None:
             plan = report.plan
             pipeline_label = dict(PIPELINE_LABELS)[plan.pipeline]
-            for text in (
+            original = source_dimensions(plan)
+            summary_rows = [
                 f"Pipeline — {pipeline_label}",
-                f"Output — {plan.output_width}×{plan.output_height}",
-                f"AI passes — {ai_plan_summary(plan)}",
-                f"Workspace — {plan.required_free_bytes:,} bytes free required",
-            ):
+                f"Original size — {original[0]}×{original[1]}" if original is not None else "Original size — unavailable",
+                f"Target size — {plan.output_width}×{plan.output_height}",
+            ]
+            summary_rows.extend(f"Stage {index} — {stage}" for index, stage in enumerate(pipeline_stage_summaries(plan), start=1))
+            summary_rows.append(f"Workspace — {plan.required_free_bytes:,} bytes free required")
+            for text in summary_rows:
                 summary = QListWidgetItem(text)
                 summary.setFlags(Qt.ItemFlag.NoItemFlags)
                 issues.addItem(summary)

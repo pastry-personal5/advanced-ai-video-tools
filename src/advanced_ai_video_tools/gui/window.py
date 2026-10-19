@@ -21,6 +21,7 @@ from advanced_ai_video_tools.gui.preview import QueuePreviewPane, SourcePreviewP
 from advanced_ai_video_tools.gui.submission import JobSubmissionController
 from advanced_ai_video_tools.gui.theme import CONTROL_RADIUS, MAJOR_REGION_GAP, SPACE_1, SPACE_2, SPACE_3, SPACE_4
 from advanced_ai_video_tools.gui.settings_dialog import ExternalToolsValidator, SettingsDialog, SettingsDialogSessionState, configure_settings_action
+from advanced_ai_video_tools.services.plan_summary import PIPELINE_LABELS, pipeline_stage_summaries, source_dimensions
 from advanced_ai_video_tools.system.settings import ApplicationSettings, SettingsError, SettingsStore
 
 JOB_NAME_COLUMN_WIDTH = 200
@@ -550,6 +551,19 @@ class MainWindow(QMainWindow):
             self._append_job_message(job_id, f"Upscale progress: {percent}% ({completed}/{total} frames).")
             self._last_upscale_message_percent[job_id] = percent
 
+    def _append_started_plan_summary(self, snapshot: object) -> None:
+        """Disclose the authoritative dimensions and executable stages globally."""
+
+        plan = getattr(snapshot, "plan", None)
+        if plan is None:
+            return
+        name = snapshot.request.generated_output_basename or snapshot.request.explicit_output_path or "output"
+        original = source_dimensions(plan)
+        original_text = f"{original[0]}×{original[1]}" if original is not None else "unavailable"
+        self._append_global_message(f"Job started: {name}. Original {original_text}; target {plan.output_width}×{plan.output_height}; pipeline {dict(PIPELINE_LABELS)[plan.pipeline]}.")
+        for index, stage in enumerate(pipeline_stage_summaries(plan), start=1):
+            self._append_global_message(f"Stage {index}: {stage}.")
+
     @Slot(object)
     def _handle_queue_snapshot(self, snapshot: object) -> None:
         job_id = getattr(snapshot, "job_id", None)
@@ -562,6 +576,7 @@ class MainWindow(QMainWindow):
         if state is JobState.RUNNING and previous_state is not JobState.RUNNING:
             self.source_preview.pause_for_processing()
             self._preview_processing_job_id = job_id
+            self._append_started_plan_summary(snapshot)
         elif self._preview_processing_job_id == job_id and state in {JobState.CANCELLED, JobState.FAILED, JobState.COMPLETED}:
             self._preview_processing_job_id = None
         if previous is None:

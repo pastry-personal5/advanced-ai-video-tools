@@ -70,9 +70,10 @@ related-file failures are reported without rolling back the source move.
    saved as a preference.
 5. Submit the accepted job to the queue.
 
-Preflight runs away from the GUI thread. The review lists the pipeline, the
-resolved output size, the ordered AI passes (or that AI is skipped or not used),
-and the free workspace space the job needs. The authoritative preflight runs again
+Preflight runs away from the GUI thread. The review lists the original and
+target dimensions plus every resolved processing stage, including its action
+and AI model filename or model name when applicable, and the free workspace
+space the job needs. The authoritative preflight runs again
 when the queued job starts, so changes to inputs or settings cannot silently
 alter a submitted job: a queued job keeps the tool and model paths it was
 submitted with and is rejected if its model file was replaced in the meantime.
@@ -90,7 +91,8 @@ runs AI twice).
 Queue Monitoring shows **Active**, **Up Next**, and **History** regions. The
 queue runs one job at a time. You can cancel the active job, remove pending or
 terminal jobs, select jobs with the keyboard, and inspect progress, output
-paths, errors, and diagnostics.
+paths, errors, and diagnostics. When a queued job starts, **Global Messages**
+shows the dimensions and stage/model summary from its authoritative preflight.
 
 The queue preview provides **Original**, **Upscaled**, and **Final Video** tabs.
 During upscaling, matched frame samples appear as they become available; a

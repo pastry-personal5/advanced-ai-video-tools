@@ -731,12 +731,22 @@ def test_preflight_dialog_discloses_pipeline_dimensions_ordered_passes_skip_and_
     )
     plan = replace(_plan(tmp_path), pipeline=ProcessingPipeline.TWO_X_THREE_X_RESIZE, upscale_passes=passes, output_width=7680, output_height=4320, required_free_bytes=123_456_789)
     rows = _dialog_rows(PreflightDialog(PreflightReport((), plan, None)))
-    assert rows[:4] == ["Pipeline — 2× → 3× → resize", "Output — 7680×4320", "AI passes — 2× Spandrel → 3× Spandrel", "Workspace — 123,456,789 bytes free required"]
+    assert rows[:8] == [
+        "Pipeline — 2× → 3× → resize",
+        "Original size — 1920×1080",
+        "Target size — 7680×4320",
+        "Stage 1 — Concatenate — stream copy with FFmpeg",
+        "Stage 2 — Extract RGB frames — FFmpeg",
+        "Stage 3 — AI upscale 2× — x2.safetensors (Spandrel)",
+        "Stage 4 — AI upscale 3× — x3.safetensors (Spandrel)",
+        "Stage 5 — Resize to 7680×4320 and encode — FFmpeg",
+    ]
+    assert rows[-3:-1] == ["Stage 6 — Verify and publish — FFprobe and atomic publication", "Workspace — 123,456,789 bytes free required"]
 
     skipped = _dialog_rows(PreflightDialog(PreflightReport((), replace(_plan(tmp_path), pipeline=ProcessingPipeline.FOUR_X_RESIZE), None)))
-    assert "AI passes — skipped (source height already meets the desired height)" in skipped
+    assert "Stage 3 — AI upscale — skipped; source height already meets the desired height" in skipped
     concat = _dialog_rows(PreflightDialog(PreflightReport((), replace(_plan(tmp_path), pipeline=ProcessingPipeline.CONCAT), None)))
-    assert "AI passes — not used (concat only; streams are copied, never re-encoded)" in concat
+    assert "Stage 1 — Concatenate — stream copy with FFmpeg" in concat
 
 
 def _dialog_rows(dialog: PreflightDialog) -> list[str]:

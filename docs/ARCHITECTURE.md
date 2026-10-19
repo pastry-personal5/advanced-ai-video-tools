@@ -76,7 +76,10 @@ otherwise depends on GUI presentation. On completion, Final Video is selected
 and plays the published local output once, then pauses on its last frame.
 Preview state is presentation-only and queue requests remain frozen typed values.
 Session messages are timestamped in memory, receive queued snapshots through Qt
-signals, and never expose exact subprocess command lines. The selected-source
+signals, and never expose exact subprocess command lines. After authoritative
+dequeue-time preflight, the frozen `JobPlan` is published in the queue snapshot;
+the `RUNNING` transition uses it to disclose original and target dimensions and
+each resolved action/model stage in Global Messages. The selected-source
 preview can move its existing video widget into a borderless fullscreen dialog
 without creating a second player or proxy media. Fullscreen has no clickable
 controls; its `0`/`9`, `j`/`l`, `Space`/`k`, `Shift-P`/`Shift-N`, `Esc`, and `?`

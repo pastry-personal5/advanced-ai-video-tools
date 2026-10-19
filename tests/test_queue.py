@@ -10,7 +10,7 @@ from queue import Queue
 
 import pytest
 
-from advanced_ai_video_tools.core.models import JobRequest, JobState, MediaProbe, PipelineStage, PreflightReport, ProgressEvent
+from advanced_ai_video_tools.core.models import ColorMatrix, ColorProfile, ConcatStrategy, JobPlan, JobRequest, JobState, MediaProbe, PipelineStage, PreflightReport, ProgressEvent, Rational
 from advanced_ai_video_tools.services.finalization import FinalizationResult
 from advanced_ai_video_tools.services.pipeline import PipelineCancelled, PipelineResult
 from advanced_ai_video_tools.services.queue import JobQueue, QueueClosedError, QueueConflictError, QueueError, QueueWorkerFailed
@@ -29,6 +29,11 @@ def _result(request: JobRequest) -> PipelineResult:
     probe = MediaProbe(output, Decimal("1"), (), (), ())
     finalization = FinalizationResult(output, probe, FinalAudioMode.NONE, ProcessResult(("fake",), 0, "", ""), "fake-workspace")
     return PipelineResult(PreflightReport((), None, None), finalization)
+
+
+def _plan(request: JobRequest) -> JobPlan:
+    output = request.explicit_output_path or request.output_directory / str(request.generated_output_basename)
+    return JobPlan(_CREATED_AT, output, request.explicit_output_path is None, (), Rational(24, 1), 3840, 2160, None, ConcatStrategy.STREAM_COPY, None, (), 100, 120, ColorProfile(ColorMatrix.BT709, "bt709", "bt709"))
 
 
 class ControlledRunner:
@@ -53,7 +58,7 @@ class ControlledRunner:
 
         self.releases.setdefault(name, threading.Event()).set()
 
-    def execute_pipeline(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: object = None, state_changed: object = None, job_id: str | None = None) -> PipelineResult:
+    def execute_pipeline(self, request: JobRequest, *, cancellation: CancellationToken | None = None, progress: object = None, state_changed: object = None, plan_ready: object = None, job_id: str | None = None) -> PipelineResult:
         """Model a cooperative synchronous pipeline."""
 
         assert cancellation is not None
@@ -69,6 +74,9 @@ class ControlledRunner:
             if callable(state_changed):
                 state_changed(JobState.QUEUED)
                 state_changed(JobState.VALIDATING)
+            if callable(plan_ready):
+                plan_ready(_plan(request))
+            if callable(state_changed):
                 state_changed(JobState.RUNNING)
             if callable(progress):
                 progress(ProgressEvent(PipelineStage.VALIDATE, 1, 1, f"Started {name}"))
@@ -257,6 +265,7 @@ def test_progress_snapshots_are_observable_and_callback_failures_are_isolated(tm
         assert runner.started.get(timeout=1) == "progress"
         progress = jobs.snapshot(identifier).last_progress
         assert progress is not None and progress.message == "Started progress"
+        assert jobs.snapshot(identifier).plan == _plan(jobs.snapshot(identifier).request)
         runner.release("progress")
         assert jobs.wait(identifier, timeout=1).state is JobState.COMPLETED
         assert callback_calls >= 1
