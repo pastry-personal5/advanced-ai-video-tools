@@ -80,6 +80,11 @@ submitted with and is rejected if its model file was replaced in the meantime.
 Queueing a job also saves its pipeline and scale as the defaults for later jobs;
 it never changes your model files.
 
+The source Preview remembers its mute choice when you move between clips. A
+muted preview shows the output-volume bar at zero; unmuting restores the volume
+level you had selected. These audio choices also apply to Queue Preview and are
+saved as non-safety preferences.
+
 The pipelines are **Auto** (the default, same as earlier versions), **Concat only**
 (stream-copies compatible MP4/MOV clips into the first clip's container with no
 re-encoding and no AI), **Native upscale** (one AI pass at the model's own 2×, 3×,

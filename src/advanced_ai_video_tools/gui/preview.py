@@ -304,6 +304,7 @@ class SourcePreviewPane(QGroupBox):
         self.preview_time_label.setMinimumWidth(84)
         self.preview_time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._preferred_muted = bool(muted)
+        self._preferred_volume = max(0, min(100, volume))
         self._duration_ms = 0
         self._apply_audio_preferences(muted, volume)
         self.previous_button = self._control("←", "Previous clip", "previewPreviousButton", muted=True)
@@ -471,7 +472,7 @@ class SourcePreviewPane(QGroupBox):
         self._reset_progress()
         self.preview_label.clear()
         self.preview_label.setVisible(False)
-        self._set_actual_muted(True)
+        self._set_actual_muted(self._preferred_muted)
         if path is None:
             self.player.setSource(QUrl())
         else:
@@ -537,29 +538,34 @@ class SourcePreviewPane(QGroupBox):
         self._apply_audio_preferences(muted, volume)
 
     def _apply_audio_preferences(self, muted: bool, volume: int) -> None:
-        self._preferred_muted = muted
-        self.audio.setVolume(max(0, min(100, volume)) / 100)
-        self._set_actual_muted(muted)
-        volume_blocker = QSignalBlocker(self.volume_slider)
-        self.volume_slider.setValue(max(0, min(100, volume)))
-        del volume_blocker
+        self._preferred_muted = bool(muted)
+        self._preferred_volume = max(0, min(100, volume))
+        self.audio.setVolume(self._preferred_volume / 100)
+        self._set_actual_muted(self._preferred_muted)
 
     def _set_actual_muted(self, muted: bool) -> None:
         self.audio.setMuted(muted)
         mute_blocker = QSignalBlocker(self.mute_toggle)
         self.mute_toggle.setChecked(muted)
         del mute_blocker
+        volume_blocker = QSignalBlocker(self.volume_slider)
+        self.volume_slider.setValue(0 if muted else self._preferred_volume)
+        del volume_blocker
 
     @Slot(bool)
     def _mute_toggled(self, muted: bool) -> None:
         self._preferred_muted = muted
-        self.audio.setMuted(muted)
-        self.audio_preferences_changed.emit(self._preferred_muted, self.volume_slider.value())
+        self._set_actual_muted(muted)
+        self.audio_preferences_changed.emit(self._preferred_muted, self._preferred_volume)
 
     @Slot(int)
     def _volume_changed(self, volume: int) -> None:
-        self.audio.setVolume(volume / 100)
-        self.audio_preferences_changed.emit(self._preferred_muted, volume)
+        self._preferred_volume = max(0, min(100, volume))
+        self.audio.setVolume(self._preferred_volume / 100)
+        if self._preferred_muted and self._preferred_volume > 0:
+            self._preferred_muted = False
+            self._set_actual_muted(False)
+        self.audio_preferences_changed.emit(self._preferred_muted, self._preferred_volume)
 
     def _reset_progress(self) -> None:
         """Clear timeline state while a new native source loads asynchronously."""

@@ -76,6 +76,10 @@ optional paired sample paths as part of the immutable typed progress event and n
 otherwise depends on GUI presentation. On completion, Final Video is selected
 and plays the published local output once, then pauses on its last frame.
 Preview state is presentation-only and queue requests remain frozen typed values.
+The source-preview mute choice remains stable across source changes for the
+session. While muted, its volume slider displays zero without discarding the
+remembered volume restored on unmute; both preferences remain non-safety
+application settings shared with Queue Preview.
 Session messages are timestamped in memory, receive queued snapshots through Qt
 signals, and never expose exact subprocess command lines. After authoritative
 dequeue-time preflight, the frozen `JobPlan` is published in the queue snapshot;

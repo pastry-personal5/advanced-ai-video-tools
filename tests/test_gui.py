@@ -1109,11 +1109,44 @@ def test_preview_audio_preferences_restore_and_persist_without_job_impact(qt_app
     window.source_preview.mute_toggle.setChecked(True)
 
     saved = store.load()
+    assert window.source_preview.audio.isMuted()
+    assert window.source_preview.volume_slider.value() == 0
+    assert window.source_preview.audio.volume() == pytest.approx(0.37)
     assert saved.preview_muted is True
     assert saved.preview_volume == 37
     assert frozen.inputs == (tmp_path / "clip.mov",)
     assert frozen.target_height == settings.target_height
     window.close()
+
+
+def test_source_preview_remembers_mute_state_across_clip_changes(qt_app: QApplication) -> None:
+    """Mute presentation stays session-consistent while retaining its volume."""
+
+    del qt_app
+    pane = SourcePreviewPane(muted=False, volume=42)
+    paths = (Path("first.mov"), Path("second.mov"))
+    changes: list[tuple[bool, int]] = []
+    pane.audio_preferences_changed.connect(lambda muted, volume: changes.append((muted, volume)))
+    pane.set_sources(paths, 0)
+
+    pane.mute_toggle.setChecked(True)
+    assert pane.audio.isMuted()
+    assert pane.volume_slider.value() == 0
+    assert pane.audio.volume() == pytest.approx(0.42)
+
+    pane.set_sources(paths, 1)
+    assert pane.mute_toggle.isChecked()
+    assert pane.audio.isMuted()
+    assert pane.volume_slider.value() == 0
+
+    pane.mute_toggle.setChecked(False)
+    pane.set_sources(paths, 0)
+    assert not pane.mute_toggle.isChecked()
+    assert not pane.audio.isMuted()
+    assert pane.volume_slider.value() == 42
+    assert changes == [(True, 42), (False, 42)]
+    pane.shutdown()
+    pane.close()
 
 
 def test_output_directory_preference_persists_when_draft_is_closed(qt_app: QApplication, tmp_path: Path) -> None:
