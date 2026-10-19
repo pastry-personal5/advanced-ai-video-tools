@@ -19,6 +19,11 @@ from advanced_ai_video_tools.video.manifest import write_concat_manifest
 from advanced_ai_video_tools.video.probe import MediaProber, ProbeError
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 24 * 60 * 60
+# Stream-copy concat preserves container timestamps.  Short clips can therefore
+# accumulate audio/video packet-duration rounding beyond a few video frames.
+# A full second still detects a missing or materially truncated clip while
+# allowing valid copied timelines such as camera/phone MP4s.
+MERGED_DURATION_TOLERANCE = Decimal("1.00")
 
 
 class MergedOutputVerificationError(RuntimeError):
@@ -137,7 +142,7 @@ class MergedOutputVerifier:
         expected_duration = sum((self._source_duration(probe) for probe in job.probes), Decimal(0))
         actual_duration = video.duration if video is not None and video.duration is not None else merged.duration
         frame_tolerance = Decimal(job.output_frame_rate.denominator) / Decimal(job.output_frame_rate.numerator) * 2
-        duration_tolerance = max(Decimal("0.10"), frame_tolerance)
+        duration_tolerance = max(MERGED_DURATION_TOLERANCE, frame_tolerance)
         if actual_duration is None or actual_duration <= 0 or abs(actual_duration - expected_duration) > duration_tolerance:
             failures.append(f"merged duration is implausible; expected approximately {expected_duration} seconds")
 

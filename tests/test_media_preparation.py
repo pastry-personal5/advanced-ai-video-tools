@@ -196,6 +196,27 @@ def test_merged_verifier_accepts_rate_rounding_below_one_timestamp_tick(tmp_path
     assert result is merged
 
 
+def test_merged_verifier_accepts_stream_copy_container_timing_drift(tmp_path: Path) -> None:
+    """Copied MP4 packet timing may extend a merged timeline by well over two frames."""
+
+    path = tmp_path / "merged.mkv"
+    path.write_bytes(b"media")
+    sources = (_probe(Path("one.mp4")), _probe(Path("two.mp4")))
+    merged = MediaProbe(path, Decimal("2.50"), (_video(duration=Decimal("2.50")),), (), ())
+
+    class ContainerTimedProber:
+        """Return a valid stream-copy concat with container-timing drift."""
+
+        def probe(self, _path: Path) -> MediaProbe:
+            """Return the deterministic merged media facts."""
+
+            return merged
+
+    job = JobPlan(datetime(2026, 8, 21, tzinfo=timezone.utc), Path("output.mp4"), True, sources, Rational(10, 1), 3840, 2160, 4, ConcatStrategy.STREAM_COPY, None, (), 100, 120, ColorProfile(ColorMatrix.BT709, "bt709", "bt709"))
+
+    assert MergedOutputVerifier(ContainerTimedProber()).verify(path, job, ConcatStrategy.STREAM_COPY) is merged
+
+
 def test_merged_verifier_requires_stream_copy_audio_to_match_selected_source_codec(tmp_path: Path) -> None:
     """A direct concat cannot substitute an audio codec before final muxing."""
 
