@@ -197,6 +197,9 @@ class MainWindow(QMainWindow):
         self.selected_job_output.setObjectName("selectedJobOutput")
         self.selected_job_output.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.selected_job_output.setWordWrap(True)
+        self.selected_job_input = QLabel()
+        self.selected_job_input.setObjectName("selectedJobInput")
+        self.selected_job_input.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.selected_job_stage_progress = QProgressBar()
         self.selected_job_stage_progress.setObjectName("selectedJobStageProgress")
         self.selected_job_stage_progress.setAccessibleName("Stage progress")
@@ -230,6 +233,7 @@ class MainWindow(QMainWindow):
         details_layout.addRow("Status", self.job_state_value)
         details_layout.addRow("Stage", self.job_stage_value)
         details_layout.addRow("Message", self.selected_job_message)
+        details_layout.addRow("Input", self.selected_job_input)
         details_layout.addRow("Output", self.selected_job_output)
 
         self.region_views: dict[str, QTableView] = {}
@@ -714,6 +718,7 @@ class MainWindow(QMainWindow):
         """Render the empty queue-selection state and disable job actions."""
 
         self.selected_job_message.setText("No jobs have been submitted.")
+        self.selected_job_input.clear()
         self.selected_job_output.clear()
         self.selected_job_stage_progress.setRange(0, 1)
         self.selected_job_stage_progress.setValue(0)
@@ -773,6 +778,7 @@ class MainWindow(QMainWindow):
 
         message = self._model.data(index, int(JobRole.ERROR)) or self._model.data(index, int(JobRole.MESSAGE))
         self.selected_job_message.setText(str(message))
+        self.selected_job_input.setText(str(self._model.data(index, int(JobRole.INPUT_SUMMARY)) or ""))
         output_path = str(self._model.data(index, int(JobRole.OUTPUT_PATH)))
         self.selected_job_output.setText(output_path)
         self.job_name_value.setText(str(self._model.data(self._model.index(index.row(), 1), int(Qt.ItemDataRole.DisplayRole))))

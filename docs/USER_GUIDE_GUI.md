@@ -89,7 +89,10 @@ runs AI twice).
 ## Monitor and control jobs
 
 Queue Monitoring shows **Active**, **Up Next**, and **History** regions. The
-queue runs one job at a time. You can cancel the active job, remove pending or
+Selected Job panel shows the first input's full file path and appends `, ...` when
+the job contains additional input clips. The Input row appears immediately
+above the output destination. The queue runs one job at a time. You can cancel
+the active job, remove pending or
 terminal jobs, select jobs with the keyboard, and inspect progress, output
 paths, errors, and diagnostics. When a queued job starts, **Global Messages**
 shows the dimensions and stage/model summary from its authoritative preflight.

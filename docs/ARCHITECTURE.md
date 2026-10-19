@@ -66,7 +66,8 @@ same near-full application height. Job Creation shows the selected local source
 through `QMediaPlayer`/`QVideoWidget`; Queue Monitoring presents its immutable
 queue model through Active, Up Next, and History presentation regions alongside
 the `Original`, `Upscaled`, and `Final Video` tabs in an independent play-once
-player. For
+player. Its Selected Job details show the first input's full path followed by
+`, ...` when additional ordered inputs exist. For
 the selected running job during `UPSCALE`, the first two tabs asynchronously
 decode their matched first local frame as soon as it is ready, then the latest
 measured local `frame-<multiple of 16>.png` samples; Final Video is empty until

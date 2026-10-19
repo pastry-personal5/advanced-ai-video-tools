@@ -103,9 +103,9 @@ def test_gui_theme_text_contrast_and_scaled_control_inventory(qt_app: QApplicati
     assert CONTROL_HEIGHT == 32
 
 
-def _snapshot(tmp_path: Path, job_id: str, state: JobState, position: int | None, *, revision: int, progress: ProgressEvent | None = None) -> QueueJobSnapshot:
+def _snapshot(tmp_path: Path, job_id: str, state: JobState, position: int | None, *, revision: int, progress: ProgressEvent | None = None, inputs: tuple[Path, ...] | None = None) -> QueueJobSnapshot:
     created = datetime(2026, 8, 21, tzinfo=timezone.utc)
-    request = JobRequest((tmp_path / f"{job_id}.mov",), tmp_path, explicit_output_path=tmp_path / f"{job_id}.mp4", created_at=created)
+    request = JobRequest(inputs or (tmp_path / f"{job_id}.mov",), tmp_path, explicit_output_path=tmp_path / f"{job_id}.mp4", created_at=created)
     return QueueJobSnapshot(job_id, request, state, position, progress, revision)
 
 
@@ -169,6 +169,7 @@ def test_bridge_mutates_model_on_qt_thread_and_rejects_stale_revisions(qt_app: Q
     assert model.data(index, int(JobRole.STATE)) == "running"
     assert model.data(index, int(JobRole.PROGRESS_COMPLETED)) == 4
     assert model.data(index, int(JobRole.PROGRESS_TOTAL)) == 10
+    assert model.data(index, int(JobRole.INPUT_SUMMARY)) == str(tmp_path / "alpha.mov")
     assert model.data(index, int(JobRole.OUTPUT_PATH)) == str(tmp_path / "alpha.mp4")
     assert model.headerData(0, Qt.Orientation.Horizontal) == "Status"
     assert model.headerData(1, Qt.Orientation.Horizontal) == "Job Name"
@@ -214,7 +215,15 @@ def test_model_exposes_pending_order_actions_and_terminal_error(qt_app: QApplica
 def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication, tmp_path: Path) -> None:  # pylint: disable=too-many-statements
     """The native shell renders measured progress and delegates user actions."""
 
-    first = _snapshot(tmp_path, "first", JobState.RUNNING, None, revision=2, progress=ProgressEvent(PipelineStage.ENCODE, 3, 8, "Encoding output"))
+    first = _snapshot(
+        tmp_path,
+        "first",
+        JobState.RUNNING,
+        None,
+        revision=2,
+        progress=ProgressEvent(PipelineStage.ENCODE, 3, 8, "Encoding output"),
+        inputs=(tmp_path / "first.mov", tmp_path / "second.mov"),
+    )
     second = _snapshot(tmp_path, "second", JobState.QUEUED, 0, revision=0)
     queue = FakeQueue((first, second))
     bridge = QueueSnapshotBridge()
@@ -249,6 +258,7 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     assert window.job_name_value.text() == "first.mov"
     assert window.job_state_value.text() == "Running"
     assert window.job_stage_value.text() == "encode"
+    assert window.selected_job_input.text() == f"{tmp_path / 'first.mov'}, ..."
     assert window.selected_job_stage_progress.maximum() == 8
     assert window.selected_job_stage_progress.value() == 3
     assert window.selected_job_stage_progress.format() == "Stage: 3/8"
@@ -276,6 +286,10 @@ def test_main_window_tracks_selection_progress_and_controls(qt_app: QApplication
     assert selected_details is not None
     assert selected_details.layout().contentsMargins().left() == SPACE_2
     assert selected_details.layout().verticalSpacing() == 4
+    input_label = selected_details.layout().labelForField(window.selected_job_input)
+    assert input_label is not None
+    assert input_label.text() == "Input"
+    assert selected_details.layout().getWidgetPosition(window.selected_job_input)[0] < selected_details.layout().getWidgetPosition(window.selected_job_output)[0]
     window._handle_region_cell_click("active", active_view.model().index(0, 2))  # pylint: disable=protected-access
     assert queue.cancelled == ["first"]
 

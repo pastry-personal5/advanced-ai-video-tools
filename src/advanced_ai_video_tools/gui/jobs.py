@@ -45,6 +45,7 @@ class JobRole(IntEnum):
     OUTPUT_PATH = JOB_ID + 7
     CAN_CANCEL = JOB_ID + 8
     ERROR = JOB_ID + 9
+    INPUT_SUMMARY = JOB_ID + 10
 
 
 _TERMINAL_STATES = frozenset({JobState.CANCELLED, JobState.FAILED, JobState.COMPLETED})
@@ -143,6 +144,7 @@ class JobListModel(QAbstractTableModel):
             int(JobRole.OUTPUT_PATH): QByteArray(b"outputPath"),
             int(JobRole.CAN_CANCEL): QByteArray(b"canCancel"),
             int(JobRole.ERROR): QByteArray(b"error"),
+            int(JobRole.INPUT_SUMMARY): QByteArray(b"inputSummary"),
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
@@ -221,6 +223,9 @@ class JobListModel(QAbstractTableModel):
         if role == int(JobRole.ERROR):
             outcome = self._queue.wait(snapshot.job_id, timeout=0) if snapshot.state in _TERMINAL_STATES else None
             return str(outcome.error) if outcome is not None and outcome.error is not None else None
+        if role == int(JobRole.INPUT_SUMMARY):
+            first_input = str(snapshot.request.inputs[0]) if snapshot.request.inputs else ""
+            return f"{first_input}, ..." if len(snapshot.request.inputs) > 1 else first_input
         return None
 
     def snapshot_at(self, index: QModelIndex) -> QueueJobSnapshot | None:
