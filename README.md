@@ -3,7 +3,7 @@
 [![Release](https://img.shields.io/github/v/tag/pastry-personal5/advanced-ai-video-tools?label=release)](https://github.com/pastry-personal5/advanced-ai-video-tools/releases)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](pyproject.toml)
 [![Platform](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-lightgrey)](docs/DEVELOPMENT.md)
-[![License](https://img.shields.io/badge/license-Proprietary-red)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
 Advanced AI Video Tools is a macOS Apple Silicon application and CLI that
