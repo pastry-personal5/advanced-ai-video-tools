@@ -18,7 +18,7 @@ def test_identity_map_contains_approved_v2_values() -> None:
     assert IDENTITY.primary_command == "advanced-ai-video-tools"
     assert IDENTITY.legacy_command == "ai-video-tools"
     assert IDENTITY.bundle_identifier == "com.pastrypersonal5.advancedaivideotools"
-    assert IDENTITY.output_prefix == "ai-"
+    assert IDENTITY.output_prefix == "confidential-"
     assert IDENTITY.gui_lock_filename == "advanced-ai-video-tools-gui.lock"
 
 
@@ -59,7 +59,7 @@ def test_runtime_consumers_use_canonical_identity() -> None:
     """Runtime-generated names and ownership markers use canonical values."""
 
     basename = automatic_output_basename(datetime(2026, 8, 24, 12, 30, 0).astimezone())
-    assert basename.startswith(f"{IDENTITY.output_prefix}video-")
+    assert basename.startswith(IDENTITY.output_prefix)
     workspace = OwnedWorkspace(Path("/tmp/root"), Path("/tmp/root/job"), "id")
     assert workspace.marker_path.name == IDENTITY.workspace_marker
 

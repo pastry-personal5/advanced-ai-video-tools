@@ -143,7 +143,7 @@ def test_ready_plan_freezes_name_dimensions_rate_and_scale(tmp_path: Path) -> No
 
     assert report.ready
     assert report.plan is not None
-    assert re.fullmatch(r"ai-video-20260821-143052-[0-9a-f]{32}\.mp4", report.plan.output_path.name)
+    assert re.fullmatch(r"confidential-20260821-143052-[0-9a-f]{32}\.mp4", report.plan.output_path.name)
     assert (report.plan.output_width, report.plan.output_height) == (3840, 2160)
     assert report.plan.output_frame_rate == Rational(30000, 1001)
     assert report.plan.ai_scale == 2

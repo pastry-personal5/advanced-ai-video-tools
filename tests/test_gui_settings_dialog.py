@@ -750,3 +750,39 @@ def test_spandrel_factory_defaults_are_disclosed_and_the_runner_can_return_to_it
     assert dialog.draft_settings().tools.spandrel_runner is None
     dialog.cancel_button.click()
     validator.shutdown()
+
+
+@pytest.mark.parametrize("prefix", ["", "review-", "confidential-"])
+def test_output_prefix_settings_save_and_search(qt_app: QApplication, tmp_path: Path, prefix: str) -> None:
+    """The searchable prefix field participates in the shared atomic draft."""
+
+    del qt_app
+    validator = ExternalToolsValidator(RecordingDiscovery(_toolchain(tmp_path)))
+    store = RecordingStore()
+    dialog = _dialog(ApplicationSettings(output_video_prefix="old-"), validator, store)
+    dialog.search.setText("prefix")
+    assert dialog.current_page_path == SettingsDialog.INPUT_OUTPUT_PATH
+    dialog.input_output_page.output_video_prefix.setText(prefix)
+    dialog.ok_button.click()
+    assert len(store.saved) == 1
+    assert store.saved[0].output_video_prefix == prefix
+    validator.shutdown()
+
+
+def test_output_prefix_invalid_and_cancelled_drafts_are_not_saved(qt_app: QApplication, tmp_path: Path) -> None:
+    """Unsafe edits show an inline error and cannot persist through OK or Cancel."""
+
+    del qt_app
+    validator = ExternalToolsValidator(RecordingDiscovery(_toolchain(tmp_path)))
+    store = RecordingStore()
+    dialog = _dialog(ApplicationSettings(), validator, store)
+    dialog.input_output_page.output_video_prefix.setText("../escape-")
+    assert dialog.dirty
+    assert dialog.input_output_page.prefix_error.text()
+    dialog.ok_button.click()
+    assert not store.saved
+    dialog.input_output_page.output_video_prefix.setText("valid-but-cancelled-")
+    assert not dialog.input_output_page.prefix_error.text()
+    dialog.cancel_button.click()
+    assert not store.saved
+    validator.shutdown()

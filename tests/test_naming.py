@@ -22,7 +22,7 @@ def test_automatic_name_includes_local_second_and_compact_uuid7() -> None:
     created = datetime(2026, 8, 21, 14, 30, 52, 123456, tzinfo=timezone(timedelta(hours=9)))
     name = automatic_output_basename(created)
 
-    match = re.fullmatch(r"ai-video-20260821-143052-([0-9a-f]{32})\.mp4", name)
+    match = re.fullmatch(r"confidential-20260821-143052-([0-9a-f]{32})\.mp4", name)
     assert match is not None
     identifier = UUID(hex=match.group(1))
     assert identifier.version == 7
@@ -65,7 +65,7 @@ def test_generated_reservations_avoid_disk_and_queue_collisions(
 
     registry = OutputPathRegistry()
     created = datetime(2026, 8, 21, tzinfo=timezone.utc)
-    basename = "ai-video-20260821-000000-0198ca56c40070008000000000000000.mp4"
+    basename = "confidential-20260821-000000-0198ca56c40070008000000000000000.mp4"
     monkeypatch.setattr("advanced_ai_video_tools.storage.naming.automatic_output_basename", lambda _created_at, _suffix=".mp4": basename)
     base = tmp_path / basename
     base.touch()
@@ -100,7 +100,7 @@ def test_mov_names_bind_the_frozen_suffix_to_the_generated_identity() -> None:
     created = datetime(2026, 8, 21, 14, 30, 52, 123456, tzinfo=timezone(timedelta(hours=9)))
     mov = automatic_output_basename(created, ".mov")
 
-    assert mov.endswith(".mov") and re.fullmatch(r"ai-video-20260821-143052-[0-9a-f]{32}\.mov", mov)
+    assert mov.endswith(".mov") and re.fullmatch(r"confidential-20260821-143052-[0-9a-f]{32}\.mov", mov)
     assert automatic_output_basename_matches(mov, created, ".mov")
     assert automatic_output_basename_matches(mov.replace(".mov", "-01.mov"), created, ".mov")
     assert not automatic_output_basename_matches(mov, created)
@@ -122,3 +122,24 @@ def test_registry_reserves_generated_and_frozen_mov_names_without_collision(tmp_
     assert registry.reserve_frozen_generated(tmp_path, frozen_name) == tmp_path / frozen_name
     with pytest.raises(OutputCollisionError):
         registry.reserve_frozen_generated(tmp_path, frozen_name)
+
+
+@pytest.mark.parametrize("prefix", ["", "custom-", "검토-", "100%-", "ai-video-"])
+def test_custom_prefix_is_literal_and_survives_frozen_validation(prefix: str) -> None:
+    """Prefixes do not change timestamp, UUID, or collision validation."""
+
+    created = datetime(2026, 8, 21, tzinfo=timezone.utc)
+    basename = automatic_output_basename(created, prefix=prefix)
+    assert basename.startswith(f"{prefix}20260821-000000-")
+    assert automatic_output_basename_matches(basename, created)
+    assert automatic_output_basename_matches(basename.replace(".mp4", "-01.mp4"), created)
+
+
+@pytest.mark.parametrize("prefix", ["../", "a/b", "a\\b", "a:b", "bad\n", "bad\0", ".."])
+def test_unsafe_prefixes_cannot_generate_or_validate_names(prefix: str) -> None:
+    """A custom prefix cannot turn a frozen basename into a path."""
+
+    created = datetime(2026, 8, 21, tzinfo=timezone.utc)
+    with pytest.raises(ValueError, match="prefix"):
+        automatic_output_basename(created, prefix=prefix)
+    assert not automatic_output_basename_matches(prefix + automatic_output_basename(created), created)

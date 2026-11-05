@@ -582,7 +582,7 @@ class JobEditor(QWidget):
             allow_mixed_color_tags=self._settings.allow_mixed_color_tags,
             tools=self._settings.tools,
             created_at=created_at,
-            generated_output_basename=automatic_output_basename(created_at, suffix),
+            generated_output_basename=automatic_output_basename(created_at, suffix, self._settings.output_video_prefix),
         )
 
     @Slot(bool)

@@ -110,7 +110,7 @@ def test_settings_round_trip_with_private_atomic_file(tmp_path: Path) -> None:
 
     assert store.load() == settings
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
-    assert path.read_text(encoding="utf-8").startswith("preview:\n")
+    assert path.read_text(encoding="utf-8").startswith("output:\n")
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert document["schema_version"] == 4
     assert document["processing"] == {"allow_mixed_color_tags": False, "native_scale": 3, "overwrite_mode": "no_overwrite", "pipeline": "2x-3x-resize", "target_height": 1080}
@@ -227,3 +227,35 @@ def test_unknown_fields_do_not_break_forward_compatible_minor_changes(tmp_path: 
     path.write_text(yaml.safe_dump({"schema_version": 1, "future_hint": "ignored", "processing": {"target_height": 1440, "future_option": 3}}), encoding="utf-8")
 
     assert SettingsStore(path).load().target_height == 1440
+
+
+@pytest.mark.parametrize("prefix", ["", "review-", "검토-", "100%-"])
+def test_output_video_prefix_round_trip(tmp_path: Path, prefix: str) -> None:
+    """An explicit blank or custom prefix survives atomic YAML persistence."""
+
+    store = SettingsStore(tmp_path / "settings.yaml")
+    settings = ApplicationSettings(output_video_prefix=prefix)
+    store.save(settings)
+    assert store.load() == settings
+
+
+def test_existing_settings_adopt_factory_prefix_without_rewrite(tmp_path: Path) -> None:
+    """Documents lacking the additive preference use the new factory default."""
+
+    path = tmp_path / "settings.yaml"
+    original = "schema_version: 4\nprocessing:\n  target_height: 1080\n"
+    path.write_text(original, encoding="utf-8")
+    settings = SettingsStore(path).load()
+    assert settings.output_video_prefix == "confidential-"
+    assert settings.target_height == 1080
+    assert path.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.parametrize("prefix", [None, 42, "../escape-", "bad\n"])
+def test_invalid_persisted_prefix_is_quarantined(tmp_path: Path, prefix: object) -> None:
+    """Malformed output preferences follow the existing corrupt-document policy."""
+
+    path = tmp_path / "settings.yaml"
+    path.write_text(yaml.safe_dump({"schema_version": 4, "output": {"video_prefix": prefix}}), encoding="utf-8")
+    assert SettingsStore(path).load() == ApplicationSettings()
+    assert not path.exists()

@@ -35,7 +35,8 @@ or choose a page from the left tree:
   model directory, and the Spandrel runner executable.
 - **Input and Output → Color Policy** contains the off-by-default **Allow mixed
   color tags** preference. Enable it only if untagged clips are known to match
-  the other clips' unanimous declared supported SDR profile.
+  the other clips' unanimous declared supported SDR profile. This page also
+  sets the **Output video file prefix** (factory default: `confidential-`).
 
 Leave an executable blank to use `PATH` (the Spandrel runner instead uses the
 factory-default `tools/spandrel-runner/spandrel-runner`); leave the model directory
@@ -131,3 +132,13 @@ The application stores non-secret preferences and local diagnostics in its
 standard macOS application-support location. It stores job workspaces in the
 standard macOS cache location. Do not place model weights, generated media, or
 credentials in the repository.
+
+### Output video file prefix
+
+Open **Preferences → Settings → Input and Output → Color Policy** and edit
+**Output video file prefix**, then click **OK**. The factory default is
+`confidential-`, producing `confidential-YYYYMMDD-HHMMSS-<UUID>.mp4` (or `.mov`
+for a MOV concat job). No `video-` text is added. Leave the field blank for no
+prefix. Path separators, `..`, and control characters are rejected.
+The saved prefix applies to new jobs and survives restart; queued jobs keep
+their existing filenames. **Cancel** discards edits.

@@ -46,6 +46,7 @@ from advanced_ai_video_tools.core.models import NativeScale, ProcessingPipeline,
 from advanced_ai_video_tools.gui.theme import CONTROL_HEIGHT, SPACE_2, SPACE_3, SPACE_4
 from advanced_ai_video_tools.gui.worker_lifecycle import connect_completion_cleanup, shutdown_worker_thread
 from advanced_ai_video_tools.services.plan_summary import PIPELINE_LABELS
+from advanced_ai_video_tools.storage.naming import validate_output_prefix
 from advanced_ai_video_tools.system.spandrel import DEFAULT_SPANDREL_MODELS, DEFAULT_SPANDREL_RUNNER, SUPPORTED_MODEL_SUFFIXES
 from advanced_ai_video_tools.system.settings import DEFAULT_DELETION_RULES, ApplicationSettings, DeletionRule, SettingsError, SettingsStore
 from advanced_ai_video_tools.system.tools import ToolDiscovery, ToolDiscoveryError
@@ -430,6 +431,21 @@ class InputOutputSettingsPage(QWidget):
         layout.addWidget(heading)
         layout.addWidget(explanation)
         layout.addWidget(self.allow_mixed_color_tags)
+        self.output_video_prefix = QLineEdit(settings.output_video_prefix)
+        self.output_video_prefix.setObjectName("outputVideoFilePrefix")
+        self.output_video_prefix.setAccessibleName("Output video file prefix")
+        prefix_label = QLabel("Output video file prefix:")
+        prefix_label.setBuddy(self.output_video_prefix)
+        layout.addWidget(prefix_label)
+        layout.addWidget(self.output_video_prefix)
+        prefix_help = QLabel("Factory default: confidential- (confidential-YYYYMMDD-HHMMSS-UUID.mp4). Leave blank for no prefix. Applies to new jobs after saving.")
+        prefix_help.setWordWrap(True)
+        layout.addWidget(prefix_help)
+        self.prefix_error = QLabel()
+        self.prefix_error.setWordWrap(True)
+        self.prefix_error.setAccessibleName("Output video file prefix error")
+        layout.addWidget(self.prefix_error)
+        self.output_video_prefix.textChanged.connect(self.draft_changed)
         layout.addStretch(1)
         self.allow_mixed_color_tags.toggled.connect(self.draft_changed)
 
@@ -882,7 +898,7 @@ class SettingsDialog(QDialog):
         descriptors = (
             _SettingsPageDescriptor(self.FILE_PATH, "editor file automatic deletion rules related files trash source target pattern add edit delete enable disable move up down reorder restore built-in defaults changes applied settings saved", self.file_page),
             _SettingsPageDescriptor(self.UPSCALING_PATH, "processing upscaling pipeline auto concat native scale desired height 2x 3x 4x resize spandrel model safetensors pth", self.upscaling_page),
-            _SettingsPageDescriptor(self.INPUT_OUTPUT_PATH, "input output color tags mixed untagged sdr bt709 transfer primaries policy allow", self.input_output_page),
+            _SettingsPageDescriptor(self.INPUT_OUTPUT_PATH, "input output video file prefix confidential filename naming color tags mixed untagged sdr bt709 transfer primaries policy allow", self.input_output_page),
             _SettingsPageDescriptor(self.EXTERNAL_TOOLS_PATH, "tools external ffmpeg ffprobe real esrgan realesrgan spandrel runner executable model directory path choose use automatic blank resolve validation validate small vulkan inference", self.external_tools_page),
         )
         self._descriptors = {descriptor.path: descriptor for descriptor in descriptors}
@@ -983,6 +999,7 @@ class SettingsDialog(QDialog):
             self._settings,
             tools=self._tool_draft(),
             deletion_rules=self.file_page.settings_value(),
+            output_video_prefix=self.input_output_page.output_video_prefix.text(),
             allow_mixed_color_tags=self.input_output_page.allow_mixed_color_tags.isChecked(),
             pipeline=self.upscaling_page.pipeline_value(),
             native_scale=self.upscaling_page.native_scale_value(),
@@ -998,7 +1015,10 @@ class SettingsDialog(QDialog):
     def dirty(self) -> bool:
         """Whether the local draft differs from the loaded settings."""
 
-        return self.draft_settings() != self._settings
+        try:
+            return self.draft_settings() != self._settings
+        except ValueError:
+            return True
 
     @property
     def current_page_path(self) -> tuple[str, str] | None:
@@ -1061,7 +1081,15 @@ class SettingsDialog(QDialog):
         self._refresh_dialog_status()
 
     def _input_output_changed(self) -> None:
-        self._page_states[self.INPUT_OUTPUT_PATH] = SettingsValidationState.VALID if self.input_output_page.allow_mixed_color_tags.isChecked() != self._settings.allow_mixed_color_tags else SettingsValidationState.SAVED
+        try:
+            validate_output_prefix(self.input_output_page.output_video_prefix.text())
+        except ValueError as error:
+            self.input_output_page.prefix_error.setText(str(error))
+            self._page_states[self.INPUT_OUTPUT_PATH] = SettingsValidationState.INVALID
+        else:
+            self.input_output_page.prefix_error.clear()
+            changed = self.input_output_page.allow_mixed_color_tags.isChecked() != self._settings.allow_mixed_color_tags or self.input_output_page.output_video_prefix.text() != self._settings.output_video_prefix
+            self._page_states[self.INPUT_OUTPUT_PATH] = SettingsValidationState.VALID if changed else SettingsValidationState.SAVED
         self._refresh_page_labels()
         self._refresh_dialog_status()
 
@@ -1172,6 +1200,9 @@ class SettingsDialog(QDialog):
             self.status.setText("External-tool validation could not start because another validation is running.")
 
     def _commit(self) -> None:
+        if self._page_states[self.INPUT_OUTPUT_PATH] is SettingsValidationState.INVALID:
+            self._reveal_page(self.INPUT_OUTPUT_PATH, self.input_output_page.output_video_prefix)
+            return
         draft = self.draft_settings()
         if draft == self._settings:
             self._accept_saved()

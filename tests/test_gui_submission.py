@@ -164,7 +164,7 @@ def test_editor_preserves_concat_order_and_builds_frozen_supported_request(qt_ap
     assert not request.acknowledge_dropped_streams
     assert request.allow_mixed_color_tags
     assert request.created_at == _CREATED
-    assert request.generated_output_basename is not None and request.generated_output_basename.startswith("ai-video-20260821-143052-")
+    assert request.generated_output_basename is not None and request.generated_output_basename.startswith("confidential-20260821-143052-")
     assert QCoreApplication.instance() is qt_app
 
 
@@ -803,3 +803,17 @@ def test_editor_requests_keep_the_tools_they_were_created_with_after_settings_ch
 
     assert (queued.pipeline, queued.native_scale, queued.tools.model_2x) == (ProcessingPipeline.NATIVE, NativeScale.TWO, old_model)
     assert (fresh.pipeline, fresh.native_scale, fresh.tools.model_2x) == (ProcessingPipeline.AUTO, None, new_model)
+
+
+def test_editor_freezes_prefix_and_applies_saved_changes_to_future_jobs(qt_app: QApplication, tmp_path: Path) -> None:
+    """New requests use the saved prefix while earlier request identities stay frozen."""
+
+    del qt_app
+    editor = JobEditor(ApplicationSettings(output_video_prefix="first-"), clock=lambda: _CREATED)
+    editor.add_inputs((tmp_path / "clip.mov",))
+    editor.output_directory.setText(str(tmp_path))
+    first = editor.create_job_request()
+    editor.apply_settings(ApplicationSettings(output_video_prefix="second-", recent_output_directory=tmp_path))
+    second = editor.create_job_request()
+    assert first.generated_output_basename.startswith("first-20260821-143052-")
+    assert second.generated_output_basename.startswith("second-20260821-143052-")

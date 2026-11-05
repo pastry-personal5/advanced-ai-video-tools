@@ -197,7 +197,7 @@ def test_queue_freezes_names_and_claims_destinations_at_submission(tmp_path: Pat
         frozen = jobs.snapshot(generated).request
         assert frozen.created_at == _CREATED_AT
         assert frozen.generated_output_basename is not None
-        assert frozen.generated_output_basename.startswith("ai-video-20260821-143052-")
+        assert frozen.generated_output_basename.startswith("confidential-20260821-143052-")
         assert runner.started.get(timeout=1) == "generated"
 
         explicit = jobs.submit(_request(tmp_path, "explicit", destination=destination))

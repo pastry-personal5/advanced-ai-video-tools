@@ -314,17 +314,24 @@ The CLI provides `--no-overwrite`, and the GUI provides an overwrite setting tha
 
 ### Automatic output naming
 
-Generate the default output basename when the job is created, not when processing starts or finishes. Use the timezone-aware local wall clock and this ASCII-only format:
+Generate the default output basename when the job is created, not when processing starts or finishes. Use the timezone-aware local wall clock and this factory-default format:
 
 ```text
-ai-video-YYYYMMDD-HHMMSS-<compact-UUIDv7>.mp4
+confidential-YYYYMMDD-HHMMSS-<compact-UUIDv7>.mp4
 ```
 
 The suffix is `.mp4` for every AI pipeline. Concat only instead binds the first clip's lowercase `.mp4` or `.mov` suffix to the generated identity when the job is created, and the authoritative preflight rechecks that the first clip still has that suffix.
 
-For example: `ai-video-20260821-143052-01a022ccf35b7a1e8b0bf554b4c36db2.mp4`.
+For example: `confidential-20260821-143052-01a022ccf35b7a1e8b0bf554b4c36db2.mp4`.
 
-- `ai-video-` is the fixed prefix.
+- `confidential-` is the factory-default prefix, with no added `video-`.
+  The GUI persists an editable `output.video_prefix` preference in Settings →
+  Input and Output → Color Policy; blank means no prefix. Existing settings
+  without the preference adopt the default without a rewrite. Prefixes are
+  literal text and cannot contain path separators (including macOS `:`), `..`,
+  or control characters. New GUI requests freeze the saved prefix into their
+  basename; queued requests retain their original names. The CLI uses the
+  factory default and continues to ignore GUI preferences.
 - `YYYYMMDD-HHMMSS` is the creation time rendered in the job's local timezone.
 - `compact-UUIDv7` is an RFC 9562 UUIDv7 rendered as 32 lowercase hexadecimal characters without hyphens. Its 48-bit Unix-millisecond timestamp is derived from the same absolute creation instant, so repeated or ambiguous local wall-clock seconds remain distinguishable.
 - The selected output directory remains separate from the generated basename. The CLI uses `--output-dir`; the GUI exposes an output-directory picker.

@@ -17,6 +17,8 @@ import yaml
 from loguru import logger
 
 from advanced_ai_video_tools.core.models import NativeScale, OverwriteMode, ProcessingPipeline, ToolOverrides
+from advanced_ai_video_tools.identity import IDENTITY
+from advanced_ai_video_tools.storage.naming import validate_output_prefix
 from advanced_ai_video_tools.storage.paths import application_data_directory, legacy_application_data_directory
 
 SETTINGS_SCHEMA_VERSION = 4
@@ -136,8 +138,10 @@ class ApplicationSettings:
     allow_mixed_color_tags: bool = False
     pipeline: ProcessingPipeline = ProcessingPipeline.AUTO
     native_scale: NativeScale = NativeScale.FOUR
+    output_video_prefix: str = IDENTITY.output_prefix
 
     def __post_init__(self) -> None:
+        validate_output_prefix(self.output_video_prefix)
         if not isinstance(self.tools, ToolOverrides):
             raise TypeError("tools must be a ToolOverrides instance")
         if not isinstance(self.overwrite_mode, OverwriteMode):
@@ -320,6 +324,7 @@ class SettingsStore:
 def _encode_document(settings: ApplicationSettings) -> dict[str, object]:
     document: dict[str, object] = {
         "schema_version": SETTINGS_SCHEMA_VERSION,
+        "output": {"video_prefix": settings.output_video_prefix},
         "processing": {"allow_mixed_color_tags": settings.allow_mixed_color_tags, "overwrite_mode": settings.overwrite_mode.value, "target_height": settings.target_height, "pipeline": settings.pipeline.value, "native_scale": int(settings.native_scale)},
         "preview": {"muted": settings.preview_muted, "volume": settings.preview_volume},
         "recent": {"input_directory": _encode_path(settings.recent_input_directory), "output_directory": _encode_path(settings.recent_output_directory)},
@@ -348,6 +353,7 @@ def _decode_document(value: object) -> tuple[ApplicationSettings, tuple[str, ...
     tools = _mapping(document.get("tools", {}), "tools")
     recent = _mapping(document.get("recent", {}), "recent")
     processing = _mapping(document.get("processing", {}), "processing")
+    output = _mapping(document.get("output", {}), "output")
     preview = _mapping(document.get("preview", {}), "preview")
     deletion_rules, warnings = _decode_deletion_rules(document.get("deletion_rules"), version)
     height = processing.get("target_height", DEFAULT_TARGET_HEIGHT)
@@ -388,6 +394,7 @@ def _decode_document(value: object) -> tuple[ApplicationSettings, tuple[str, ...
                 ),
                 recent_input_directory=_optional_path(recent.get("input_directory"), "recent.input_directory"),
                 recent_output_directory=_optional_path(recent.get("output_directory"), "recent.output_directory"),
+                output_video_prefix=output.get("video_prefix", IDENTITY.output_prefix),
                 target_height=height,
                 overwrite_mode=overwrite,
                 preview_muted=muted,

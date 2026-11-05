@@ -29,7 +29,7 @@ IDENTITY = ApplicationIdentity(
     import_package_name="advanced_ai_video_tools",
     bundle_identifier="com.pastrypersonal5.advancedaivideotools",
     log_filename="advanced-ai-video-tools.log",
-    output_prefix="ai-",
+    output_prefix="confidential-",
     workspace_marker=".ai-video-tools-owned",
     gui_lock_filename="advanced-ai-video-tools-gui.lock",
 )
